@@ -1,7 +1,7 @@
 (* Useful system functions *)
 open Batteries
 open Syntax
-open InterpState
+open InterpSwitch
 
 (* Generic Sys defs *)
 let sys_name = "Sys"
@@ -25,10 +25,12 @@ let sys_time_ty =
        }
 ;;
 
-let sys_time_fun (nst : State.network_state) _ args =
+let sys_time_fun (st : InterpSwitch.state) args =
   let open CoreSyntax in
   match args with
-  | [] -> InterpSyntax.V(vinteger (Integer.create ~value:nst.current_time ~size:32))
+  (* global_time is a single shared ref, so the current switch's copy is the
+     network-wide time. *)
+  | [] -> InterpSwitch.V(vinteger (Integer.create ~value:!(st.global_time) ~size:32))
   | _ -> sys_time_error "takes no parameters"
 ;;
 
@@ -52,7 +54,7 @@ let sys_random_ty =
        }
 ;;
 
-let sys_random_fun _ _ args =
+let sys_random_fun _ args =
   let open CoreSyntax in
   match args with
   | [] ->
@@ -65,7 +67,7 @@ let sys_random_fun _ _ args =
       |> Z.( * ) (Z.of_int 2)
       |> Z.( + ) (if Random.bool () then Z.one else Z.zero)
     in
-    InterpSyntax.V(vinteger (Integer.create_z ~value:randval ~size:32))
+    InterpSwitch.V(vinteger (Integer.create_z ~value:randval ~size:32))
   | _ -> sys_random_error "takes no parameters"
 ;;
 
@@ -101,12 +103,12 @@ let sys_dequeue_depth_cid = Cid.create_ids [sys_id; sys_dequeue_depth_id]
 let sys_dequeue_depth_error msg = sys_error sys_dequeue_depth_name msg
 
 
-let sys_dequeue_depth_fun _ _ args =
+let sys_dequeue_depth_fun _ args =
   let open CoreSyntax in
   match args with
   | [] ->
     (* return 0 for now *)
-    InterpSyntax.V(default_vint 32)
+    InterpSwitch.V(default_vint 32)
   | _ -> sys_dequeue_depth_error "takes no parameters"
 ;;
 let sys_dequeue_depth_ty =
@@ -122,7 +124,7 @@ let sys_dequeue_depth_ty =
 ;;
 
 (* directory of Sys methods *)
-let defs : State.global_fun list =
+let defs : global_fun list =
   [ { cid = sys_time_cid; body = sys_time_fun; ty = sys_time_ty }
   ; { cid = sys_random_cid; body = sys_random_fun; ty = sys_random_ty } 
   ; { cid = sys_dequeue_depth_cid; body = sys_dequeue_depth_fun; ty = sys_dequeue_depth_ty}

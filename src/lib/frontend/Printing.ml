@@ -154,15 +154,6 @@ let rec raw_ty_to_string t =
   | TVector (ty, size) ->
     Printf.sprintf "%s[%s]" (raw_ty_to_string ty) (size_to_string size)
   | TTuple tys -> "(" ^ concat_map " * " raw_ty_to_string tys ^ ")"
-  | TTable t ->
-    " table_type {"
-    ^ "\n\tkey_size: "
-    ^ comma_sep ty_to_string t.tkey_sizes
-    ^ "\n\targ_ty: "
-    ^ comma_sep ty_to_string t.tparam_tys
-    ^ "\n\tret_ty: "
-    ^ comma_sep ty_to_string t.tret_tys
-    ^ "}\n"
   | TActionConstr a ->
     Printf.sprintf
       "(ACTION CTOR : (%s) -> (%s) -> (%s))"
@@ -319,6 +310,7 @@ and e_to_string e =
     Printf.sprintf "hash<<%s>>(%s)" (size_to_string size) (es_to_string es)
   | EFlood e -> Printf.sprintf "flood %s" (exp_to_string e)
   | EProj (e, l) -> exp_to_string e ^ "#" ^ l
+  | EGet (e, l) -> exp_to_string e ^ "#" ^ size_to_string l
   | ERecord lst ->
     Printf.sprintf
       "{%s}"
@@ -342,17 +334,6 @@ and e_to_string e =
     Printf.sprintf "to_int<<%s>>(%s)" (size_to_string sz1) (size_to_string sz2)
   | EStmt (s, e) ->
     Printf.sprintf "{%s; return %s}" (stmt_to_string s) (exp_to_string e)
-  | ETableCreate t ->
-    Printf.sprintf
-      "table_create<%s>((%s),%s, %s)"
-      (ty_to_string t.tty)
-      (concat_map "," exp_to_string t.tactions)
-      (exp_to_string t.tsize)
-      (exp_to_string t.tdefault)
-      (* (cid_to_string (fst t.tdefault))
-      (comma_sep exp_to_string (snd t.tdefault)) *)
-  | ETableMatch tr ->
-    Printf.sprintf "table_match(%s);" (comma_sep exp_to_string tr.args)
   (* | EPatWild _ -> "_" *)
 
 and exp_to_string exp = 
@@ -378,14 +359,7 @@ and action_to_string (name, (ps, stmt)) =
     (params_to_string ps)
     (stmt_to_string stmt)
 
-and entry_to_string entry =
-  Printf.sprintf
-    "[%s](%s) -> %s;"
-    (string_of_int entry.eprio)
-    (comma_sep exp_to_string entry.ematch)
-    (exp_to_string entry.eaction)
-
-and s_to_string s = 
+and s_to_string s =
   match s with 
   | SAssign (i, e) -> id_to_string i ^ " = " ^ exp_to_string e ^ ";"
   | SNoop -> "skip;"
@@ -454,26 +428,6 @@ and s_to_string s =
       (id_to_string i)
       (size_to_string k)
       (stmt_to_string s)
-  | STableMatch tbl_rec ->
-    if tbl_rec.out_tys <> None
-    then
-      Printf.sprintf
-        "%s %s = table_match(%s, (%s), (%s));"
-        (comma_sep ty_to_string (Option.get tbl_rec.out_tys))
-        (comma_sep id_to_string tbl_rec.outs)
-        (exp_to_string tbl_rec.tbl)
-        (comma_sep exp_to_string tbl_rec.keys)
-        (comma_sep exp_to_string tbl_rec.args)
-    else
-      Printf.sprintf
-        "%s = table_match(%s);"
-        (comma_sep id_to_string tbl_rec.outs)
-        (comma_sep exp_to_string ((tbl_rec.tbl :: tbl_rec.keys) @ tbl_rec.args))
-  | STableInstall (id, entries) ->
-    Printf.sprintf
-      "table_install(%s, {\n\t%s\n\t}\n);"
-      (exp_to_string id)
-      (List.map entry_to_string entries |> String.concat "\n")
 and stmt_to_string stmt =
   let s_str = s_to_string stmt.s in
   let prag_str = match stmt.spragmas with

@@ -154,26 +154,8 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
         @@ !(fty.constraints)
       in
       new_env, { e with e = ECall (f, inferred_args, unordered); ety = Some fty.ret_ty }
-    (* Special case for action constructor. TODO: make actions constructors just be functions *)
     | TActionConstr(_) -> (
       failwith "TActionConstr is not expected to ever be reached"
-      (* let env, inferred_args = infer_exps env args in
-      let fty : acn_ctor_ty =
-        { aconst_param_tys = List.map (fun arg -> Option.get arg.ety) inferred_args
-        ; aacn_ty = {
-            aarg_tys = List.init (List.length acn_ctor_ty.aacn_ty.aarg_tys) (fun _ -> fresh_type ());
-            aret_tys = List.init (List.length acn_ctor_ty.aacn_ty.aret_tys) (fun _ -> fresh_type ());}
-        }
-      in
-      unify_raw_ty e.espan (TActionConstr fty) inferred_fty.raw_ty;
-      let aacn_ty = {
-        aarg_tys = List.map strip_links fty.aacn_ty.aarg_tys;
-        aret_tys = List.map strip_links fty.aacn_ty.aret_tys;
-        }
-      in
-      let acn_ty = ty@@TAction (aacn_ty) in
-      let acn_ty = strip_links acn_ty in
-      env, { e with e = ECall (f, inferred_args, unordered); ety = Some (acn_ty) } *)
     )
     | _ -> error_sp e.espan "Cannot call non-function"
   )
@@ -204,6 +186,9 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
         else inst ty
         | None -> error_sp e.espan @@ "Unknown label " ^ List.hd labels ^" in record exp: "^(Printing.exp_to_string e)
       in
+    (* mk_ty wraps the type with a fresh, unconstrained effect, 
+       which is fine because there are no effectful globals
+       (would produce an error in expected_ty above) *)
     let inf_ety =
       TRecord
         (List.map2 (fun l e -> l, (Option.get e.ety).raw_ty) labels inf_es)
@@ -248,59 +233,49 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       inf_entries;
     env, { e with e = EWith (inf_base, inf_entries); ety = Some expected_ty }
   | ETuple es ->
-    let env, inf_es = infer_exps env es in
+    let env, inf_es = infer_exps env es in (* infer the types and effects of each inner element of the tuple*)
+    (* form check *)
+    List.iter
+      (fun e' ->
+        if (not env.in_global_def) && is_global (Option.get e'.ety)
+        then error_sp e'.espan "Cannot dynamically create tuples containing global types")
+      inf_es;
+    (* effect unification *)
+    (* This is a vestigial. *)
+    (* It checks that effect ordering is preserved internally, 
+       which only blocks programs with global tuples constructed 
+       from other globals in the rhs constructor expression. 
+       But this is not the right place to catch such programs, e.g.,
+       the ERecord and EVector cases let them through anyways. *)
     let tuple_eff = fresh_effect () in
     List.iteri
       (fun i e' ->
-        if (not env.in_global_def) && is_global (Option.get e'.ety)
-        then
-          error_sp
-            e'.espan
-            "Cannot dynamically create tuples containing global types"
-        else (
-          (* This commented out code was a workaround to get unification to work 
-             for tuple expressions that contained elements from other tuples. 
-             The problem was that: tup foo = (bar.1, bar.2)  failed to unify, 
-             because it tried to unify the effect of foo.0 with bar.1, and there 
-             so it ended up trying to unify FSucc(FProj()) with FProj()
-            The solution was to add a case in TyperUnify.try_unify_effect: 
-                | FProj(FVar(tqv)), eff | eff, FProj(FVar(tqv)) -> ...
-            This solves the problem because in such a case, one of the sides 
-            is going to be a variable. And it is safe because projecting 
-            does not have an effect itself. *)
-          (* let expected = match (e'.e) with 
-            | EOp(TGet(_, idx), _) -> wrap_effect tuple_eff [None, 0; None, idx]
-            | _ -> wrap_effect tuple_eff [None, 0; None, i] 
-          in *)
+        if is_global (Option.get e'.ety) then (
           let expected = wrap_effect tuple_eff [None, 0; None, i] in
-          let derived = (Option.get e'.ety).teffect in           
-          unify_effect e.espan expected derived
-        )
-      )
-      inf_es;
+          unify_effect e.espan expected (Option.get e'.ety).teffect))
+    inf_es;
     let final_ety =
-      ty_eff (TTuple (List.map (fun e -> (Option.get e.ety).raw_ty) inf_es)) tuple_eff
+      TTuple (List.map (fun e -> (Option.get e.ety).raw_ty) inf_es) |> mk_ty
     in
     env, { e with e = ETuple inf_es; ety = Some final_ety }
-
-
   | EVector es ->
     let env, inf_es = infer_exps env es in
-    let ety = fresh_type () in
-    List.iteri
-      (fun i e' ->
+    (* form check *)
+    List.iter
+      (fun e' ->
         if (not env.in_global_def) && is_global (Option.get e'.ety)
-        then
-          error_sp
-            e'.espan
-            "Cannot dynamically create vectors containing global types"
-        else (
-          let expected =
-            { ety with teffect = wrap_effect ety.teffect [None, 0; None, i] }
-          in
-          unify_ty e.espan expected (Option.get e'.ety)))
+        then error_sp e'.espan "Cannot dynamically create vectors containing global types")
       inf_es;
-    let final_ety = TVector (ety.raw_ty, IConst (List.length es)) |> mk_ty in
+    (* type unification *)
+    let fresh_ety = fresh_type () in
+    List.iteri 
+      (fun i e' ->
+        let expected =
+          { fresh_ety with teffect = wrap_effect fresh_ety.teffect [None, 0; None, i] }
+        in
+        unify_ty e.espan expected (Option.get e'.ety))
+    inf_es;
+    let final_ety = TVector (fresh_ety.raw_ty, IConst (List.length es)) |> mk_ty in
     env, { e with e = EVector inf_es; ety = Some final_ety }
   | EIndex (e1, IUser (Id idx)) ->
     let env, inf_e1, inf_e1ty = infer_exp env e1 |> textract in
@@ -377,6 +352,39 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
         }
     in
     env, { e with e = EIndex (inf_e1, idx); ety }
+  | EGet(e1, idx) -> (
+    (* 4/2026 -- preliminary rule based on TGet and EIndex *)
+    let i =
+      match idx with
+      | IConst i -> i
+      | _ ->
+        error_sp e.espan
+        @@ "Index "
+        ^ size_to_string idx
+        ^ " is neither a variable nor a constant."
+    in
+    (* infer tuple type from expression *)
+    let env, inf_e1, inf_ety = infer_exp env e1 |> textract in
+    (* there is no expected type for a tuple *)
+    let size = match inf_ety.raw_ty with 
+      | TTuple(inf_rtys) -> List.length inf_rtys
+      | _ -> failwith "Type error: could not resolve tuple type length"
+    in
+    let expected_rtys = List.init size (fun _ -> (fresh_type ()).raw_ty) in
+    let expected_ty = mk_ty @@ TTuple expected_rtys in
+    unify_ty e.espan inf_ety expected_ty; (* expected type of the tuple *)
+    if i >= size
+      then (
+        let err_str = "Tuple index "^(string_of_int i)^" is out of bounds ("^(string_of_int size)^")" in
+        error_sp e.espan err_str
+      );
+    let ety = Some(
+      ty_eff
+        (List.nth expected_rtys i)
+        (wrap_effect inf_ety.teffect [None, 0; None, i])
+    ) in
+    env, {e with e = EGet(inf_e1, idx); ety}
+  )    
   | EComp (e1, idx, sz) ->
     validate_size e.espan env sz;
     let renamed_idx = Id.freshen idx in
@@ -444,106 +452,6 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     let env, inf_s = infer_statement env s in
     let env, inf_e1, inf_e1ty = infer_exp env e1 |> textract in
     env, { e with e = EStmt (inf_s, inf_e1); ety = Some inf_e1ty }
-  | ETableCreate ecreate ->
-    let env, inf_tsize = infer_exp env ecreate.tsize in
-    let unify_arg_tys sp msg tys1 tys2 =
-      if List.length tys1 <> List.length tys2
-      then error_sp sp ("wrong number of match-time arguments " ^ msg);
-      List.iter2 (unify_ty e.espan) tys1 tys2
-    in
-    (* for actions, we check the action args and return types *)
-    (* expected types come from table type *)
-    let exp_atys, exp_rty =
-      match ecreate.tty.raw_ty with
-      | TTable trec -> trec.tparam_tys, trec.tret_tys
-      | _ -> error "expected table type"
-    in
-    (* inferred types come from actions passed as arguments *)
-    let env, inf_acns = infer_exps env ecreate.tactions in
-    let check_acn_ctor_ty e_inf_acn =
-      let inf_atys, inf_rty =
-        match (Option.get e_inf_acn.ety).raw_ty with
-        | TActionConstr {aacn_ty = {aarg_tys; aret_tys} } -> aarg_tys, aret_tys
-        | _ -> error "not an action"
-      in
-      (* unify runtime arg and return types *)
-      unify_arg_tys
-        e_inf_acn.espan
-        "in action assigned to table"
-        exp_atys
-        inf_atys;
-      unify_arg_tys
-        e_inf_acn.espan
-        "in return of action assigned to table"
-        exp_rty
-        inf_rty
-    in
-    List.iter check_acn_ctor_ty inf_acns;
-    (* infer types of default action args *)
-    let def_cid, def_args, flag = unpack_default_action ecreate.tdefault.e in
-    let env, inf_def_args = infer_exps env def_args in
-    (* type check the default action's const args *)
-    let expected_def_arg_tys =
-      match (lookup_var e.espan env def_cid).raw_ty with
-      | TActionConstr a -> a.aconst_param_tys
-      | _ -> error_sp e.espan "the default action does not have type TActionConstr"
-    in
-    let inf_def_arg_tys =
-      List.map (fun exp -> Option.get exp.ety) inf_def_args
-    in
-    unify_arg_tys
-      e.espan
-      ("provided to default action \"" ^ Printing.cid_to_string def_cid ^ "\"")
-      expected_def_arg_tys
-      inf_def_arg_tys;
-    (* check that the default action is one of the table's actions *)
-    let tbl_acn_cids =
-      List.map
-        (fun exp ->
-          match exp.e with
-          | EVar cid -> cid
-          | _ -> error_sp exp.espan "table actions must be a list of action ids")
-        inf_acns
-    in
-    if not (List.exists (Cid.equal def_cid) tbl_acn_cids)
-    then
-      error_sp
-        e.espan
-        ("default action ("
-        ^ Printing.cid_to_string def_cid
-        ^ ") is not an action assigned to the table.");
-    (* The constructor expression must have an unbound effect, or it may not
-       unify with the type of the declaration. Note that, we cannot infer the
-       full table type from the constructor expression, because the constructor
-       expression doesn't know what the table keys are. *)
-    let ety = { ecreate.tty with teffect = fresh_effect () } in
-    (* return typed table with typed action args *)
-    ( env
-    , { e with
-        e =
-          ETableCreate
-            { ecreate with
-              tactions = inf_acns
-            ; tsize = inf_tsize
-            (* note that the default action expression is currently typed as TVoid, because the type 
-               never matters except for earlier in this checking branch, where it is obtained from elsewhere *)
-            ; tdefault = {ecreate.tdefault with e=ECall(def_cid, inf_def_args, flag); ety=Some(ty TVoid)}
-            }
-      ; ety = Some ety
-      } )
-  | ETableMatch tr ->
-    let new_env, new_tr, ret_ty = infer_tblmatch env tr e.espan in
-    let ret_ty =
-      match ret_ty with
-      | [ret_ty] -> ret_ty
-      | _ ->
-        error
-          "table apply expression has multiple return types. This should be \
-           impossible."
-    in
-    let new_e = ETableMatch new_tr in
-    new_env, { e with e = new_e; ety = Some ret_ty }
-  
 
 and infer_op env span op args =
   let env, ty, new_args =
@@ -692,132 +600,6 @@ and infer_exps env es =
       es
   in
   env, List.rev es'
-
-and infer_action_args env sp (acn_args : exp list) (expected_arg_tys : ty list) =
-  let _, inf_acn_args = infer_exps env acn_args in
-  List.iter2
-    (fun inf_e expect_ty ->
-      match inf_e.ety with
-      | Some ty -> try_unify_ty sp ty expect_ty
-      | None -> error_sp sp "could not infer type of action argument")
-    inf_acn_args
-    expected_arg_tys;
-  inf_acn_args
-
-and infer_keys env sp (inf_keysizes : ty list) keys =
-  let inf_keys = List.map (infer_exp env) keys |> List.split |> snd in
-  if List.length inf_keysizes <> List.length keys
-  then error_sp sp "Key has incorrect number of fields for table_type.";
-  List.iter2
-    (fun key_exp inf_keysz ->
-      let keysz =
-        match key_exp.ety with
-        | None -> error_sp key_exp.espan "Could not infer type"
-        | Some ty -> ty
-      in
-      unify_ty sp keysz inf_keysz)
-    inf_keys
-    inf_keysizes;
-  inf_keys
-
-(* for table return types *)
-and tup_of_tys tys =
-  match tys with
-  | [t] -> t.raw_ty
-  | _ -> TTuple (List.map (fun ty -> ty.raw_ty) tys)
-
-and infer_tblmatch (env : env) (tr : tbl_match) sp : env * tbl_match * ty list =
-  let etbl = tr.tbl in
-  (* infer table type, which looks it up from context *)
-  let _, inf_etbl = infer_exp env etbl in
-  let tblty = Option.get inf_etbl.ety in
-  (* try_unify_rty sp ((Option.get inf_etbl.ety).raw_ty) tr.tty.raw_ty; *)
-  (* get information from inferred table type *)
-  let inf_keysize, inf_arg_rtys, inf_ret_ty =
-    match inf_etbl.ety with
-    | Some ty ->
-      (match TyTQVar.strip_links ty.raw_ty with
-       | TTable trec ->
-         trec.tkey_sizes, trec.tparam_tys, tup_of_tys trec.tret_tys
-       | t ->
-         error_sp
-           sp
-           ("table_match arg is not a table: " ^ Printing.raw_ty_to_string t))
-    | _ -> error_sp sp "table_match 1st arg has no type"
-  in
-  let key_args, acn_args = tr.keys, tr.args in
-  (* type check key args *)
-  let inf_keys = infer_keys env sp inf_keysize key_args in
-  (* type check action args *)
-  let inf_acn_args = infer_action_args env sp acn_args inf_arg_rtys in
-  (* the actions and case statements have already been type checked at creation time.*)
-
-  (* check effects *)
-  (* inferred type of the match statement --
-       a function call with:
-        1st arg is declared table type.
-        next args are key types, remaining args are action arg types.
-       start effect is fresh, table arg effect is fresh, end effect is table arg effect+1,
-       constraints are that start effect is equal to table arg effect.   *)
-  let base_apply_fty =
-    let tbl_eff = FVar (QVar (Id.fresh "eff")) in
-    let start_eff = FVar (QVar (Id.fresh "eff")) in
-    let base_tblty = ty_eff tblty.raw_ty tbl_eff in
-    (* note: its okay to use inferred keys/acn args because they have been
-         checked against inferred table, which has been checked against declared table. *)
-    let base_key_tys = List.map (fun ekey -> Option.get ekey.ety) inf_keys in
-    let base_arg_tys =
-      List.map (fun earg -> Option.get earg.ety) inf_acn_args
-    in
-    (* hack: put return types at end of arg types *)
-    { arg_tys = (base_tblty :: base_key_tys) @ base_arg_tys
-    ; ret_ty = ty inf_ret_ty
-    ; start_eff
-    ; end_eff = FSucc tbl_eff
-    ; constraints = ref [CLeq (start_eff, tbl_eff)]
-    }
-  in
-  (* the inferred type is a copy of the base type. *)
-  let inf_apply_fty =
-    instantiator#visit_ty (fresh_maps ()) (ty (TFun base_apply_fty))
-  in
-  (* the actual type is a call with 1st arg of INFERRED type of the table variable.
-       This is important because the inferred type will have the concrete effect corresponding
-       to where the variable was declared. *)
-  (* this can be cleaner. inferred type should come entirely from inferred variables.
-       declared / expected type should come entirely (modulo key types) from declared type.
-       but this seems correct for now. *)
-  let base_key_tys = List.map (fun ekey -> Option.get ekey.ety) inf_keys in
-  let base_arg_tys = List.map (fun earg -> Option.get earg.ety) inf_acn_args in
-  let expected_fty =
-    { (* hack: put return types at end of arg types *)
-      arg_tys = (Option.get inf_etbl.ety :: base_key_tys) @ base_arg_tys
-    ; ret_ty = ty inf_ret_ty
-    ; start_eff = env.current_effect
-    ; end_eff = fresh_effect ()
-    ; constraints = ref []
-    }
-  in
-  (* unify inferred and actual types *)
-  unify_raw_ty sp (TFun expected_fty) inf_apply_fty.raw_ty;
-  let new_env =
-    check_constraints sp "Table match" env expected_fty.end_eff
-    @@ !(expected_fty.constraints)
-  in
-  let new_tr =
-    { tbl = inf_etbl
-    ; keys = inf_keys
-    ; args = inf_acn_args
-    ; outs = tr.outs
-    ; out_tys = tr.out_tys
-    }
-  in
-  let ret_tys =
-    match expected_fty.ret_ty.raw_ty with
-    | TTuple raw_tys -> List.map ty raw_tys
-    | _ -> [expected_fty.ret_ty]
-  in
-  new_env, new_tr, ret_tys
 
 and infer_statement (env : env) (s : statement) : env * statement =
   (*(match s.s with
@@ -993,23 +775,6 @@ and infer_statement (env : env) (s : statement) : env * statement =
           bs
       in
       env, SMatch (inf_es, inf_bs)
-    | STableMatch tm ->
-      let new_env, new_tm, _ = infer_tblmatch env tm s.sspan in
-      let new_env =
-        match new_tm.out_tys with
-        | Some out_tys ->
-          (* table_match declares new locals *)
-          add_locals new_env (List.combine new_tm.outs out_tys)
-        | None -> new_env
-      in
-      new_env, STableMatch new_tm
-    | STableInstall (etbl, entries) ->
-      (* infer table type, which looks it up from context *)
-      let _, inf_etbl = infer_exp env etbl in
-      let env, inf_entries =
-        infer_entries env s.sspan (Option.get inf_etbl.ety) entries
-      in
-      env, STableInstall (inf_etbl, inf_entries)
     | SLoop (s1, idx, sz) ->
       validate_size s.sspan env sz;
       let renamed_idx = Id.freshen idx in
@@ -1066,74 +831,6 @@ and infer_statement (env : env) (s : statement) : env * statement =
       new_env, SLoop (inf_s1, idx, sz)
   in
   env, { s with s = stmt }
-
-(* check / infer types of entries in a table install statement *)
-and infer_entries (env : env) sp tbl_ty entries =
-  (* get key sizes *)
-  let key_sizes =
-    match (TyTQVar.strip_links tbl_ty.raw_ty) with
-    | TTable tbl_ty -> tbl_ty.tkey_sizes
-    | _ -> error_sp sp ("first argument to table_install is not a table:\n"^(Printing.raw_ty_to_string tbl_ty.raw_ty))
-  in
-  let ty_to_size (ty : ty) = 
-    match ty.raw_ty with 
-    | TInt(sz) -> sz
-    | TBool -> IConst(1)
-    | _ -> error_sp sp "[ty_to_size] expected an int or bool, but got something else"
-  in
-  let expected_pat_rawtys = List.map (fun sz -> TPat (ty_to_size sz)) key_sizes in
-  (* do inference and checks for a single entry *)
-  let infer_entry env entry =
-    (* type the patterns *)
-    let env, inf_ematch =
-      if List.length entry.ematch <> List.length expected_pat_rawtys
-      then
-        error_sp
-          sp
-          "an entry has the wrong number of patterns based on this table's key."
-      else (
-        let env, inf_epats_rev =
-          List.fold_left
-            (fun (env, inf_epats_rev) (epat, expected_epat_rawty) ->
-              (* infer the expression's type *)
-              let env, inf_epat, inf_epat_ty = infer_exp env epat |> textract in
-              (* unify that type with the expected type *)
-              unify_raw_ty epat.espan expected_epat_rawty inf_epat_ty.raw_ty;
-              (* return the new environment and pat *)
-              env, inf_epat :: inf_epats_rev)
-            (env, [])
-            (List.combine entry.ematch expected_pat_rawtys)
-        in
-        env, List.rev inf_epats_rev)
-    in
-    (* type the constant action parameters *)
-    let action_cid, action_args, flag = unpack_default_action entry.eaction.e in
-    let param_tys =
-      match (lookup_var sp env action_cid).raw_ty with
-      | TActionConstr acn_ctor_ty -> acn_ctor_ty.aconst_param_tys
-      | _ -> error_sp sp "table entry does not refer to an action."
-    in
-    (* infer types of action args *)
-    let env, inf_eargs = infer_exps env action_args in
-    let inf_arg_tys = List.map (fun arg -> Option.get arg.ety) inf_eargs in
-    (* "unify", inferred args with params (make sure they are equiv) *)
-    List.iter2 (unify_ty sp) inf_arg_tys param_tys;
-    (* return new env and entry with typed patterns and args *)
-    (* note that the action call's type is not currently checked *)
-    let eaction = {entry.eaction with e=ECall(action_cid, inf_eargs, flag); ety = Some(ty TVoid)} in
-    let entry = {entry with ematch = inf_ematch; eaction;} in
-    env, entry
-  in
-  let env', entries_rev =
-    List.fold_left
-      (fun (env, entries_rev) entry ->
-        let env', entry' = infer_entry env entry in
-        env', entry' :: entries_rev)
-      (env, [])
-      entries
-  in
-  let entries = List.rev entries_rev in
-  env', entries
 
 and infer_branches (env : env) s etys branches =
   let drop_constraints = drop_constraints env in
@@ -1263,7 +960,7 @@ let retrieve_constraints env span id params =
             }
       } ->
     let maps = fresh_maps () in
-    let params2 = List.map (instantiator#visit_ty maps) arg_tys in
+    let params2 = List.map (instantiator#visit_ty maps) arg_tys in (* instantiated event types *)
     let constraints = List.map (instantiator#visit_constr maps) constraints in
     let _ =
       (* FIXME: This isn't quite sufficient -- it won't catch e.g.
@@ -1338,6 +1035,7 @@ let rec infer_parser_step env (step, span) =
     (match exp.e with
      | ECall (cid, args, _) ->
        let params = lookup_parser span env cid in
+       let params = instantiator#visit_params (fresh_maps ()) params in
        let _, inf_args = infer_exps env args in
        List.iter2
          (fun (_, pty) arg ->
@@ -1347,7 +1045,8 @@ let rec infer_parser_step env (step, span) =
        let exp' = call_sp cid inf_args span in
        let exp' = { exp' with ety = Some (mk_ty TEvent) } in
        PCall exp', span
-     | _ ->
+
+      | _ ->
        error_sp
          span
          "Parser bodies can only read, skip, generate, match, or call another \
@@ -1446,24 +1145,23 @@ let rec infer_declaration
         (Id.name id)
         (ty_to_string (lookup_var d.dspan env (Cid.id id))); *)
       env, effect_count, DEvent (id, annot, sort, constr_specs, params)
+
     | DHandler (id, s, body) ->
+      (* Handlers with polymorphic arguments should not constrain those
+         arguments in the body. To check this, we make a generalized
+         copy of the params at the start. *)
+      let generalized_params_start = generalizer#visit_params () (fst body) in
+      (* Re-generalize the entire body to clean up any shared TVar refs
+         that were mutated by the params generalization above, then
+         re-instantiate with a single fresh_maps so params and body
+         get consistent fresh TVars. *)
+      let generalized_body = generalizer#visit_body () body in
+      let body = instantiator#visit_body (fresh_maps ()) generalized_body in
+
       enter_level ();
       let constraints = retrieve_constraints env d.dspan id (fst body) in
-      (* LEFT OFF HERE. Unify handler and event types. *)
-      (* 1. look the type of the event's constructor (follow pattern from EVar inference) *)
-      (* let inst t = instantiator#visit_ty (fresh_maps ()) t in *)
-      (* let inf_ev_ctor_ty = lookup_var d.dspan env (Cid.id id) |> inst in *)
-      (* 2. unify the event's parameters with the handler's parameters *)
-      (* let _ =   match inf_ev_ctor_ty.raw_ty with 
-        | TFun fty -> (
-          match ret_ty.raw_ty with
-        )
-        | _ -> error_sp d.dspan "Error: found a variable with the same name as this handler"
-      in  *)
-      (* match inf_ev_ctor_ty with  *)
 
-
-      (* unify_ty d.dspan ty inf_ety; *)
+      (* type the handler body *)
       let _, inf_body =
         let starting_env =
           { env with current_effect = FZero; constraints }
@@ -1473,11 +1171,50 @@ let rec infer_declaration
         infer_body starting_env body
       in
       leave_level ();
+
+      (* generalize the body *)
       let inf_body = generalizer#visit_body () inf_body in
 
+      (* check that no polymorphic param types have been constrained by inference *)
+      let polymorphic_ty_preserved old_rty new_rty = 
+        equiv_ty ~ignore_effects:true ~qvars_wild:false ~ignore_qvar_ids:true old_rty new_rty 
+      in
+      List.iter2 
+        (fun (old_id, old_ty) (_, new_ty) -> 
+          if not (polymorphic_ty_preserved old_ty new_ty)
+          then 
+            (
+              let err_str = Printf.sprintf 
+                "Parameter %s of handler %s was declared as polymorphic (%s), but was \n\
+                used as a type %s in the handler body. \n\
+                Please declare %s parameter with a concrete type instead."
+                (Id.name old_id) (Id.name id) (ty_to_string old_ty) (ty_to_string new_ty) (Id.name old_id)
+              in
+            error_sp old_ty.tspan @@ err_str)
+        )
+        generalized_params_start
+        (fst inf_body);
 
-
+      (* return the handler with the typed body *)
       env, effect_count, DHandler (id, s, inf_body)
+    | DParser (id, params, parser) ->
+      enter_level ();
+      (* a parser may branch on the ingress port *)
+      let ingress_port_param = (Builtins.ingr_port_id, builtin_tys.ingr_port_ty) in
+      let parser_env =
+        add_locals env (ingress_port_param::params) 
+        |> define_parser Builtins.lucid_parse_id [(Id.create "pkt", ty TBitstring)]
+      in
+      
+      let inf_parser = infer_parser_block parser_env parser in
+      leave_level ();
+
+      let inf_params = generalizer#visit_params () params in
+      let inf_parser = generalizer#visit_parser_block () inf_parser in
+
+      let env = define_parser id params env in
+      env, effect_count, DParser (id, inf_params, inf_parser)
+
     | DFun (id, ret_ty, constr_specs, body) ->
       (* a function declaration needs to have all the 
          local builtins available to it as well. *)
@@ -1531,6 +1268,7 @@ let rec infer_declaration
         @@ "Function "
         ^ Id.name id
         ^ " violates ordering constraints";
+      (* add the function's type to the environment for later use. *)
       let fty : func_ty =
         { arg_tys = List.map (fun (_, ty) -> ty) (fst inf_body)
         ; ret_ty
@@ -1540,10 +1278,11 @@ let rec infer_declaration
         }
         |> generalizer#visit_func_ty ()
       in
-      let inf_body = generalizer#visit_body () inf_body in
-      (* add the function's type to the environment for later use. *)
       let env = define_const id (mk_ty @@ TFun fty) env in
+      (* generalize the function's body *)
+      let inf_body = generalizer#visit_body () inf_body in
       env, effect_count, DFun (id, ret_ty, constr_specs, inf_body)
+
     | DMemop (id, params, memop_body) ->
       enter_level ();
       let inf_body = infer_memop env params memop_body in
@@ -1570,38 +1309,6 @@ let rec infer_declaration
               lst
           in
           { new_env with record_labels }
-        | TTable ttbl ->
-          (* want to do something about the inner types ?*)
-          let inf_tparam_tys =
-            List.map
-              (fun stated_ty ->
-                (* let raw_ty = stated_ty.raw_ty in *)
-                let inf_ty = inst stated_ty in
-                (* not sure what this does... *)
-                try_unify_ty stated_ty.tspan stated_ty inf_ty;
-                inf_ty)
-              ttbl.tparam_tys
-          in
-          let inf_tret_tys =
-            List.map
-              (fun stated_ty ->
-                let inf_ty = inst stated_ty in
-                (* not sure what this does... *)
-                try_unify_ty stated_ty.tspan stated_ty inf_ty;
-                inf_ty)
-              ttbl.tret_tys
-          in
-          let inf_ty =
-            { ty with
-              raw_ty =
-                TTable
-                  { ttbl with
-                    tparam_tys = inf_tparam_tys
-                  ; tret_tys = inf_tret_tys
-                  }
-            }
-          in
-          define_user_ty id sizes inf_ty env
         | _ -> new_env
       in
       new_env, effect_count, DUserTy (id, sizes, ty)
@@ -1723,20 +1430,7 @@ let rec infer_declaration
       ( env
       , effect_count
       , DActionConstr (id, ret_ty, const_params, (params, inf_action_body)) )
-    | DParser (id, params, parser) ->
-      enter_level ();
-      (* a parser may branch on the ingress port *)
-      let ingress_port_param = (Builtins.ingr_port_id, builtin_tys.ingr_port_ty) in
-      let parser_env =
-        add_locals env (ingress_port_param::params) 
-        |> define_parser Builtins.lucid_parse_id [(Id.create "pkt", ty TBitstring)]
-      in
-      
-      let inf_parser = infer_parser_block parser_env parser in
-      leave_level (); (* bug fix: parser never left level *)
-       
-      let env = define_parser id params env in
-      env, effect_count, DParser (id, params, inf_parser)
+
   in
   let new_d = { d with d = new_d } in
   Wellformed.check_qvars new_d;

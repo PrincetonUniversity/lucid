@@ -186,7 +186,7 @@ let rec v_to_mask (v : CoreSyntax.v) =
     | VBits b -> 
       (* let v = BitString.bits_to_int b  in  *)
       (* let v = Integer.create ~value:v ~size:(List.length b) in *)
-      let m  = Integer.max_int (List.length b) in
+      let m  = Integer.max_int (BitString.length b) in
       CoreSyntax.VInt(m)
     | VGlobal _ -> Console.error "a global cannot appear as a key in a table"
     | VEvent _ -> Console.error "an event cannot appear as a key in a table"
@@ -327,7 +327,7 @@ let rec parse_value payloads_t_id err_str ty j =
 
 
 
-let parse_locations default_port num_switches lst =
+let parse_locations default_port num_switches lst : loc list =
   let locations =
     match List.assoc_opt "locations" lst with
     | Some (`List lst) ->
@@ -493,13 +493,13 @@ let control_event_to_string control_e =
 ;;
 
 (* json exporter functions *)
-let packet_event_to_json event = 
+(* let packet_event_to_json event = 
   ["type", `String "packet";   
   "bytes", `String (List.hd event.data |> CorePrinting.value_to_string)]
-;;
+;; *)
 
 let event_to_json {eid; data; eserialized} =   
-  let raw_json_val v =
+  let raw_json_val (v : value) =
     match v.v with
     | VInt i -> `Int (Integer.to_int i)
     | VBool b -> `Bool b

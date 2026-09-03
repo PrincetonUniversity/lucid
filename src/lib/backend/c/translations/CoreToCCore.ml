@@ -54,11 +54,7 @@ let size_to_ty = function
   | C.Sz(sz) -> F.ty@@F.TInt(F.sz sz)
   | C.Szs(szs) -> F.ttuple @@ List.map (fun sz -> F.ty@@F.TInt(F.sz sz)) szs
 ;;
-let rec bits_to_ints = function 
-  | BitString.B0::bs -> 0::(bits_to_ints bs)
-  | BitString.B1::bs -> 1::(bits_to_ints bs)
-  | [] -> []
-;;
+let bits_to_ints = BitString.to_ints ;;
 
 
 (* helpers for actions and action types *)

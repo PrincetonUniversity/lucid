@@ -3,6 +3,10 @@
 # this should work on any system with opam installed, 
 # or on Ubuntu and Debian if opam is not installed
 
+# Update system packages
+sudo apt update
+sudo apt install -y build-essential libpython3.10-dev
+
 # Check for opam and install if not found
 if ! command -v opam &> /dev/null
 then
@@ -12,9 +16,6 @@ then
         echo "Opam is not installed and this script can only auto-install it for Ubuntu and Debian. Please install opam manually and re-run this script."
         exit 1
     fi
-    # Update system packages
-    sudo apt update
-    sudo apt install -y build-essential
     sudo apt install -y opam
 fi
 
@@ -49,3 +50,10 @@ fi
 opam install -y --confirm-level=unsafe-yes --deps-only .
 echo "All Lucid dependencies installed."
 echo "Run eval \$(opam env) to update your shell env before calling make."
+
+# NOTE: 
+# if you get an error like:
+# The compilation of ocaml-base-compiler.4.12.0 failed at "make -j23"
+# run lines 39 and 49 with --jobs=1, e.g.:
+# opam switch create 4.12.0 --jobs=1
+# opam install -y --jobs=1 --confirm-level=unsafe-yes --deps .

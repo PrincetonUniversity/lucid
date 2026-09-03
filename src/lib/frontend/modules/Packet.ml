@@ -1,6 +1,6 @@
 open Batteries
 open Syntax
-open InterpState
+open InterpSwitch
 
 let packet_name = "Packet"
 let packet_id = Id.create packet_name
@@ -37,12 +37,12 @@ let packet_parse_ty =
 ;;
 let packet_parse_error msg = packet_error packet_parse_name msg
 
-let packet_parse_fun nst swnum args =
-  let _, _, _ = nst, swnum, args in
+let packet_parse_fun _ args =
+  let _ = args in
   packet_parse_error "Packet.parse should never be called outside of parsers"
 ;;
 
-let defs : State.global_fun list =
+let defs : global_fun list =
   [ { cid = packet_parse_cid; body = packet_parse_fun; ty = packet_parse_ty } ]
 ;;
 

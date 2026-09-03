@@ -69,7 +69,7 @@ let lucid_background_event_parser ?(with_payloads=true) pkt_var bg_events =
    let tag_id = Cid.create ["tag"] in
    let tag_ty = ty (TInt(Sz 16)) in   
    let etag = var tag_id tag_ty in
-   block 
+   block
       [ (* skip the lucid ethernet header *)
          skip (ty (TInt(Sz 32)));
          skip (ty (TInt(Sz 16)));
@@ -78,30 +78,30 @@ let lucid_background_event_parser ?(with_payloads=true) pkt_var bg_events =
          skip (ty (TInt(Sz 16)));
          PRead(Cid.create ["tag"], tag_ty, pkt_var) (* read the event tag *)
       ]
-      (pmatch [etag] branches)   
+      (pmatch [etag] (branches @ [pbranch_wild 1 (block [] pdrop)]))
 ;;
 
 (* generate a background event parser that starts after the ethernet header *)
-let lucid_background_event_parser_after_eth ?(with_payloads=true) pkt_var bg_events = 
-   match bg_events with 
+let lucid_background_event_parser_after_eth ?(with_payloads=true) pkt_var bg_events =
+   match bg_events with
    | [] -> block [ ] pdrop (* no background events means there's nothing to parse *)
-   | _ -> 
-   let (branches : parser_branch list) = List.map 
-      (fun bg_ev -> match bg_ev.d with 
-         | DEvent(_, Some(num), _,_) -> 
+   | _ ->
+   let (branches : parser_branch list) = List.map
+      (fun bg_ev -> match bg_ev.d with
+         | DEvent(_, Some(num), _,_) ->
             pbranch [num] (packetevent_parse_block ~with_payloads pkt_var bg_ev)
          | DEvent(_, None, _, _) -> error "event has no number"
          | _ -> error "not an event?")
       bg_events
    in
    let tag_id = Cid.create ["tag"] in
-   let tag_ty = ty (TInt(Sz 16)) in   
+   let tag_ty = ty (TInt(Sz 16)) in
    let etag = var tag_id tag_ty in
-   block 
+   block
       [
          PRead((Cid.create ["tag"]),tag_ty,pkt_var)
       ]
-      (pmatch [etag] branches)      
+      (pmatch [etag] (branches @ [pbranch_wild 1 (block [] pdrop)]))
 ;;
 
 (* inline all the calls in a single parser *)

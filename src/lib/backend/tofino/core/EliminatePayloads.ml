@@ -29,7 +29,7 @@ type ctx = Collections.CidSet.t;;
 
 let filter_payload_params params = 
   List.filter params ~f:(fun (_, ty) -> 
-    not (InterpPayload.is_payload_ty ty))
+    not (InterpParsing.is_payload_ty ty))
 ;;
 
 (* in a statement, delete the payload argument (the last arg) in calls to constructors of events with payloads *)
@@ -56,7 +56,7 @@ let process_decl (events_with_payloads: ctx) (d:decl) =
     let fst_param = List.hd rev_params in 
     match fst_param with 
     (* if the first parameter is a payload, delete it and update context *)
-    | Some(_, ty) when (InterpPayload.is_payload_ty ty) -> 
+    | Some(_, ty) when (InterpParsing.is_payload_ty ty) -> 
       let events_with_payloads = Collections.CidSet.add (Cid.id id) events_with_payloads in
       let params = Caml.List.tl rev_params |> List.rev in
       events_with_payloads, { d with d = DEvent(id, num_opt, esort, params) }

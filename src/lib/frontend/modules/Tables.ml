@@ -1,15 +1,10 @@
 (* Tables as a builtin module *)
-(* TODO: test with nested types for keys, args *)
-(* TODO: update documentation *)
 (* TODO: add an install_mask_priority function *)
 (* TODO: add a remove function *)
 (* TODO: add an update function *)
-(* TODO: simplify action / action constructor syntax *)
-(* TODO: remove all the pattern syntax and 
-         special table syntax from the frontend *)
 open Batteries
 open Syntax
-open InterpState
+open InterpSwitch
 open LibraryUtils
 open Pipeline
 open InterpSyntax
@@ -56,8 +51,8 @@ match v with
     CoreSyntax.VTuple([v; CoreSyntax.VInt(mask)])
   | VBits b -> 
     let v = BitString.bits_to_int b  in 
-    let v = Integer.create ~value:v ~size:(List.length b) in
-    let m  = Integer.max_int (List.length b) in
+    let v = Integer.create ~value:v ~size:(BitString.length b) in
+    let m  = Integer.max_int (BitString.length b) in
     CoreSyntax.VTuple([CoreSyntax.VInt(v); CoreSyntax.VInt(m)])
   | VGlobal _ -> Syntax.error "a global cannot appear as a key in a table"
   | VEvent _ -> Syntax.error "an event cannot appear as a key in a table"
@@ -151,19 +146,19 @@ let create_sig =
 ;;
 
 (* interpreter implementation *)
-let create_ctor (nst : InterpState.State.network_state) swid args = 
+(* Append a new table to the pipeline *)
+let create_ctor (st : state) args : Pipeline.t =
   match args with 
   (* the table value arg is added by interpcore *)
   | [tbl_v; tbl_len; tbl_acn_ctors; tbl_def_acn; tbl_def_args] -> 
     let _ = tbl_acn_ctors in
-    let st = nst.switches.(swid) in
     let p = st.pipeline in
     let tbl_id = match tbl_v with 
       | V { v = VGlobal(tbl_id, _) } -> tbl_id
       | _ -> error"Table.create: expected a global for the table id"
     in
     let def_acn_cid, def_acn_ctor = 
-      ival_fcn_to_internal_action nst swid tbl_def_acn 
+      ival_fcn_to_internal_action st tbl_def_acn
     in
     let flat_default_args = match tbl_def_args with 
       | V({v=VTuple(vs)}) -> List.map CoreSyntax.value vs
@@ -230,12 +225,11 @@ let install_ty =
 ;;
 
 (* install an exact pattern, with key value equal to mask *)
-let install_fun nst swid args =
-  let _, _ = nst, swid in
+let install_fun st args =
   let open CoreSyntax in
   match args with
   | [vtbl; vkey; vaction; vaction_const_arg_tup] -> 
-    let target_pipe = (State.sw nst swid).pipeline in    
+    let target_pipe = st.pipeline in    
     let stage = match (extract_ival vtbl).v with 
       | VGlobal(_, stage) -> stage
       | _-> error "Table.install: table arg didn't eval to a global"
@@ -250,7 +244,7 @@ let install_fun nst swid args =
       | _ -> error "Table.create: expected a tuple for the default action args"
     in
     let acn_cid, acn_ctor = 
-      ival_fcn_to_internal_action nst swid vaction
+      ival_fcn_to_internal_action st vaction
     in
 
     let acn remaining_args = 
@@ -311,12 +305,11 @@ let install_ternary_ty =
 ;;
 
 (* install an exact pattern, with key value equal to mask *)
-let install_ternary_fun nst swid args =
-  let _, _ = nst, swid in
+let install_ternary_fun st args =
   let open CoreSyntax in
   match args with
   | [vtbl; vkey; vmask; vaction; vaction_const_arg_tup] -> 
-    let target_pipe = (State.sw nst swid).pipeline in    
+    let target_pipe = st.pipeline in    
     let stage = match (extract_ival vtbl).v with 
       | VGlobal(_, stage) -> stage
       | _-> error "Table.install: table arg didn't eval to a global"
@@ -338,7 +331,7 @@ let install_ternary_fun nst swid args =
       | _ -> error "Table.create: expected a tuple for the default action args"
     in
     let acn_cid, acn_ctor = 
-      ival_fcn_to_internal_action nst swid vaction
+      ival_fcn_to_internal_action st vaction
     in
     let acn remaining_args = 
       acn_ctor (vaction_const_args@remaining_args)
@@ -391,16 +384,14 @@ let lookup_ty =
     }
 ;;
 
-let lookup_fun nst swid args =
-  let _, _ = nst, swid in
-  let open State in
+let lookup_fun st args =
   let open InterpSyntax in
   let open CoreSyntax in
   match args with
   | [V { v = VGlobal(_, tbl_pos); }; V { v = vkey }; V { v = vargs }] ->  
     let keys = flatten_v vkey |> List.map value in  
     (* get all the entries from the table *)
-    let default, entries = Pipeline.get_table_entries tbl_pos (State.sw nst swid).pipeline in
+    let default, entries = Pipeline.get_table_entries tbl_pos st.pipeline in
     (* find the first matching case *)
     let fst_match =
       List.fold_left
@@ -433,16 +424,16 @@ let lookup_fun nst swid args =
     let ret_values = acn arg_values in
     let ret_vs = List.map (fun (valu: CoreSyntax.value) -> valu.v) ret_values in
     (* wrap the return values in a tuple, if more than 1 return *)
-    if (List.length ret_vs = 1) then (InterpSyntax.V (value_sp (List.hd ret_vs) Span.default))
+    if (List.length ret_vs = 1) then (InterpSwitch.V (value_sp (List.hd ret_vs) Span.default))
     else 
-      InterpSyntax.V(vtup ret_vs Span.default)
+      InterpSwitch.V(vtup ret_vs Span.default)
   | _ ->
     lookup_error "Incorrect number or type of arguments to Table.lookup"
 
 
 let constructors = [create_id, create_sig]
 
-let defs : State.global_fun list =
+let defs : global_fun list =
   [
     { cid = install_cid; body = install_fun; ty = install_ty };
     { cid = install_ternary_cid; body = install_ternary_fun; ty = install_ternary_ty };
@@ -468,7 +459,7 @@ let signature =
 (*** helpers to convert to old syntax for tofino backend ***)
 let function_cids = 
   (fst (List.split constructors))@(List.map 
-    (fun (def: InterpState.State.global_fun ) -> def.cid) 
+    (fun (def: InterpSwitch.global_fun ) -> def.cid) 
     (defs)
   )
 ;;

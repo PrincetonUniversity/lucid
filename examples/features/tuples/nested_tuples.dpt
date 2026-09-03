@@ -1,0 +1,70 @@
+// Polymorphic parsers using nested tuple arguments.
+// Eth header
+type eth_t = {
+  int<48> dst_mac;
+  int<48> src_mac;
+  int<16> etype;
+}
+const int<16> IP_ETHERTY = 0x0800;
+
+// IPv4 header type
+type ip_t = {
+  int<4> version;
+  int<4> ihl;
+  int<8> diffserv;
+  int<16> total_len;
+  int<16> id;
+  int<3> flags;
+  int<13> frag_offset;
+  int<8> ttl;
+  int<8> protocol;
+  int<16> hdr_csum;
+  int<32> src;
+  int<32> dst;
+}
+
+type udp_t = {
+  int<16> src_port;
+  int<16> dst_port;
+  int<16> length;
+  int<16> csum;
+}
+
+event passthrough(auto hdrs, Payload.t payload) {
+    generate_port(0, this);
+}
+
+parser parse_udp(auto l2_hdrs, bitstring pkt) {
+    udp_t udp = read(pkt);
+    match udp#dst_port with
+    | 2152 -> { 
+        generate passthrough((l2_hdrs, udp), Payload.parse(pkt));
+    }
+    | _ -> {    
+        generate passthrough((l2_hdrs, udp), Payload.parse(pkt));
+    }
+}
+
+parser parse_ip(auto l1_hdrs, bitstring pkt) {
+  ip_t ip = read(pkt);
+  match ip#protocol with 
+  | 0x11 -> { 
+        parse_udp((l1_hdrs, ip), pkt); 
+    }
+  | 132 -> { 
+        generate passthrough((l1_hdrs, ip), Payload.parse(pkt));
+    }
+  | _ -> {     
+       generate passthrough((l1_hdrs, ip), Payload.parse(pkt)); 
+    }
+}
+
+
+parser main(bitstring pkt) {
+    eth_t e = read(pkt);
+    match e#etype with
+    | LUCID_ETHERTY -> { do_lucid_parsing(pkt); } // call builtin parser 
+    | IP_ETHERTY -> { parse_ip(e, pkt); }    
+    | _ -> { generate passthrough(e, Payload.parse(pkt)); }
+}
+

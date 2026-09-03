@@ -37,7 +37,10 @@ let set_event_nums ds =
           let rv = DEvent(id, Some !num, sort, specs, args) in
           num := !num + 1;
           rv
-        | Some _ -> DEvent(id, num_opt, sort, specs, args)
+        | Some _ -> 
+          (* TODO: check if the event has any polymorphic arguments. 
+              If so, we cannot currently support user-defined event numbers *)
+          DEvent(id, num_opt, sort, specs, args)
     end
   in
   v#visit_decls () ds

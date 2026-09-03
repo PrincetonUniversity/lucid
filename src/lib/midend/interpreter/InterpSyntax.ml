@@ -1,35 +1,8 @@
 (* interpreter-specific extensions to core syntax: 
 internal value and event types *)
 open CoreSyntax
-(* open InterpControl *)
-
-(* values used in interpreter contexts. 'nst is network state *)
-type 'nst ival =
-  | V of value
-  | F of (cid option * 'nst code)
-
-and 'nst code = 'nst -> int (* switch *) -> 'nst ival list -> 'nst ival
-
-and memop
-
-and 'nst handler =
-'nst -> int (* switch *) -> int (* port *) -> event_val -> unit
-
-let f (cid: cid) (code: 'nst code) = F(Some(cid), code)
-let anonf (code:'nst code) = F(None, code)
 
 
-let extract_ival iv =
-  match iv with
-  | V v -> v
-  | F _ -> failwith "IVal not a regular value"
-;;
-
-let ival_to_string v =
-  match v with
-  | V v -> CorePrinting.value_to_string v
-  | F _ -> "<function>"
-;;
 
 
 (* internal event location in simulated network *)
@@ -41,7 +14,7 @@ type loc = {
 (* an internal event in the interpreter *)
 type ievent = {
   sevent : event_val;
-  sloc : loc; (*we always know where an event is located *)
+  sloc : loc; (* we always know where an event is located *)
   stime : int;
   squeue_order : int; (* tiebreaker for two events queued at the same time *)
 }
@@ -78,24 +51,3 @@ let internal_event_to_string ievent =
   CorePrinting.event_to_string ievent.sevent
 ;;
 
-
-(* an input from the user *)
-
-
-(* type interp_input =
-  | IEvent of {iev : event_val; ilocs : loc list; itime : int}
-  | IControl of {ictl : control_val; ilocs : loc list; itime : int}
-;;
-let ievent iev ilocs itime = IEvent{iev; ilocs; itime}
-let icontrol ictl ilocs itime = IControl{ictl; ilocs; itime}
-let interp_input_to_time interp_input = 
-  match interp_input with
-  | IEvent({itime}) -> itime
-  | IControl({itime}) -> itime
-;;
-
-let input_locs interp_input = 
-  match interp_input with
-  | IEvent({ilocs}) -> ilocs
-  | IControl({ilocs}) -> ilocs
-;; *)

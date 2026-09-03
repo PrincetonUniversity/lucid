@@ -1,7 +1,7 @@
 (* Interpretation of stateful pairarrays. *)
 open Batteries
 open Syntax
-open InterpState
+open InterpSwitch
 
 (* Generic PairArray defs *)
 let pairarray_name = "PairArray"
@@ -59,9 +59,8 @@ let pairarray_update_ty =
        }
 ;;
 
-let pairarray_update_fun nst swid args =
+let pairarray_update_fun st args =
   let open InterpSyntax in
-  let open State in 
   match args with
   | [V { v = VGlobal (_, stage) }; V { v = VInt idx }; F (_, memop); arg1; arg2; default]
     ->
@@ -73,18 +72,18 @@ let pairarray_update_fun nst swid args =
         ; arg2
         ; default ]
       in
-      let v = memop nst swid args |> extract_ival in
+      let v = memop st args |> extract_ival in
       match v.v with
       | VTuple [VInt n1; VInt n2; v3] -> n1, n2, { v with v = v3 }
       | _ -> failwith "array_update: Internal error"
     in
-    V(Pipeline.update_complex ~stage ~idx:(Integer.to_int idx) ~memop:update_f (sw nst swid).pipeline)
+    V(Pipeline.update_complex ~stage ~idx:(Integer.to_int idx) ~memop:update_f st.pipeline)
   | _ -> pairarray_update_error "Incorrect number or type of arguments"
 ;;
 
 let constructors = [pairarray_create_id, pairarray_create_sig]
 
-let defs : State.global_fun list =
+let defs : global_fun list =
   [ { cid = pairarray_update_cid
     ; body = pairarray_update_fun
     ; ty = pairarray_update_ty

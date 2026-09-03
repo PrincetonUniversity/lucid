@@ -3,7 +3,6 @@
    laid out on the tofino. *)
 (* open Batteries *)
 open Dpt
-open Cmdline
 open BackendLogging
 open Printf
 open IoUtils
@@ -15,8 +14,8 @@ open Yojson.Basic
 let do_logging = ref true ;;
 let disable_logging () = 
   do_logging := false;
-  Config.cfg.verbose <- false;
-  Config.cfg.debug <- false;
+  Config.base_cfg.verbose <- false;
+  Config.base_cfg.debug <- false;
   (* InterpHelpers.silent := true; *)
   (* NormalizeInts.silent := true;
   PackageTofinoApp.silent := true; *)
@@ -52,7 +51,7 @@ module ArgParse = struct
   let parse_args () =
     let args_ref = ref args_default in
     (* FIXME: Crazy hack, we should unify the two methods of commandline parsing *)
-    let set_symb s = Config.cfg.symb_file <- s in
+    let set_symb s = Config.base_cfg.symb_file <- s in
     let set_json_fn s = args_ref :=  {!args_ref with json_fn=s;} in 
     let speclist =
       [ "-o", Arg.String set_json_fn, "Output json file"
@@ -60,7 +59,7 @@ module ArgParse = struct
       ]
     in
     let parse_aarg (arg : string) =
-      Config.cfg.dpt_file <- arg;
+      Config.base_cfg.dpt_file <- arg;
       args_ref := { !args_ref with dptfn = arg };
     in
     Arg.parse speclist parse_aarg usage;
@@ -69,16 +68,21 @@ module ArgParse = struct
   ;;
 end
 
-let profile_for_tofino target_filename portspec build_dir profile_cmd = 
+let get_portspec () =
+  match TofinoConfig.cfg.portspec with
+  | Some portspec_fn -> TofinoPorts.parse portspec_fn
+  | None -> TofinoPorts.create TofinoConfig.cfg.ports TofinoConfig.cfg.recirc_port
+;;
+
+let profile_for_tofino target_filename portspec build_dir profile_cmd =
   let ds = Input.parse target_filename in
   let _, ds = FrontendPipeline.process_prog Builtins.tofino_builtin_tys ds in
-  let portspec = ParsePortSpec.parse portspec in 
   TofinoProfiling.profile ds portspec build_dir profile_cmd
 ;;
 let compile_to_dfg target_filename json_fn =
   let ds = Input.parse target_filename in
   let _, ds = FrontendPipeline.process_prog Builtins.tofino_builtin_tys ds in
-  let portspec = ParsePortSpec.parse Config.cfg.portspec in
+  let portspec = get_portspec () in
   TofinoProfiling.export_dfg ds portspec json_fn;
 ;;
 let main () = 

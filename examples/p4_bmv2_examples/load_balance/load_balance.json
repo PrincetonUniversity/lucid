@@ -1,0 +1,314 @@
+{
+  "random seed": 1,
+  "max time": 30000,
+  "default_input_gap": 100,
+  "topology": {
+    "nodes": {
+      "0": {
+        "ports": {
+          "2": {
+            "type": "link"
+          },
+          "3": {
+            "type": "link"
+          }
+        }
+      },
+      "1": {
+        "ports": {
+          "2": {
+            "type": "link"
+          },
+          "3": {
+            "type": "link"
+          }
+        }
+      },
+      "2": {
+        "ports": {
+          "2": {
+            "type": "link"
+          },
+          "3": {
+            "type": "link"
+          }
+        }
+      }
+    },
+    "links": [
+      {
+        "0:2": "1:2"
+      },
+      {
+        "0:3": "2:2"
+      },
+      {
+        "1:3": "2:3"
+      }
+    ]
+  },
+  "events": [
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        0
+      ],
+      "args": {
+        "table": "ecmp_group",
+        "key": [
+          "167772161<32>"
+        ],
+        "action": "ecmp_group.set_ecmp_params",
+        "args": [
+          "0<16>",
+          "2<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        0
+      ],
+      "args": {
+        "table": "ecmp_nhop",
+        "key": [
+          "0<16>"
+        ],
+        "action": "ecmp_nhop.set_nhop",
+        "args": [
+          "8796093022722<48>",
+          "167772674<32>",
+          "2<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        0
+      ],
+      "args": {
+        "table": "ecmp_nhop",
+        "key": [
+          "1<16>"
+        ],
+        "action": "ecmp_nhop.set_nhop",
+        "args": [
+          "8796093022979<48>",
+          "167772931<32>",
+          "3<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        0
+      ],
+      "args": {
+        "table": "send_frame",
+        "key": [
+          "2<32>"
+        ],
+        "action": "send_frame.rewrite_mac",
+        "args": [
+          "8796093022464<48>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        0
+      ],
+      "args": {
+        "table": "send_frame",
+        "key": [
+          "3<32>"
+        ],
+        "action": "send_frame.rewrite_mac",
+        "args": [
+          "8796093022464<48>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        1
+      ],
+      "args": {
+        "table": "ecmp_group",
+        "key": [
+          "167772674<32>"
+        ],
+        "action": "ecmp_group.set_ecmp_params",
+        "args": [
+          "0<16>",
+          "1<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        1
+      ],
+      "args": {
+        "table": "ecmp_nhop",
+        "key": [
+          "0<16>"
+        ],
+        "action": "ecmp_nhop.set_nhop",
+        "args": [
+          "8796093022722<48>",
+          "167772674<32>",
+          "1<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        1
+      ],
+      "args": {
+        "table": "send_frame",
+        "key": [
+          "1<32>"
+        ],
+        "action": "send_frame.rewrite_mac",
+        "args": [
+          "8796093022720<48>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        2
+      ],
+      "args": {
+        "table": "ecmp_group",
+        "key": [
+          "167772931<32>"
+        ],
+        "action": "ecmp_group.set_ecmp_params",
+        "args": [
+          "0<16>",
+          "1<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        2
+      ],
+      "args": {
+        "table": "ecmp_nhop",
+        "key": [
+          "0<16>"
+        ],
+        "action": "ecmp_nhop.set_nhop",
+        "args": [
+          "8796093022979<48>",
+          "167772931<32>",
+          "1<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        2
+      ],
+      "args": {
+        "table": "send_frame",
+        "key": [
+          "1<32>"
+        ],
+        "action": "send_frame.rewrite_mac",
+        "args": [
+          "8796093022976<48>"
+        ]
+      }
+    },
+    {
+      "type": "packet",
+      "bytes": "08000000010008000000010108004500002800000000400665cf0a0001010a00000104570050000000000000000050000000963c0000",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 5000
+    },
+    {
+      "type": "packet",
+      "bytes": "08000000010008000000010108004500002800000000400665cf0a0001010a00000108ae005000000000000000005000000091e50000",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 5500
+    },
+    {
+      "type": "packet",
+      "bytes": "08000000010008000000010108004500002800000000400665cf0a0001010a0000010d0500500000000000000000500000008d8e0000",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 6000
+    },
+    {
+      "type": "packet",
+      "bytes": "08000000010008000000010108004500002800000000400665cf0a0001010a000001115c005000000000000000005000000089370000",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 6500
+    },
+    {
+      "type": "packet",
+      "bytes": "08000000010008000000010108004500002800000000400665cf0a0001010a00000115b3005000000000000000005000000084e00000",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 7000
+    },
+    {
+      "type": "packet",
+      "bytes": "08000000010008000000010108004500002800000000400665cf0a0001010a0000011a0a005000000000000000005000000080890000",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 7500
+    },
+    {
+      "type": "packet",
+      "bytes": "08000000010008000000010108004500002800000000400663ce0a0001010a00020203e8005000000000000000005000000094aa0000",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 8000
+    },
+    {
+      "type": "packet",
+      "bytes": "080000000100080000000101080045000028000000004006020a0a0001010a63636303e8005000000000000000005000000032e60000",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 8500
+    }
+  ]
+}

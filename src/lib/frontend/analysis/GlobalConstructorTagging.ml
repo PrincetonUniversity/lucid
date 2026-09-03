@@ -34,7 +34,6 @@ let gty_to_tag ty = match (TyTQVar.strip_links ty.raw_ty) with
 
     (* error ("[gty_to_tag] unknown global constructor type: "^(Printing.ty_to_string ty)) *)
   )
-  | TTable _ -> (tabletag)
   | TActionConstr _ -> (actiontag)
   | TRecord _ -> (recordtag)
   | TVector _ -> (tupletag)
@@ -133,21 +132,6 @@ let rec globals_of_econstr user_constrs parent_tcid var_tcid constr_exp : (exp) 
         (* note that we give back the original constructor with the new annotations *)
         {constr_exp with espan=annotated_inner_econstr.espan;}
         ))
-  | ETableCreate(tbl) -> (
-    (* print_endline ("[globals_of_econstr.ETableCreate]"); *)
-    (* annotate the table constructor just like an array *)
-    (* let fully_qualified_cid = cid_concats (var_path@[var_cid]) in *)
-    (* but also, annotate the action references with their source names. 
-       Note that action names are not type fields, but declared in 
-       modules, like functions. (So var_path is not relevant) *)
-    let tactions' = List.map
-      (fun action -> 
-        annotate_espan action None (SyntaxUtils.cid_of_exp action |> cid))
-      tbl.tactions
-    in 
-    let e' = ETableCreate({tbl with tactions = tactions';}) in
-    annotate_espan {constr_exp with e=e'} parent_tcid var_tcid
-  )
   | ERecord(fields) -> (
 (*     print_endline ("[globals_of_econstr.ERecord]");
     print_endline ("[globals_of_econstr.INPUT] "^(annotated_exp_to_string annotated_constr_exp)); *)
@@ -399,14 +383,6 @@ let debug_tagged_global_names decls =
         in
         name_map := action_names@(!name_map);
       );
-    method! visit_ETableCreate () _ tbl_action_exps _ _ = 
-      let action_names = List.map 
-        (fun eaction -> 
-          SyntaxUtils.cid_of_exp eaction, Option.get eaction.espan.global_created_in_src)
-        tbl_action_exps
-      in
-
-      name_map := action_names@(!name_map);
     end
   in
   v#visit_decls () decls;

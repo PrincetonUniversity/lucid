@@ -1,0 +1,201 @@
+// a link monitor example
+//
+// Each switch keeps per-egress-port telemetry in two arrays:
+//   byte_cnt_reg[port]  — packets sent out that port since the last probe.
+//                          Incremented on every IPv4 forward; sampled and
+//                          reset to 0 when a probe egresses the port.
+//   last_time_reg[port] — timestamp of the last probe through that port.
+//                          Sampled and rewritten to "now" on each probe.
+//
+// A probe is a source-routed packet that walks the network collecting
+// (swid, port, byte_cnt, last_time, cur_time) telemetry tuples at every
+// hop. The receiving host reads the full chain.
+//
+
+// MAX_HOPS = 4 (encoded as the literal `4` throughout — vector sizes and
+// for-loop bounds need a concrete literal, and naming this via `size` ran
+// into "Cannot unify 4 with MAX_HOPS" mismatches between vector-typed
+// fields and loop indices).
+const int N_PORTS  = 8;     // arrays sized to fit our triangle's ports
+
+const int<16> ETY_IPV4 = 0x0800;
+
+type eth_hdr_t = {
+  int<48> dmac;
+  int<48> smac;
+  int<16> ety;
+}
+
+type ipv4_t = {
+  int<4>  version;
+  int<4>  ihl;
+  int<8>  diffserv;
+  int<16> total_len;
+  int<16> id;
+  int<3>  flags;
+  int<13> frag_offset;
+  int<8>  ttl;
+  int<8>  protocol;
+  int<16> hdr_csum;
+  int<32> src;
+  int<32> dst;
+}
+
+// -------- IPv4 forwarding table (same shape as basic) --------------------
+
+type fwd_t = {
+  int<48> fwd_dmac;
+  int<32> fwd_port;
+  bool    fwd_hit;
+}
+
+action fwd_t ipv4_forward(int<48> dmac, int<32> port)() {
+  return {fwd_dmac = dmac; fwd_port = port; fwd_hit = true};
+}
+
+action fwd_t ipv4_drop(int<48> _dmac, int<32> _port)() {
+  return {fwd_dmac = 0; fwd_port = 0; fwd_hit = false};
+}
+
+global Table.t<<int<32>, (int<48>, int<32>), (), fwd_t>> ipv4_lpm =
+  Table.create(1024, [ipv4_forward; ipv4_drop], ipv4_drop, (0, 0));
+
+// -------- per-port telemetry arrays --------------------------------------
+//
+// Declaration order matters: every execution path must access these in
+// declaration order. ipv4_lpm comes first, then byte_cnt_reg, then
+// last_time_reg.
+
+global Array.t<32> byte_cnt_reg  = Array.create(N_PORTS);
+global Array.t<32> last_time_reg = Array.create(N_PORTS);
+
+memop get_val(int mv, int unused)         { return mv; }
+memop zero_out(int mv, int unused)        { return 0; }
+memop incr_by(int mv, int by)             { return mv + by; }
+memop set_to_arg(int mv, int arg)         { return arg; }
+
+// -------- events ---------------------------------------------------------
+
+packet event ipv4_pkt(eth_hdr_t eth, ipv4_t ip, Payload.t pl);
+
+// Probe event. Not a packet event — there's no wire format to parse, and
+// `generate_port` carries it between switches as a typed Lucid value.
+//
+//   n_route   — labels remaining in the route (0..MAX_HOPS)
+//   n_data    — telemetry tuples accumulated so far (0..MAX_HOPS)
+//   route[]   — upcoming egress ports; route[0] is "this hop"
+//   swids/ports/byte_cnts/last_times/cur_times — push-front telemetry,
+//   index 0 = most recent hop
+event probe(int<8> n_route, int<8> n_data,
+            int<32>[4] route,
+            int<32>[4] swids,
+            int<32>[4] ports,
+            int<32>[4] byte_cnts,
+            int<32>[4] last_times,
+            int<32>[4] cur_times);
+
+// -------- handlers -------------------------------------------------------
+
+handle ipv4_pkt(eth_hdr_t eth, ipv4_t ip, Payload.t pl) {
+  fwd_t d = Table.lookup(ipv4_lpm, ip#dst, ());
+  if (d#fwd_hit) {
+    // Count this packet against the egress port's byte_cnt.
+    Array.setm(byte_cnt_reg, d#fwd_port, incr_by, 1);
+
+    eth_hdr_t new_eth = {
+      dmac = d#fwd_dmac;
+      smac = eth#dmac;
+      ety  = eth#ety
+    };
+    ipv4_t new_ip = {
+      version     = ip#version;
+      ihl         = ip#ihl;
+      diffserv    = ip#diffserv;
+      total_len   = ip#total_len;
+      id          = ip#id;
+      flags       = ip#flags;
+      frag_offset = ip#frag_offset;
+      ttl         = ip#ttl - 1;
+      protocol    = ip#protocol;
+      hdr_csum    = 0;
+      src         = ip#src;
+      dst         = ip#dst
+    };
+    printf("sw %d port %d -> %d : ipv4 dst=%d ttl=%d",
+           self, ingress_port, d#fwd_port, ip#dst, new_ip#ttl);
+    generate_port(d#fwd_port,
+      ipv4_pkt(new_eth, {new_ip with hdr_csum = hash<16>(checksum, new_ip)}, pl));
+  } else {
+    printf("sw %d port %d : drop ipv4 dst=%d (no route)",
+           self, ingress_port, ip#dst);
+  }
+}
+
+handle probe(int<8> n_route, int<8> n_data,
+             int<32>[4] route,
+             int<32>[4] swids,
+             int<32>[4] ports,
+             int<32>[4] byte_cnts,
+             int<32>[4] last_times,
+             int<32>[4] cur_times) {
+  // We always reach this handler with n_route >= 1: the previous hop's
+  // generate_port either delivered to the next switch (route still has
+  // entries) or to an unconnected host port (where it appears in
+  // `Exits`). The very-end "probe DONE" view is therefore printed
+  // *here* at the last hop, just before the egress.
+  int<32> egress = route[0];
+
+  // Sample-and-reset byte counter, then sample-and-update last_time.
+  int<32> bc  = Array.update(byte_cnt_reg,  egress, get_val, 0, zero_out, 0);
+  int<32> now = Sys.time();
+  int<32> lt  = Array.update(last_time_reg, egress, get_val, 0, set_to_arg, now);
+
+  // Pop the head of the route (shift left, pad with 0).
+  int<32>[4] new_route = [route[1]; route[2]; route[3]; 0];
+
+  // Push the new telemetry tuple onto the FRONT of each accumulator
+  // (index 0 = "this hop", n_data grows by 1).
+  int<32>[4] new_swids      = [self;   swids[0];      swids[1];      swids[2]];
+  int<32>[4] new_ports      = [egress; ports[0];      ports[1];      ports[2]];
+  int<32>[4] new_byte_cnts  = [bc;     byte_cnts[0];  byte_cnts[1];  byte_cnts[2]];
+  int<32>[4] new_last_times = [lt;     last_times[0]; last_times[1]; last_times[2]];
+  int<32>[4] new_cur_times  = [now;    cur_times[0];  cur_times[1];  cur_times[2]];
+
+  int<8> nr_out = n_route - 1;
+  int<8> nd_out = n_data + 1;
+
+  printf("sw %d port %d -> %d : probe push (route_left=%d data=%d bc=%d lt=%d now=%d)",
+         self, ingress_port, egress, nr_out, nd_out, bc, lt, now);
+
+  if (nr_out == 0) {
+    // Last hop — also print the accumulated chain so the test output
+    // shows the full telemetry sequence.
+    printf("sw %d : probe DONE, n_data=%d (most-recent-first)", self, nd_out);
+    for (i < 4) {
+      int<32> idx = size_to_int(i);
+      if (idx < (int<32>)nd_out) {
+        printf("  hop[%d]: sw=%d port=%d byte_cnt=%d cur=%d last=%d",
+               idx, new_swids[i], new_ports[i], new_byte_cnts[i],
+               new_cur_times[i], new_last_times[i]);
+      }
+    }
+  }
+
+  // Emit the (possibly final) probe. If route_left=0 the port is a host
+  // port and the event lands in `Exits`.
+  generate_port(egress, probe(nr_out, nd_out,
+                              new_route,
+                              new_swids, new_ports,
+                              new_byte_cnts, new_last_times, new_cur_times));
+}
+
+parser main(bitstring pkt) {
+  eth_hdr_t eth = read(pkt);
+  match eth#ety with
+  | LUCID_ETHERTY -> { do_lucid_parsing(pkt); }
+  | 0x0800        -> {
+      ipv4_t ip = read(pkt);
+      generate(ipv4_pkt(eth, ip, Payload.parse(pkt)));
+    }
+  | _             -> { drop; }
+}

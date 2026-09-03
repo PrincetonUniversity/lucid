@@ -1,0 +1,26 @@
+// test aliasing globals in various containers (records, vectors, tuples)
+type my_t = {
+    Array.t<32> x;
+    Array.t<32> y;
+}
+global my_t rec_arrs1 = {x = Array.create(8); y = Array.create(8)};
+global Array.t<32>[auto] arrs1 = [Array.create(8); Array.create(8)];
+global (Array.t<32>, Array.t<32>) tup_arrs1 = (Array.create(8), Array.create(8));
+global Array.t<32> garr1 = Array.create(8);
+
+event main(int x, int y) {
+    auto foo1 = rec_arrs1#x;
+    Array.set(foo1, 0, 0);
+    auto foo2 = rec_arrs1#y;
+    Array.set(foo2, 0, 0);
+    auto foo3 = arrs1[0];
+    Array.set(foo3, 0, 0);
+    auto foo4 = arrs1[1];
+    Array.set(foo4, 0, 0);
+    auto foo5 = tup_arrs1#0;
+    Array.set(foo5, 0, 0);
+    auto foo6 = tup_arrs1#1;
+    Array.set(foo6, 0, 0);
+    auto foo7 = garr1;
+    Array.set(foo7, 0, 0);
+}

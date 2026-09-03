@@ -11,7 +11,6 @@ and z = [%import: (Z.t[@opaque])]
 and pragma = [%import: Pragma.t]
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
 and location = int
-and bit = [%import: (BitString.bit[@opaque])]
 and bits = [%import: (BitString.bits[@opaque])]
 
 (* All sizes should be inlined and precomputed *)
@@ -114,7 +113,7 @@ and event_val =
   ; evnum : value option
   ; data : value list
   ; edelay : int
-  ; eserialized : bool
+  ; eserialized : bool (* Only used in parsing and deparsing. Maybe remove. *)
   }
 
 and value =
@@ -316,7 +315,7 @@ let rec infer_vty v =
   | VGlobal _ -> failwith "Cannot infer type of global value"
   | VPat bs -> TPat(Sz(List.length bs))
   | VTuple(vs) -> TTuple(List.map infer_vty vs)
-  | VBits bits -> TBits(Sz(List.length bits))
+  | VBits bits -> TBits(Sz(BitString.length bits))
   | VRecord fields ->
     TRecord (List.map (fun (id, v) -> id, infer_vty v) fields)
 ;;

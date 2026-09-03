@@ -9,6 +9,14 @@ module TQVar_tys = struct
     | Unbound of id * level
     | Link of 'a
 
+    (* Note/reminder on TVar and QVar meaning: 
+        TVar represents a type that is not yet resolved (t)
+        QVar represents _any_ type, independent at each use (forall t.t)
+        - Generalization replaces TVars with QVars, it is meant to be used 
+          when we are done inferring a function body, on its polymorphic arguments.
+        - Instantiation replaces QVars with TVars, when you want to unify a 
+          polymorphic type with another type, primarily in a call. *)
+
   and 'a tqvar =
     | TVar of 'a tyvar ref
     | QVar of id
@@ -50,9 +58,10 @@ module Make (A : TQVarArg) = struct
     | _ -> a
   ;;
 
-  let equiv_tqvar ?(qvars_wild = false) equiv_a t a =
+  let equiv_tqvar ?(qvars_wild = false) ?(ignore_qvar_ids = false) equiv_a t a =
     match t, A.proj (strip_links a) with
     | QVar _, _ when qvars_wild -> true
+    | QVar _, Some (QVar _) when ignore_qvar_ids -> true
     | QVar id1, Some (QVar id2) -> Id.equal id1 id2
     | ( TVar { contents = Unbound (id1, l1) }
       , Some (TVar { contents = Unbound (id2, l2) }) ) ->

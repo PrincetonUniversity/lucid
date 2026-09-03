@@ -44,7 +44,7 @@ let is_tydecl_concrete (id, sizes, ty, _) =
 
 module TypeHash = struct
   type t = raw_ty
-  let equal = SyntaxUtils.equiv_raw_ty ~ignore_effects:false ~qvars_wild:false
+  let equal = SyntaxUtils.equiv_raw_ty ~ignore_effects:false ~qvars_wild:false ~ignore_qvar_ids:false
   let hash = (fun _ -> 1)
 end
 module TypeHashTbl = Hashtbl.Make(TypeHash)

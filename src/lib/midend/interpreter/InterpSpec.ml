@@ -3,40 +3,42 @@ open Batteries
 open CoreSyntax
 open InterpSyntax
 open InterpJson
-open InterpCore
 open Yojson.Basic
-open Preprocess
-module Env = InterpState.Env
-module IntMap = InterpState.IntMap
+(* open InterpCore *)
+(* open Preprocess *)
+module Env = Collections.CidMap
+module IntMap = InterpSim.IntMap
 
 module IC = InterpControl
 
 type json = Yojson.Basic.t
 
 type t =
-  { num_switches : int
-  ; links : InterpState.State.topology
-  ; externs : value Env.t list
+  { 
+    (* num_switches : int *)
+   (* links : InterpSim.topology *)
+    externs : value Env.t list
   ; events : interp_input list
-  ; config : InterpConfig.simulation_config
-  ; extern_funs : (InterpState.State.network_state InterpSyntax.ival) Env.t
+  ; simconfig : InterpSim.simulation_config
+  ; extern_funs : (InterpSwitch.ival) Env.t
   ; ctl_pipe_name : string option
   }
 
 (* and empty configuration. For function interpretation. *)
 let empty_spec = {
-  num_switches = 1;
-  links = IntMap.empty;
+  (* num_switches = 1; *)
+  
   externs = [];
   events = [];
-  config = { 
+  simconfig = { 
       num_switches = 1
+    ; links = IntMap.empty
     ; max_time = 0
     ; default_input_gap = 0
     ; generate_delay = 0
     ; propagate_delay = 0
-    ; random_delay_range = 1
-    ; random_propagate_range = 1
+    ; random_delay_range = 0
+    ; random_propagate_range = 0
     ; random_seed = 0
     ; drop_chance = 0 };
   extern_funs = Env.empty;
@@ -125,10 +127,24 @@ let parse_interp_inputs
   List.rev located_events_rev
 ;;
 
-let builtins renaming n =
-  List.init n (fun i ->
-    Env.singleton (rename renaming "self" "self") (vint i 32))
+let builtins_env (renaming : Renaming.env) n_switches =
+  List.init n_switches (fun i ->
+    Env.singleton (rename renaming.var_map "self" "self") (vint i 32))
 ;;
+
+
+let parse_extern   
+  (* parse a single extern value *)
+  (pp : Preprocess.t)
+  (renaming : Renaming.env) 
+  (id : string) 
+  (value : json) : (Cid.t * value) =
+  let cid = rename renaming.var_map "extern" id in
+  let ty = Env.find cid pp.externs in
+  let v = parse_value "Extern " ty value in
+  cid, v
+;;
+
 
 let parse_externs
   (pp : Preprocess.t)
@@ -137,46 +153,26 @@ let parse_externs
   (externs : (string * json) list)
   =
   List.fold_left
-    (fun acc (id, values) ->
-      let id = rename renaming.var_map "extern" id in
-      let ty = Env.find id pp.externs in
-      let vs =
-        match values with
-        | `List lst -> List.map (parse_value "Extern" ty) lst
+    (fun switch_envs (id, values) ->
+      (* extract values from json *)
+      let vs_json = match values with 
+        | `List lst -> lst
         | _ -> error "Non-list type for extern value specification"
       in
-      if List.length vs <> num_switches
-      then
-        error
-        @@ "Number of values for extern "
-        ^ Cid.to_string id
-        ^ " does not match number of switches";
-      List.map2 (fun env v -> Env.add id v env) acc vs)
-    (builtins renaming.var_map num_switches)
+      if List.length vs_json <> num_switches
+      then error @@ "Number of values for extern "^id^" does not match number of switches!";
+      let parse_extern_for_switch = parse_extern pp renaming id in
+      let cids_vs = List.map parse_extern_for_switch vs_json in
+      let cid = List.hd cids_vs |> fst in
+      let vs = List.map snd cids_vs in
+      (* add to env for each switch *)
+      List.map2 (fun env v -> Env.add cid v env) switch_envs vs)
+    (builtins_env renaming num_switches)
     externs
 ;;
 
 let parse_links num_switches links recirc_ports =
-  let add_link id port dst acc =
-    try
-      IntMap.modify
-        id
-        (fun map ->
-          match IntMap.find_opt port map with
-          | None -> IntMap.add port dst map
-          | Some dst' when dst = dst' -> map
-          | _ ->
-            error
-            @@ Printf.sprintf
-                 "Switch:port pair %d:%d assigned to two different \
-                  destinations!"
-                 id
-                 port)
-        acc
-    with
-    | Not_found -> error @@ "Invalid switch id " ^ string_of_int id
-  in
-  let add_links acc (src, dst) =
+  let add_bidirectional_links acc (src, dst) =
     let src_id, src_port = parse_port src in
     let dst_id, dst_port =
       match dst with
@@ -184,23 +180,23 @@ let parse_links num_switches links recirc_ports =
       | _ -> error "Non-string format for link entry!"
     in
     acc
-    |> add_link src_id src_port (dst_id, dst_port)
-    |> add_link dst_id dst_port (src_id, src_port)
+    |> InterpSim.add_internal_link src_id src_port ((dst_id, dst_port))
+    |> InterpSim.add_internal_link dst_id dst_port ((src_id, src_port))
   in
-  List.fold_left add_links (InterpState.State.empty_topology num_switches recirc_ports) links
+  List.fold_left add_bidirectional_links (InterpSim.default_linkmap num_switches recirc_ports) links
 ;;
 
 (* Make a full mesh with arbitrary port numbers.
    Specifically, we map 1:2 to 2:1, and 3:4 to 4:3, etc. *)
-let make_full_mesh num_switches recirc_ports =
+let make_full_mesh num_switches recirc_ports : InterpSim.linkmap =
   let switch_ids = List.init num_switches (fun n -> n) in
   List.fold_left2
     (fun acc id recirc_port ->
       let port_map =
         List.fold_left
           (fun acc port ->
-            if id = port then acc else IntMap.add port (port, id) acc)
-          (IntMap.add recirc_port (id, recirc_port) IntMap.empty)
+            if id = port then acc else IntMap.add port (Some (port,  id)) acc)
+          (IntMap.add recirc_port (Some (id,  recirc_port)) IntMap.empty)
           switch_ids
       in
       IntMap.add id port_map acc)
@@ -212,11 +208,11 @@ let make_full_mesh num_switches recirc_ports =
 (*   and code = network_state -> int (* switch *) -> ival list -> value
 *)
 let create_foreign_functions renaming efuns python_file =
-  let open InterpState.State in
+  let open InterpState in
   let oc_to_py v =
     match v with
-    | InterpSyntax.V { v = VBool b } -> Py.Bool.of_bool b
-    | InterpSyntax.V { v = VInt n } -> Py.Int.of_int (Integer.to_int n)
+    | InterpSwitch.V { v = VBool b } -> Py.Bool.of_bool b
+    | InterpSwitch.V { v = VInt n } -> Py.Int.of_int (Integer.to_int n)
     | _ -> error "Can only call external functions with int/bool arguments"
   in
   let obj =
@@ -241,8 +237,8 @@ let create_foreign_functions renaming efuns python_file =
         ^ " is not a function in the python file!"
       | Some o ->
         let f =
-          InterpSyntax.anonf
-            (fun _ _ args ->
+          InterpSwitch.anonf
+            (fun _ args ->
               let pyretvar =
                 Py.Callable.to_function
                   o
@@ -251,15 +247,30 @@ let create_foreign_functions renaming efuns python_file =
               let _ = pyretvar in
               (* this is the return from python? *)
               (* Dummy return value *)
-              InterpSyntax.V(value (VBool false)))
+              InterpSwitch.V(value (VBool false)))
         in
         Env.add id f acc)
     efuns
     Env.empty
 ;;
 
+
+let default (pp : Preprocess.t) (renaming : Renaming.env) : t = 
+  (* Default configuration for when there is no spec, used with softSwitch*)
+  Py.initialize ();
+  let num_switches = 1 in
+  let recirc_ports = [196] in
+  let recirc_ports_def = List.map 
+    (fun i -> ( "recirculation_port", `List (List.init 1 (fun _ -> `Int i)) ))
+    recirc_ports
+  in
+  let externs = parse_externs pp renaming num_switches recirc_ports_def in
+  let simconfig = InterpSim.default_simulation_config num_switches recirc_ports in
+  { externs; events=[]; simconfig; extern_funs=Env.empty; ctl_pipe_name=None }  
+;;
+
 let parse 
-(* (nst : InterpState.State.network_state) *)
+(* (nst : InterpState.network_state) *)
 (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t =
   let json = from_file filename in
   match json with
@@ -294,7 +305,7 @@ let parse
         | Some _ -> error "Non-assoc type for extern definitions"
       in
       let recirc_ports_def =
-        (* This is an extern under the hood, but users don't see it that way *)
+        (* recirculation_ports is a builtin defined here as an extern *)
         match List.assoc_opt "recirculation_ports" lst with
         | Some (`List lst) -> "recirculation_port", `List lst
         | None ->
@@ -315,7 +326,7 @@ let parse
       @@ "Number of recirculation ports does not match number of switches!";
     let links =
       if num_switches = 1
-      then InterpState.State.empty_topology 1 recirc_port_ints
+      then InterpSim.default_linkmap 1 recirc_port_ints
       else (
         match List.assoc_opt "links" lst with
         | Some (`Assoc links) -> parse_links num_switches links recirc_port_ints
@@ -359,8 +370,9 @@ let parse
       | Some (`String filename) -> Some filename
       | _ -> None
     in
-    let config : InterpConfig.simulation_config =
+    let simconfig : InterpSim.simulation_config =
       { num_switches
+      ; links
       ; max_time
       ; default_input_gap
       ; generate_delay
@@ -371,6 +383,6 @@ let parse
       ; drop_chance
       }
     in
-    { num_switches; links; externs; events; config; extern_funs; ctl_pipe_name }
+    {  externs; events; simconfig; extern_funs; ctl_pipe_name }
   | _ -> error "Unexpected interpreter specification format"
 ;;

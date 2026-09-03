@@ -1,0 +1,15 @@
+type my_t = {
+    int a;
+    int b;
+}
+
+event my_event(my_t my_arg);
+handle my_event(my_t my_arg) {
+    my_t new_arg = {a=my_arg#b; b=my_arg#a;};
+    generate(my_event(new_arg));
+}
+
+event foo(int x, int y, int z, int zz); 
+handle foo(int x, int y, int z, int zz){
+    generate(my_event({a=x; b=y;}));
+}

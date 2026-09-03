@@ -1,0 +1,31 @@
+{
+  "max time": 10000,
+  "topology": {
+    "nodes": {
+      "0": {
+        "ports": {
+          "1" : {"type": "link"},
+          "2" : {"type": "recirc"},
+          "3" : {"type": "interface", "ifname":"feth0"}
+        }
+      },
+      "1": {
+        "ports": {
+          "0" : {"type": "link"},
+          "2" : {"type": "recirc"}
+        }
+      }
+    },
+    "links": [
+      {"0:1": "1:0"}
+    ]
+  },
+  "events": [
+    {
+      "name": "main", 
+      "args": [1],
+      "locations": ["0:10"],
+      "timestamp":1200
+    }
+  ]
+}

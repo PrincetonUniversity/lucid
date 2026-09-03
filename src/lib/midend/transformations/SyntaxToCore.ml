@@ -36,20 +36,6 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
   | S.TGroup -> C.TGroup
   | S.TEvent -> C.TEvent
   | S.TInt sz -> C.TInt (translate_size sz)
-  (* TABLE UPDATE hard coded translation into table type *)
-  (* | S.TName(cid, sizes, _) when (Cid.equals cid Tables.t_id) -> 
-    let size_to_ty (sz : S.size) = 
-      C.ty (C.TInt (translate_size sz))
-    in
-    let tkey_sizes, tparam_tys, tret_tys = match (List.map (SyntaxUtils.normalize_size) sizes) with 
-      | [ITup(skeys); ITup(sparams); ITup(srets)] -> (
-        List.map translate_size skeys,
-        List.map size_to_ty sparams,
-        List.map size_to_ty srets
-      )
-      | _ -> S.error@@"[translate_raw_ty] expected 3 size arguments, each a tuple, but got something else"
-    in
-    C.TTable { tkey_sizes; tparam_tys; tret_tys } *)
   | S.TName (cid, sizes, _) -> C.TName (cid, List.map translate_size sizes)
   | S.TMemop (n, sz) -> C.TMemop (n, translate_size sz)
   | S.TFun fty ->
@@ -58,23 +44,8 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
       ; ret_ty = translate_ty fty.ret_ty
       }
   | S.TVoid -> C.TBool (* Dummy translation needed for foreign functions *)
-  | S.TBuiltin(cid, rtys, _) -> 
+  | S.TBuiltin(cid, rtys, _) ->
     C.TBuiltin(cid, List.map (fun rty -> translate_raw_ty rty Span.default)  rtys)
-  | S.TTable tbl ->
-    let ty_to_intsize (ty : S.ty) = 
-      match ty.raw_ty with 
-      | TInt(sz) -> SyntaxUtils.extract_size sz
-      | TBool ->1
-      | _ -> S.error "[rty_to_size] expected an integer, but got something else"
-    in
-    let tkey_sizes = C.Szs (List.map ty_to_intsize tbl.tkey_sizes) in
-    let tparam_sizes = C.Szs (List.map ty_to_intsize tbl.tparam_tys) in
-    let tret_sizes = C.Szs (List.map ty_to_intsize tbl.tret_tys) in
-    C.TName(Tables.t_id, [tkey_sizes; tparam_sizes; tret_sizes])
-    (* let tparam_tys = List.map translate_ty tbl.tparam_tys in
-    let tret_tys = List.map translate_ty tbl.tret_tys in
-
-    C.TTable { tkey_sizes; tparam_tys; tret_tys } *)
   | S.TActionConstr a ->
     let aconst_param_tys = List.map translate_ty a.aconst_param_tys in
     let aarg_tys = List.map translate_ty a.aacn_ty.aarg_tys in
@@ -196,6 +167,7 @@ and translate_exp (e : S.exp) : C.exp =
     | S.EFlood e -> C.EFlood (translate_exp e)
     | S.ERecord(fields) -> C.ERecord (List.map (fun (id, e) -> (Id.create id), translate_exp e) fields)
     | S.EProj(e, id) -> C.EProj (translate_exp e, Id.create id)
+    | S.EGet(_, _) -> S.error "[translate_exp] tuples should be eliminated in frontend"
     | ETuple exps -> C.ETuple(List.map translate_exp exps)
     | ESizeCast _
     | EStmt _
@@ -206,52 +178,14 @@ and translate_exp (e : S.exp) : C.exp =
         e.espan
         "[SyntaxToCore.translate_exp] unsupported construct for core IR (EStmt, EWith, EComp, EIndex)"
     | EVector(exps) ->
-      (* vectors can appear as builtin type arguments. At this point, they have a known 
+      (* vectors can appear as builtin type arguments. At this point, they have a known
          length, so can be translated into tuples. *)
       C.ETuple(List.map translate_exp exps)
-    | S.ETableCreate _ ->
-      err
-        e.espan
-        "[SyntaxToCore.translate_exp] ETableCreate should be translated by \
-         special function"
-    | S.ETableMatch _ ->
-      err e.espan "table match exps should have been eliminated before IR."
     (* | S.EPatWild (Some sz) -> C.EVal (C.vwild (translate_size sz))
     | S.EPatWild None ->
       err e.espan "wildcard patterns (_) should have a size before IR." *)
   in
   { e = e'; ety = translate_ty (Option.get e.ety); espan = e.espan }
-
-and translate_etablecreate _ (exp : S.exp) : C.exp =
-  match exp.e with
-  | S.ETableCreate tc ->
-    (* let tty = translate_ty tc.tty in
-    let tsize = translate_exp tc.tsize in
-    let tactions = List.map translate_exp tc.tactions in
-    let default_cid, default_args, _ = SyntaxUtils.unpack_default_action tc.tdefault.e in
-    let tdefault = default_cid, default_args |> List.map translate_exp in
-    let e' = C.ETableCreate { tid = id; tty; tactions; tsize; tdefault } in *)
-    (* let tty = translate_ty tc.tty in *)
-    let tsize = translate_exp tc.tsize in
-    let tactions = C.tup_sp (List.map translate_exp tc.tactions) Span.default in
-    let default_acn_constr_evar, default_acn_constr_arg = match tc.tdefault.e with 
-      | ECall(cid, args, _) -> 
-        let e = Syntax.EVar(cid) in
-        let ty_opt = (List.hd tc.tactions).ety in
-        let espan = tc.tdefault.espan in
-        (Syntax.aexp e ty_opt espan, Syntax.tuple_sp_ty args tc.tdefault.espan)
-      | _ -> err_unsupported tc.tdefault.espan "default action in a table create should be a call"  
-    in
-    let default_acn_constr_evar = translate_exp default_acn_constr_evar in
-    let default_acn_constr_arg = translate_exp default_acn_constr_arg in
-    let e' = 
-      C.ECall(Cid.create ["Table"; "create"], [tsize; tactions; default_acn_constr_evar; default_acn_constr_arg], false) in
-    { e = e'; ety = translate_ty (Option.get exp.ety); espan = exp.espan }
-  | _ ->
-    err
-      exp.espan
-      "[SyntaxToCore.translate_etablecreate] non table create expressions \
-       should be translated by translate_exp"
 
 and translate_params params =
   List.map (fun (id, ty) -> id, translate_ty ty) params
@@ -279,39 +213,9 @@ and translate_statement (s : S.statement) : C.statement =
   let translate_branch (ps, s) =
     List.map translate_pattern ps, translate_statement s
   in
-  (* let translate_entry (entry : S.tbl_entry) : C.tbl_entry =
-    let action_cid, action_args, _ = SyntaxUtils.unpack_default_action entry.eaction.e in
-    { ematch = List.map translate_exp entry.ematch
-    ; eprio = entry.eprio
-    ; eaction = Cid.to_id action_cid
-    ; eargs = List.map translate_exp action_args
-    }
-  in *)
   let s' =
     match s.s with
     | S.SNoop -> C.SNoop
-    (* TABLE UPDATE -- hard coded table install call -> table_install *)
-    (* | S.SUnit {e=ECall(cid, args, _)} when ((Cid.names cid) = ["Table"; "install"]) -> 
-      let tbl_exp = List.nth args 0 in
-      let key_tup = List.nth args 1 in
-      let match_keys = match key_tup.e with 
-        | ETuple keys -> List.map translate_exp keys
-        | _ -> err_unsupported key_tup.espan "keys in a table install should be a tuple"
-      in
-      let action_exp = List.nth args 2 in
-      let action_cid, action_args = match action_exp.e with 
-        | ECall(cid, args, _) -> cid, List.map translate_exp args (* call to an action constructor *)
-        | _ -> err action_exp.espan "the last argument of Table.install must be a call to an action constructor"
-      in 
-      let tbl_entry : C.tbl_entry = {
-        eprio = 10;
-        ematch = match_keys;
-        eaction = Cid.to_id action_cid;
-        eargs = action_args;
-      }
-      in
-      let tbl_exp = translate_exp tbl_exp in
-      C.STableInstall (tbl_exp, [tbl_entry]) *)
     | S.SUnit e -> C.SUnit (translate_exp e)
     | S.SLocal (id, ty, e) -> C.SLocal (id, translate_ty ty, translate_exp e)
     | S.SAssign (id, e) -> C.SAssign (Cid.id id, translate_exp e)
@@ -323,63 +227,6 @@ and translate_statement (s : S.statement) : C.statement =
     | S.SMatch (es, branches) ->
       C.SMatch (List.map translate_exp es, List.map translate_branch branches)
     | S.SRet eopt -> C.SRet (Option.map translate_exp eopt)
-    | S.STableMatch tm ->
-      let (core_tm : Tables.core_tbl_match) = { 
-          Tables.tbl = translate_exp tm.tbl
-        ; Tables.keys = List.map translate_exp tm.keys
-        ; Tables.args = List.map translate_exp tm.args
-        ; Tables.outs = tm.outs
-        ; Tables.out_tys =
-            (match tm.out_tys with
-            | None -> None
-            | Some otys -> Some (List.map translate_ty otys))
-      } in
-      Tables.tbl_match_to_s core_tm
-      (* C.STableMatch
-        { C.tbl = translate_exp tm.tbl
-        ; C.keys = List.map translate_exp tm.keys
-        ; C.args = List.map translate_exp tm.args
-        ; C.outs = tm.outs
-        ; C.out_tys =
-            (match tm.out_tys with
-             | None -> None
-             | Some otys -> Some (List.map translate_ty otys))
-        } *)
-    | S.STableInstall (tbl_exp, entries) -> (
-      match entries with 
-        | [{ematch; eaction}] -> (
-          let tbl_exp = translate_exp tbl_exp in
-          let ematch = List.map translate_exp ematch in
-          let ematch_tys = List.map (fun (exp : C.exp) -> exp.ety.raw_ty) ematch in
-          let ematch_ty = CoreSyntax.ty@@CoreSyntax.TTuple ematch_tys in
-          let eaction = translate_exp eaction in          
-          let action_cid, action_arg = match eaction.e with 
-            | C.ECall(cid, args, _) ->
-              let arg = 
-                if (List.length args) == 0 then 
-                  C.tup_sp [] eaction.espan
-                else
-                if (List.length args) > 1 then 
-                  C.tup_sp args eaction.espan
-                else
-                  List.hd args
-              in
-              cid, arg
-            | _ -> err s.sspan "using old syntax, table install should be a call"
-          in
-          (* how do we figure out the type of the action reference expression? *)
-          let action_var = C.var (action_cid) (C.ty (C.TBool)) in
-
-          
-
-          let ematch = CoreSyntax.exp (CoreSyntax.ETuple ematch) ematch_ty in
-          let e = C.ECall(Cid.create ["Table"; "install"], [tbl_exp; ematch; action_var; action_arg], false) in
-          C.SUnit({e; ety=C.ty C.TBool; C.espan = s.sspan})
-        )
-        | _ -> err s.sspan "table install with >1 entries not supported have exactly one entry"
-    )
-    (* C.STableInstall (translate_exp tbl_exp, List.map translate_entry entries) *)
-    (* TABLE UPDATE -- hard coded tuple assign -> table assign *)
     | S.STupleAssign(tup_asn) -> (
         let ids = tup_asn.ids in
         let tys = match tup_asn.tys with
@@ -461,40 +308,8 @@ and translate_parser_block (actions, (step, step_span)) =
 
 let translate_d preserve_user_decls d dspan dpragmas = 
   match d with
-  | S.DGlobal (id, ty, constr_exp) -> (
-    match ty.raw_ty with 
-    (* TABLE UPDATE -- hard coded translation into a decl with ETableCreate *)
-    (* | (TName(cid, _, _)) when (Cid.equal cid Tables.t_id) -> (
-      match constr_exp.e with
-      | S.ECall(_, [size_exp; actions_exp; default_exp], _) ->
-        let size = translate_exp size_exp in
-        let actions = match actions_exp.e with
-          | ETuple actions -> List.map translate_exp actions
-          | _ -> err_unsupported dspan "actions in a table create should be a tuple"
-        in
-        let default_cid, default_args = match default_exp.e with
-          | ECall(cid, args, _) -> cid, args (* call to an action constructor *)
-          | EVar(_) ->   
-            err_unsupported dspan "Tables currently must use action constructors"
-            (* cid, [] *) (* an action, which isn't fully supported *)
-          | _ -> err_unsupported dspan "default action in a table create should be a call"
-        in
-        let (tbl_def : C.tbl_def) = {
-          tid = id; 
-          tty = translate_ty ty;
-          tactions = actions;
-          tsize = size;
-          tdefault = (default_cid, List.map translate_exp default_args);
-          }
-        in
-        Some (C.DGlobal (id, translate_ty ty, {e=C.ETableCreate tbl_def; ety=translate_ty ty; espan=constr_exp.espan}))
-      | _ -> err_unsupported dspan "table create should be a call"
-    )      *)
-    | _ -> 
-      Some (match constr_exp.e with
-      | S.ETableCreate _ -> C.DGlobal (id, translate_ty ty, translate_etablecreate id constr_exp)
-      | _ -> C.DGlobal (id, translate_ty ty, translate_exp constr_exp))
-  )
+  | S.DGlobal (id, ty, constr_exp) ->
+    Some (C.DGlobal (id, translate_ty ty, translate_exp constr_exp))
   | S.DEvent (id, annot, sort, _, params) ->
     Some (C.DEvent (id, annot, translate_sort sort, translate_params params))
   | S.DHandler (id, s, body) ->

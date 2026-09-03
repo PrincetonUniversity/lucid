@@ -15,6 +15,7 @@ open Printing
    - All events have either one or two handlers declared: one in ingress and one in egress, 
      which must be in the same scope as them.
    - All sizes in symbolic declarations are either concrete or symbolic themselves
+   - Events with user-defined tag numbers cannot have polymorphic parameters, since they need to be monomorphized (duplicated) during compilation.
 
    Checks we do during typechecking:
    - No dynamic global creation
@@ -118,6 +119,36 @@ let check_symbolics ds =
     end
   in
   checker#visit_decls (ref IdSet.empty) ds
+;;
+
+
+(* Make sure that events with user-defined tag numbers
+   do not have polymorphic events. *)
+let rec check_numbered_events ds = 
+  let checker =
+    object
+      inherit [_] s_iter
+
+      method! visit_decl _ decl =
+        match decl.d with
+        | DEvent (id, num_opt, _, _, params) ->
+          (match num_opt with
+           | None -> ()
+           | Some num ->
+             if List.exists (fun (_, ty) -> is_polymorphic_ty ty) params
+             then
+               Console.error_position decl.dspan
+               @@ Printf.sprintf
+                    "Event %s has assigned number %d, but also has polymorphic \
+                     parameters. Events with assigned numbers cannot have \
+                     polymorphic parameters, since they need to be monomorphized \
+                     (duplicated) during compilation."
+                    (id_to_string id)
+                    num)
+        | _ -> ()
+    end
+  in
+  checker#visit_decls () ds
 ;;
 
 (* Next up: make sure each event has exactly one handler defined, which must be
@@ -417,7 +448,8 @@ let pre_typing_checks ?(handlers=true) ds =
   if handlers then match_handlers ds;
   check_symbolics ds;
   check_payloads ds;
-  check_match_returns ds
+  check_match_returns ds;
+  check_numbered_events ds
 ;;
 
 (*** QVar checking. This is run on each decl after its type is inferred, and makes
@@ -451,8 +483,6 @@ let basic_qvar_checker =
       span <- ty.tspan;
       super#visit_ty env ty
 
-    (* table types are always allowed to have QVars *)
-    method! visit_TTable _ _ = ()
     method! visit_exp _ _ = ()
 
     method! visit_decl env d =
@@ -550,8 +580,9 @@ let rec check_qvars d =
   | DAction _ -> ()
   | DGlobal _ ->
     (* None allowed at all *) basic_qvar_checker#visit_decl (true, true) d
-  | DSize _ | DSymbolic _ | DConst _ | DExtern _ | DParser _ ->
+  | DSize _ | DSymbolic _ | DConst _ | DExtern _ ->
     (* Only allowed in effect *) basic_qvar_checker#visit_decl (false, true) d
+  | DParser _ ->  () (* no restrictions, like functions. Previously was only allowed in effects. *)
   | DConstr _ ->
     (* Allowed in both sizes and effects *)
     basic_qvar_checker#visit_decl (false, false) d

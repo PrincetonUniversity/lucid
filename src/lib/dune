@@ -16,11 +16,13 @@
    fileutils
    pyml
    pprint
+   rawlink
    )
  (modules
    config
    interpConfig
    tofinoConfig
+   switchConfig
    cConfig
    console
    id
@@ -54,12 +56,14 @@
    memops
    wellformed
    eventFormat
+   unrollRecursiveParsers
    functionInlining
-   tableInlining
    sizeInlining
    builtinsTupleElimination
    renaming
+   monomorphicEventArgs
    globalArgElimination
+   refreshTypes
    explicitReturns
    moduleAliasing
    recordElimination
@@ -84,10 +88,16 @@
    preprocess
    InterpJson
    interpSpec
+   interpSim
    interpState
    InterpSwitch
-   interpPayload
+   InterpNetwork
+   InterpStdio
+   InterpSocket
+   interpParsing
+   interpDeparsing
    interpSyntax
+   interpTopo
    libraryInterface
    libraryUtils
    arrays
@@ -98,6 +108,7 @@
    events
    payloads
    packet
+   constants
    builtins
    TQVar
    backendLogging

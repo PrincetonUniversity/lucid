@@ -1,0 +1,300 @@
+{
+  "random seed": 1,
+  "max time": 20000,
+  "default_input_gap": 100,
+  "topology": {
+    "nodes": {
+      "0": {
+        "ports": {
+          "2": {
+            "type": "link"
+          },
+          "3": {
+            "type": "link"
+          }
+        }
+      },
+      "1": {
+        "ports": {
+          "2": {
+            "type": "link"
+          },
+          "3": {
+            "type": "link"
+          }
+        }
+      },
+      "2": {
+        "ports": {
+          "2": {
+            "type": "link"
+          },
+          "3": {
+            "type": "link"
+          }
+        }
+      }
+    },
+    "links": [
+      {
+        "0:2": "1:2"
+      },
+      {
+        "0:3": "2:2"
+      },
+      {
+        "1:3": "2:3"
+      }
+    ]
+  },
+  "events": [
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        0
+      ],
+      "args": {
+        "table": "ipv4_lpm",
+        "key": [
+          "167772417<32>"
+        ],
+        "action": "ipv4_lpm.ipv4_forward",
+        "args": [
+          "8796093022465<48>",
+          "1<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        0
+      ],
+      "args": {
+        "table": "ipv4_lpm",
+        "key": [
+          "167772674<32>"
+        ],
+        "action": "ipv4_lpm.ipv4_forward",
+        "args": [
+          "8796093022720<48>",
+          "2<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        0
+      ],
+      "args": {
+        "table": "ipv4_lpm",
+        "key": [
+          "167772931<32>"
+        ],
+        "action": "ipv4_lpm.ipv4_forward",
+        "args": [
+          "8796093022976<48>",
+          "3<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        0
+      ],
+      "args": {
+        "table": "ipv4_lpm",
+        "key": [
+          "167797603<32>"
+        ],
+        "action": "ipv4_lpm.ipv4_forward",
+        "args": [
+          "8796093022976<48>",
+          "3<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        1
+      ],
+      "args": {
+        "table": "ipv4_lpm",
+        "key": [
+          "167772417<32>"
+        ],
+        "action": "ipv4_lpm.ipv4_forward",
+        "args": [
+          "8796093022464<48>",
+          "2<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        1
+      ],
+      "args": {
+        "table": "ipv4_lpm",
+        "key": [
+          "167772674<32>"
+        ],
+        "action": "ipv4_lpm.ipv4_forward",
+        "args": [
+          "8796093022722<48>",
+          "1<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        1
+      ],
+      "args": {
+        "table": "ipv4_lpm",
+        "key": [
+          "167772931<32>"
+        ],
+        "action": "ipv4_lpm.ipv4_forward",
+        "args": [
+          "8796093022976<48>",
+          "3<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        1
+      ],
+      "args": {
+        "table": "ipv4_lpm",
+        "key": [
+          "167797603<32>"
+        ],
+        "action": "ipv4_lpm.ipv4_forward",
+        "args": [
+          "8796093022722<48>",
+          "1<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        2
+      ],
+      "args": {
+        "table": "ipv4_lpm",
+        "key": [
+          "167772417<32>"
+        ],
+        "action": "ipv4_lpm.ipv4_forward",
+        "args": [
+          "8796093022464<48>",
+          "2<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        2
+      ],
+      "args": {
+        "table": "ipv4_lpm",
+        "key": [
+          "167772674<32>"
+        ],
+        "action": "ipv4_lpm.ipv4_forward",
+        "args": [
+          "8796093022720<48>",
+          "3<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        2
+      ],
+      "args": {
+        "table": "ipv4_lpm",
+        "key": [
+          "167772931<32>"
+        ],
+        "action": "ipv4_lpm.ipv4_forward",
+        "args": [
+          "8796093022979<48>",
+          "1<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "locations": [
+        2
+      ],
+      "args": {
+        "table": "ipv4_lpm",
+        "key": [
+          "167797603<32>"
+        ],
+        "action": "ipv4_lpm.ipv4_forward",
+        "args": [
+          "8796093022720<48>",
+          "3<32>"
+        ]
+      }
+    },
+    {
+      "type": "packet",
+      "bytes": "08000000010008000000010108004600001800000000400043e00a0001010a0002021f040000",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 5000
+    },
+    {
+      "type": "packet",
+      "bytes": "08000000010008000000010108004600001800000000400042df0a0001010a0003031f040000",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 6000
+    },
+    {
+      "type": "packet",
+      "bytes": "080000000100080000000101080046000018000000004000e27e0a0001010a0063631f040000",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 7000
+    },
+    {
+      "type": "packet",
+      "bytes": "080000000100080000000101080046000018000000004000e21b0a0001010a6363631f040000",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 8000
+    }
+  ]
+}

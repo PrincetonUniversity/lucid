@@ -1,7 +1,7 @@
 (* Interpretation of stateful counters. *)
 open Batteries
 open Syntax
-open InterpState
+open InterpSwitch
 
 (* Generic Counter defs *)
 let counter_name = "Counter"
@@ -54,26 +54,25 @@ let counter_add_ty =
        }
 ;;
 
-let dummy_memop = InterpSyntax.F (None, fun _ _ args -> V(extract_ival (List.hd args)))
-let setop = InterpSyntax.F (None, fun _ _ args -> V(extract_ival (List.nth args 1)))
-let dummy_int = InterpSyntax.V (CoreSyntax.vinteger (Integer.of_int 0))
+let dummy_memop = InterpSwitch.F (None, fun _ args -> V(InterpSwitch.extract_ival (List.hd args)))
+let setop = InterpSwitch.F (None, fun _ args -> V(InterpSwitch.extract_ival (List.nth args 1)))
+let dummy_int = InterpSwitch.V (CoreSyntax.vinteger (Integer.of_int 0))
 
-let counter_add_fun nst swid args =
-  let open State in
+let counter_add_fun st args =
   let open InterpSyntax in
   let open CoreSyntax in
   match args with
   | [V { v = VGlobal (_, stage) }; V { v = VInt addval }] ->
     let get_f arg = vinteger arg in
     let set_f arg = Integer.add arg addval in
-    V(Pipeline.update ~stage ~idx:0 ~getop:get_f ~setop:set_f (sw nst swid).pipeline)
+    V(Pipeline.update ~stage ~idx:0 ~getop:get_f ~setop:set_f st.pipeline)
   | _ ->
     counter_add_error "Incorrect number or type of arguments to Counter.add"
 ;;
 
 let constructors = [counter_create_id, counter_create_sig]
 
-let defs : State.global_fun list =
+let defs : global_fun list =
   [{ cid = counter_add_cid; body = counter_add_fun; ty = counter_add_ty }]
 ;;
 

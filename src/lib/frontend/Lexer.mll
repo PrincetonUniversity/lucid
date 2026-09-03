@@ -74,22 +74,13 @@ rule token = parse
   | "@egress"         { EGRESS (position lexbuf) }
   | "@"(num as n)     { ANNOT (position lexbuf, Int.of_string n) }
   | "@main"           { MAIN  (position lexbuf) }
+  | "@rec"            { REC (position lexbuf) }
   | "packet"          { PACKET (position lexbuf) }
   | "match"           { MATCH (position lexbuf) }
   | "with"            { WITH (position lexbuf) }
   | "type"            { TYPE (position lexbuf) }
   | "noinline"        { NOINLINE (position lexbuf) }
-
-  | "table_type"              { TABLE_TYPE (position lexbuf) }
-  | "key_type:"               { KEY_TYPE (position lexbuf) }
-  | "arg_type:"               { ARG_TYPE (position lexbuf) }
-  | "ret_type:"               { RET_TYPE (position lexbuf) }
-  | "action_constr"           { ACTION_CONSTR (position lexbuf) }
   | "action"                  { ACTION (position lexbuf) }
-  | "table_create"            { TABLE_CREATE (position lexbuf) }
-  | "table_match"             { TABLE_MATCH (position lexbuf) }
-  | "table_install"           { TABLE_INSTALL (position lexbuf) }
-  | "table_multi_install"     { TABLE_MULTI_INSTALL (position lexbuf) }
 
   | "parser"          { PARSER (position lexbuf) }
   | "read"            { READ (position lexbuf) }
@@ -123,7 +114,6 @@ rule token = parse
   | "=="              { EQ (position lexbuf) }
   | "!="              { NEQ (position lexbuf)}
   | "<<"              { LSHIFT (position lexbuf) }
-  | ">>"              { RSHIFT (position lexbuf) }
   | "<="              { LEQ (position lexbuf) }
   | ">="              { GEQ (position lexbuf) }
   | "<"               { LESS (position lexbuf) }
