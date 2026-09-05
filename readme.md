@@ -1,13 +1,10 @@
 # The Lucid / DPT (data plane threads) language
 
-Lucid is a high-level network programming language, focusing on the data plane. It is inspired by P4, but designed to feel more like a conventional high-level language with simple, general, and modular abstractions. At the same time, Lucid is carefully designed so that its compiler can translate programs into efficient code optimized for real platforms. 
+Lucid is a high-level network programming language, focused on the data plane. It is inspired by P4, but designed to feel more like a conventional high-level language with simple, general, and modular abstractions. At the same time, Lucid is carefully designed so that its compiler can translate programs into efficient code optimized for real platforms. 
 
-An important idea in Lucid is pipeline parallelism. Lucid's type/effect system guarantees that a program accesses state in a consistent total order (i.e., a DAG), so any legal program can be pipelined. This allows Lucid's compiler to pipeline programs into hardware configurations for line-rate PISA switches that use physical pipelines. 
+An important idea in Lucid is pipeline parallelism. Lucid's type/effect system guarantees that a program accesses state in a consistent total order (i.e., a DAG), so any legal program can be pipelined. This allows the compiler to pipeline programs into hardware configurations for line-rate PISA switches that use physical pipelines. 
 
-Lucid also has an interpreter with support for the entire language and fast, multi-node simulations. This makes it a convenient modeling language for data-plane applications. 
-
-The Lucid codebase is also organized for extensibility, with a modular micropass design and frontend / midend / backend components that use a few common core IRs throughout.
-
+Lucid also has an interpreter with support for the entire language, raw-socket interfaces, operation up to around ~200K packets / second, and multi-node simulations. This makes it a convenient modeling language for data-plane applications. 
 
 ## Getting Started
 
@@ -141,3 +138,15 @@ Sonchack, John, Devon Loehr, Jennifer Rexford, and David Walker. "Lucid: A langu
   year={2021}
 }
 ```
+
+## Funding acknowledgements
+Work on Lucid is funded by grants from NSF and the NLnet foundation.
+
+<p align="center">
+  <img src="docs/images/NSF_Official_logo_Med_Res_600ppi.png" alt="NSF Logo" width="150" />
+  <img src="docs/images/nlnet-logo.png" alt="NLnet Logo" width="300" />
+</p>
+
+
+
+

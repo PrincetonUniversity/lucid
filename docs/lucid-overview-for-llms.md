@@ -1,6 +1,4 @@
-Lucid is an event-based data-plane language. It is imperative and syntax is similar to c++ or rust. It has domain-specific constructs inspired by P4, but is higher level, more expressive, and simpler.
-
-*Advice for programming in Lucid.* When developing in Lucid, work incrementally. Write the program first and type-check it, then fix errors, then generate a test spec (consider using a Python helper script if it is complicated). Do not try to plan or pre-compute the complete solution.
+Lucid is an event-based data-plane language. It is imperative and syntax is similar to c++ or rust. It has domain-specific constructs inspired by P4, but is higher level, more expressive, and simpler. When using Lucid, do not try to solve the whole problem at once. Break development into stages. First write a prototype, then type check it, then write some test cases in the interpreter, then go back and refine, and so on. Lucid has a good type checker and testing environment to help with this.
 
 ## Contents
 - [Basic features](#basic-features) — the core primitives, with a complete small example
@@ -40,7 +38,7 @@ Globals can be read or written by handlers and persist across handler execution.
 
 Memops are special functions passed to Array methods to operate on globals. They are restricted so they can compile to an atomic instruction: a memop may only include a return statement, or an if/else with a return statement in each branch. Expressions in the return and if/else statements can use each memop argument at most once, plus an unlimited number of constants. 
 
-Parsers are functions from unparsed packets to events. Events dispatched by parsers should be labeled as "packet" events and contain a final argument of type "Payload.t".
+Parsers are functions from unparsed packets to events. Events dispatched by parsers should be labeled as "packet" events and contain a final argument of type "Payload.t". Only packet events can be emitted out a port.
 
 Records are type declarations with fields separated and terminated by `;`, like structs.
 
@@ -99,9 +97,9 @@ parser main(bitstring pkt) {
 
 
 ## Key constraints
-A handful of rules shape how Lucid programs are written. Lucid's type checker enforces these rules and provides reasonable error messages if you make a mistake.
+A handful of non-obvious rules shape how Lucid programs are written. Internalize these before writing handlers:
 
-- **Within any execution path, globals may only be accessed in declaration order.** Any path may skip any global entirely — the ordering rule only applies to accesses that do occur. Two branches may perform different operations on the same global, or one branch may access a global while the other skips it completely. You can also revisit a global by generating another event to do it asynchronously. Lucid's type checker will tell you which global operations are misordered if you make a mistake.
+- **Globals are accessed in declaration order, at most once per control flow.** Across *all* handlers in the program, every control flow path must touch globals in the order they are declared at the top of the file, and may touch each global at most once. This is what lets Lucid programs pipeline. If you need to revisit a global, do it asynchronously by generating another event.
 - **Functions are non-recursive.** Recursion is only possible via events (a handler may generate its own event).
 - **Sizes are compile-time only.** A `size` is not a runtime value. `size_to_int` converts a size to an int; there is no reverse.
 - **Memops compile to atomic instructions.** They take exactly two int parameters (the current memory value and one runtime argument) and have a restricted expression grammar — no calls to other functions, no loops.
@@ -113,17 +111,6 @@ Parsers have a few additional constraints:
 - **Parsers must terminate explicitly.** Every branch of a parser must terminate by either: a) generating an event; b) calling another parser; or c) calling "drop;", a builtin *statement* to drop the packet. Note that "drop" cannot be called from a handler, where dropping is the default behavior when no events are generated.
 - **Other parser restrictions.** Other parser restrictions are similar to P4. A parser cannot access globals, use if/else statements, perform arithmetic or boolean operations, and can only match on one variable at a time. Note that nested match statements are supported. Also,  match statements can also be used in handlers, with the same syntax as in parsers and with support for multiple variables.
 
-## Tips
-
-- Overall, Lucid is designed to make data-plane programming more like conventional programming. When uncertain about whether something is valid, the most effective approach is to just write it and run the type checker — it will give precise, actionable error messages. Don't reason from first principles about what might be allowed; write your best guess and iterate.
-- Nested matches are allowed in parsers.
-- Read operations in the parser do not add padding (e.g., between fields).
-- Take advantage of the type checker to help you reason about global ordering.
-- Handlers can generate multiple events.
-- **Reach for `packet event` only when the protocol talks to non-Lucid endpoints.** A `packet event` is bound to a wire format: it goes through a parser on ingress and the auto-deparser on egress, which imposes real constraints (no variable-length stacks, every positional arg must occupy a distinct hardware slot, etc.). For *control protocols* that originate and terminate inside Lucid, or at Lucid-aware endpoints — probes, telemetry, distributed coordination, scheduling messages — declare a regular `event` instead. Regular events have no wire format, no parser constraints, no slot-analysis restrictions; they can carry vectors and records freely, and `generate_port` still ferries them between switches in the simulator. The data-plane semantics are identical; you only give up the ability to interoperate with non-Lucid senders/receivers, which most internal protocols don't need.
-- You can also model complicated data plane programs with regular events first, to make testing easier, and then add packet events in later.
-- Recursive events are good for housekeeping and data structure maintenence. The handler of a recursive event will execute periodically, like a background thread waking up to perform a task.
-
 ## Common gotchas
 Surface-level things that trip up newcomers:
 
@@ -133,12 +120,9 @@ Surface-level things that trip up newcomers:
 - For a table with no runtime argument (`arg_ty = ()`), pass `()` explicitly: `Table.lookup(tbl, key, ())`.
 - Polymorphic identifiers begin with a tick: `'a`, `'n`. Use `auto` only when the type checker should infer a single hole.
 - `size` values cannot be used where an `int` is expected — convert with `size_to_int`. There is no `int_to_size`.
-- `printf` is interpreter-only; it does not appear in compiled Tofino programs. Its format string supports `%d` only — `%x`, `%s`, etc. fail at parse time.
-- Bitwise XOR is `^^`. Single `^` is bitstring concatenation.
+- `printf` is interpreter-only; it does not appear in compiled Tofino programs.
 - Casts use C-style syntax: `(int<16>)idx` and truncate the higher-order bits. Cast binds tighter than `#` (record field access), so use `(int<W>)(rec#field)`. Also, bare `int` does not work in a cast.
 - A bare `int`, used as a type with no widths, means `int<32>` by default. Note that int literal *values*, such as in match arms and assignments, are inferred to the surrounding context's width.
-- Record field names are resolved globally. So two different record types cannot have a field with the same name.
-- JSON interpreter spec entries cannot carry comments.
 
 ## Running a program
 There are three stages, from fastest feedback to most realistic. Most development happens in stages 1 and 2.
@@ -405,7 +389,7 @@ An example of a complete specification using a topology block is below:
 ### Other specification fields
 `"default_input_gap": N` controls the amount of time between events in the simulation. Defaults to 1000.
 `"random_seed": N` controls the seed of the RNG,  defaults to random based on current system time.
-`"max time": N` controls how long the simulation runs, defaults to 10000.
+`"max_time": N` controls how long the simulation runs, defaults to 10000.
 
 ### Interpreter output
 The interpreter outputs a timestampped log of events received by nodes and printfs. At the end of execution, the interpreter prints: 1) a list of exit events at node, which are events generated to ports (with `generate_port`) not connected to other nodes or interfaces; 2) the final state of all globals in each node.
