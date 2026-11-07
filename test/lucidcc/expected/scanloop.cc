@@ -472,6 +472,28 @@ static void do_dispatch(void) {
 
 #define PORT_RECIRC 4294967295u // out_event.port sentinel: recirculate, don't egress
 
+// the clone in slot cidx leaves: recirculated (re-enqueued for dispatch), or
+// deparsed in front of its payload and sent out of `port`
+static void emit_clone(uint16_t cidx, uint32_t port) {
+    qe_t* c = slot(&g_slab, cidx);
+    if (port == PORT_RECIRC) {                       // recirculation (generate_self)
+        c->ev.meta.in_port = recirculation_port; // it arrives on the recirculation port
+        if (ring_push(&dispatch_in, cidx) != 0) slot_free(&g_slab, cidx);
+    } else {                                         // output to a port: deparse + send
+        packet_t view;
+        init_cursor(c->data + HEADROOM, c->pkt_len, &view); // cursor at the payload boundary (front)
+        deparse_event(&c->ev, &view);      // writes the header backwards into headroom
+        // a no-payload event emits only its header (drop the tail); a payload event keeps it.
+        uint8_t* dump_end = c->ev.meta.has_payload ? (c->data + HEADROOM + c->pkt_len) : (c->data + HEADROOM);
+        size_t out_len = (size_t)(dump_end - view.cursor);
+        // resolve egress port -> descriptor (mirrors do_rx's ingress lookup) and send;
+        // send_frame drops if the port is unknown.
+        send_frame(get_out_descriptor(&g_port_map, (int)port), view.cursor, out_len);
+        slot_free(&g_slab, cidx);                    // egress done
+    }
+}
+
+
 /******** TX: fan out each element into one copy per output, then route/deparse/send ********/
 static void do_tx(void) {
     for (int b = 0; b < BURST; b++) {
@@ -490,21 +512,7 @@ static void do_tx(void) {
             if (plen) memcpy(c->data + HEADROOM, in->data + HEADROOM + in->payload_off, plen);
             c->pkt_len = plen;
             c->payload_off = 0;                          // the payload now sits at the front of c
-            if (oe->port == PORT_RECIRC) {               // recirculation (generate_self)
-                c->ev.meta.in_port = recirculation_port; // it arrives on the recirculation port
-                if (ring_push(&dispatch_in, cidx) != 0) slot_free(&g_slab, cidx);
-            } else {                                     // output to a port: deparse + send
-                packet_t view;
-                init_cursor(c->data + HEADROOM, plen, &view); // cursor at the payload boundary (front)
-                deparse_event(&c->ev, &view);      // writes the header backwards into headroom
-                // a no-payload event emits only its header (drop the tail); a payload event keeps it.
-                uint8_t* dump_end = oe->ev.meta.has_payload ? (c->data + HEADROOM + plen) : (c->data + HEADROOM);
-                size_t out_len = (size_t)(dump_end - view.cursor);
-                // resolve egress port -> descriptor (mirrors do_rx's ingress lookup) and send;
-                // send_frame drops if the port is unknown.
-                send_frame(get_out_descriptor(&g_port_map, (int)oe->port), view.cursor, out_len);
-                slot_free(&g_slab, cidx);                // egress done
-            }
+            emit_clone(cidx, oe->port);
         }
         slot_free(&g_slab, idx);                         // input consumed (cloned per output)
     }

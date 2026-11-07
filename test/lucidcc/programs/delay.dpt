@@ -1,12 +1,16 @@
-// LUCIDCC_REJECT: not yet supported by the C drivers
-// Delayed generates: a recirculation and a port output, each with
-// Event.delay. The translation carries the delay on the out-event; the
-// drivers' calendar queue is not there yet, so the program is rejected
-// rather than compiled with the delays dropped.
+// Delayed generates. Each ping(x) sends out(100 + x) at once and out(x) after
+// 250 us, and recirculates ping(x + 1) after 100 us, up to x = 2. So the
+// undelayed outputs of the three pings come first, 100 us apart, then the
+// delayed ones (test/lucidcc/gen_pcaps.py: the delays are wide enough that the
+// order does not depend on how fast the program runs). Event tags, in
+// declaration order: ping=1, out=2.
 event ping(int<32> x);
-packet event out(int<32> x);
+event out(int<32> x);
 
 handle ping(int<32> x) {
-    generate_port(1, Event.delay(out(x), 2000));
-    generate(Event.delay(ping(x + 1), 1000));
+    generate_port(1, out(100 + x));
+    generate_port(1, Event.delay(out(x), 250000));
+    if (x < 2) {
+        generate(Event.delay(ping(x + 1), 100000));
+    }
 }

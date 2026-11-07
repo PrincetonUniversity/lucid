@@ -120,6 +120,7 @@ static struct {
 	uint64_t alloc_drop;         // no mbuf for an output
 	uint64_t port_drop;          // an output to a program port bound to no DPDK port
 	uint64_t tx_drop;            // the NIC's transmit queue full
+	uint64_t cal_drop;           // the calendar of delayed outputs full
 	uint64_t bug_drop;           // a ring the design says cannot fill was full
 } st;
 
@@ -170,6 +171,41 @@ static int parse_prog_args(int argc, char *argv[]) {
 	return 0;
 }
 |}]
+
+(* the calendar of delayed outputs, emitted only for programs that delay: a heap
+   by departure time (ties in scheduling order) of clones and their egress. *)
+let calendar_lib = dforiegn {|
+/******** the calendar: delayed clones waiting for their departure time ********/
+#define CAL_SIZE 4096
+typedef struct { uint64_t at; uint64_t seq; struct rte_mbuf *m; uint32_t port; } cal_ent;
+static struct { cal_ent heap[CAL_SIZE]; uint32_t n; uint64_t seq; } cal;
+static inline int cal_before(cal_ent *a, cal_ent *b) { return a->at < b->at || (a->at == b->at && a->seq < b->seq); }
+static int cal_push(uint64_t at, struct rte_mbuf *m, uint32_t port) {
+	if (cal.n >= CAL_SIZE) return -1;
+	uint32_t i = cal.n++;
+	cal.heap[i] = (cal_ent){ .at = at, .seq = cal.seq++, .m = m, .port = port };
+	while (i > 0) {
+		uint32_t p = (i - 1) / 2;
+		if (!cal_before(&cal.heap[i], &cal.heap[p])) break;
+		cal_ent t = cal.heap[p]; cal.heap[p] = cal.heap[i]; cal.heap[i] = t; i = p;
+	}
+	return 0;
+}
+static cal_ent cal_pop(void) {
+	cal_ent top = cal.heap[0];
+	cal.n--;
+	cal.heap[0] = cal.heap[cal.n];
+	uint32_t i = 0;
+	for (;;) {
+		uint32_t l = 2 * i + 1, r = l + 1, m = i;
+		if (l < cal.n && cal_before(&cal.heap[l], &cal.heap[m])) m = l;
+		if (r < cal.n && cal_before(&cal.heap[r], &cal.heap[m])) m = r;
+		if (m == i) break;
+		cal_ent t = cal.heap[m]; cal.heap[m] = cal.heap[i]; cal.heap[i] = t; i = m;
+	}
+	return top;
+}
+|}
 
 (* ===== config + EAL / port / ring initialization ===== *)
 let dpdk_config_init = dforiegn [%string {|
@@ -303,9 +339,9 @@ static void dpdk_shutdown(void) {
 	}
 	rte_eal_cleanup();
 	fprintf(stderr, "rx %"PRIu64" tx %"PRIu64" recirc %"PRIu64" dropped: parse %"PRIu64" jumbo %"PRIu64
-		" recirc-full %"PRIu64" alloc %"PRIu64" no-port %"PRIu64" tx-full %"PRIu64" bug %"PRIu64"\n",
+		" recirc-full %"PRIu64" alloc %"PRIu64" no-port %"PRIu64" tx-full %"PRIu64" calendar %"PRIu64" bug %"PRIu64"\n",
 		st.rx, st.tx, st.recirc, st.parse_drop, st.seg_drop, st.recirc_drop, st.alloc_drop, st.port_drop,
-		st.tx_drop, st.bug_drop);
+		st.tx_drop, st.cal_drop, st.bug_drop);
 }
 |}]
 
@@ -362,9 +398,41 @@ static void do_dispatch(void) {
 
 (* TX: copy mbufs to output and recirculation ports. For events leaving 
    on ports, deparse the event into the mbuf's headroom and transmit.
-	 Recirculated events are enqueued on recirc_in without deparsing. *)
-let dpdk_do_tx = dforiegn [%string {|
+	 Recirculated events are enqueued on recirc_in without deparsing. A program
+	 that delays holds a delayed clone in the calendar until the sender's stamp plus
+	 the delay; do_timers then emits it the same way. *)
+let dpdk_do_tx has_delays =
+  let timers = if has_delays then {|
+// emit the delayed clones whose departure time has come, earliest first
+static void do_timers(uint64_t now) {
+	while (cal.n > 0 && cal.heap[0].at <= now) { cal_ent e = cal_pop(); emit_clone(e.m, e.port); }
+}|} else "" in
+  let hold = if has_delays then {|
+				if (oe->delay > 0) {                // hold it until the sender's stamp + delay
+					if (cal_push((uint64_t)ip->ev.meta.timestamp + (uint64_t)oe->delay, c, oe->port) != 0) { st.cal_drop++; rte_pktmbuf_free(c); }
+					continue;
+				}|} else "" in
+  dforiegn [%string {|
 /******** TX: fan out each event-mbuf into one copy per output, then route/deparse/send ********/
+// the clone leaves: recirculated onto recirc_in, or deparsed and sent out of `port`
+static void emit_clone(struct rte_mbuf *c, uint32_t port) {
+	qe_priv_t *cp = qe(c);
+	if (port == PORT_RECIRC) {              // recirculation (generate_self)
+		cp->ev.meta.in_port = %{recirc_port_var}; // it arrives on the recirculation port
+		if (rte_ring_enqueue(recirc_in, c) != 0) { st.recirc_drop++; rte_pktmbuf_free(c); return; } // drop-tail
+		st.recirc++;
+	} else {                                // output to a port: deparse + transmit
+		uint16_t dport = dpdk_of_prog(port);
+		if (dport == PORT_NONE) { st.port_drop++; rte_pktmbuf_free(c); return; }
+		%{packet_t_ty} view = view_over(c); // cursor at the payload boundary (front of c)
+		%{deparse_event_fn}(&cp->ev, &view); // writes the header backwards into headroom
+		rte_pktmbuf_prepend(c, (uint16_t)(view.start - view.cursor)); // include the header
+		if (unlikely(rte_eth_tx_burst(dport, 0, &c, 1) < 1)) { st.tx_drop++; rte_pktmbuf_free(c); return; }
+		st.tx++;
+	}
+	last_active = rte_rdtsc();
+}
+%{timers}
 static void do_tx(void) {
 	void *batch[BURST_SIZE];
 	unsigned nb;
@@ -384,21 +452,8 @@ static void do_tx(void) {
 				if (unlikely(c == NULL)) { st.alloc_drop++; continue; }
 				qe_priv_t *cp = qe(c);
 				cp->ev = oe->ev;
-				cp->payload_off = 0;                // the payload now sits at the front of c
-				if (oe->port == PORT_RECIRC) {          // recirculation (generate_self)
-					cp->ev.meta.in_port = %{recirc_port_var}; // it arrives on the recirculation port
-					if (rte_ring_enqueue(recirc_in, c) != 0) { st.recirc_drop++; rte_pktmbuf_free(c); continue; } // drop-tail
-					st.recirc++;
-				} else {                                // output to a port: deparse + transmit
-					uint16_t dport = dpdk_of_prog(oe->port);
-					if (dport == PORT_NONE) { st.port_drop++; rte_pktmbuf_free(c); continue; }
-					%{packet_t_ty} view = view_over(c); // cursor at the payload boundary (front of c)
-					%{deparse_event_fn}(&cp->ev, &view); // writes the header backwards into headroom
-					rte_pktmbuf_prepend(c, (uint16_t)(view.start - view.cursor)); // include the header
-					if (unlikely(rte_eth_tx_burst(dport, 0, &c, 1) < 1)) { st.tx_drop++; rte_pktmbuf_free(c); continue; }
-					st.tx++;
-				}
-				last_active = rte_rdtsc();
+				cp->payload_off = 0;                // the payload now sits at the front of c%{hold}
+				emit_clone(c, oe->port);
 			}
 			rte_pktmbuf_free(m); // input consumed (copied per output)
 		}
@@ -407,7 +462,12 @@ static void do_tx(void) {
 |}]
 
 (* ===== main loop ===== *)
-let dpdk_main = dforiegn {|
+(* A program that delays runs the timers each iteration while the calendar holds
+   anything, and a pending delayed output counts as activity for --idle-exit. *)
+let dpdk_main has_delays =
+  let timers = if has_delays then "\n\t\tif (cal.n > 0) do_timers(now_ns()); // emit the delayed clones that are due" else "" in
+  let pending = if has_delays then "cal.n == 0 && " else "" in
+  dforiegn [%string {|
 /******** main loop ********/
 static volatile bool force_quit = false;
 static void on_signal(int sig) { (void)sig; force_quit = true; }
@@ -440,8 +500,8 @@ static void lcore_main(void) {
 		if (stats_cycles && rte_rdtsc() >= stats_next) { print_stats(rte_rdtsc(), hz); stats_next += stats_cycles; }
 		if (do_rx() > 0) last_active = rte_rdtsc(); // poll the ports for what fits, parse, enqueue on rx_in
 		do_dispatch();  // a burst from each input ring, handled and forwarded to tx_in
-		do_tx();        // drain tx_in: clone, deparse, send; a recirculation goes onto recirc_in
-		if (idle_cycles && rte_rdtsc() - last_active > idle_cycles) break;
+		do_tx();        // drain tx_in: clone, deparse, send; a recirculation goes onto recirc_in%{timers}
+		if (idle_cycles && %{pending}rte_rdtsc() - last_active > idle_cycles) break;
 	}
 }
 
@@ -454,7 +514,7 @@ int main(int argc, char *argv[]) {
 	dpdk_shutdown();
 	return 0;
 }
-|}
+|}]
 
 let progname = "lucidprog"
 
@@ -514,13 +574,14 @@ sudo ./build/%{progname}-shared --log-level=8 -l 1 -n 4 --no-pci --vdev 'net_pca
 (* return a list of files *)
 let package_prog decls =
 	let sm = section_marker in
+	let d = !CCoreHandlers.has_delays in
 [
 	"lucidprog.c", `Decls (
 		[dpdk_includes]
 		@ [sm "program code"] @ decls
-		@ [sm "driver config + init"; dpdk_queue; dpdk_config_init]
-		@ [sm "driver pipeline"; dpdk_do_rx; dpdk_do_dispatch; dpdk_do_tx]
-		@ [sm "driver main"; dpdk_main]);
+		@ [sm "driver config + init"; dpdk_queue] @ (if d then [calendar_lib] else []) @ [dpdk_config_init]
+		@ [sm "driver pipeline"; dpdk_do_rx; dpdk_do_dispatch; dpdk_do_tx d]
+		@ [sm "driver main"; dpdk_main d]);
 	(* capital M: the DPDK makefile lists `Makefile` as a prerequisite of its build
 	   rules, so the on-disk name must match (Linux is case-sensitive). *)
 	"Makefile", `String makefile;

@@ -150,8 +150,13 @@ static int ring_pop(idx_ring* r, uint16_t* out) {
 
 
 (* the slab allocator: a fixed pool of queue elements (a hand-rolled
-   rte_mempool) whose free-list is an idx_ring. *)
-let slab_lib = dforiegn [%string {|
+   rte_mempool) whose free-list is an idx_ring. A program that delays gives each
+   element the egress of a delayed out-event, kept while it waits in the calendar. *)
+let slab_lib has_delays =
+  let out_port_field = if has_delays
+    then "\n    uint32_t        out_port;       // a delayed out-event's egress, while it waits in the calendar"
+    else "" in
+  dforiegn [%string {|
 /********* the queue element (a slab slot) ***********/
 // the event, the handler's outputs, and the element's packet bytes (this driver's
 // analogue of the DPDK mbuf + private area). The packet occupies data[HEADROOM ..
@@ -161,7 +166,7 @@ typedef struct {
     %{out_event_ty} out_events[%{out_events_cap}];
     uint16_t        n_out;
     uint32_t        pkt_len;        // packet bytes from data+HEADROOM
-    uint32_t        payload_off;    // payload boundary, relative to data+HEADROOM
+    uint32_t        payload_off;    // payload boundary, relative to data+HEADROOM%{out_port_field}
     uint8_t         data[HEADROOM + SLOT_USABLE];
 } qe_t;
 
@@ -184,6 +189,43 @@ static void slab_init(slab_t* s) {
     for (uint16_t i = 0; i < POOL_SIZE; i++) ring_push(&s->free, i);   // every slot starts free
 }
 |}]
+
+(* the calendar of delayed out-events, emitted only for programs that delay: a
+   heap of slot indices by departure time (ties in scheduling order), drained by
+   do_timers when the clock reaches them. *)
+let calendar_lib = dforiegn {|
+/********* the calendar: delayed out-events waiting for their departure time ***********/
+typedef struct { uint64_t at; uint64_t seq; uint16_t idx; } cal_ent;
+typedef struct { cal_ent heap[POOL_SIZE]; uint32_t n; uint64_t seq; } calendar_t;
+static calendar_t g_calendar;
+static int cal_before(cal_ent* a, cal_ent* b) { return a->at < b->at || (a->at == b->at && a->seq < b->seq); }
+static int cal_push(calendar_t* c, uint64_t at, uint16_t idx) {
+    if (c->n >= POOL_SIZE) return -1;
+    uint32_t i = c->n++;
+    c->heap[i].at = at; c->heap[i].seq = c->seq++; c->heap[i].idx = idx;
+    while (i > 0) {
+        uint32_t p = (i - 1) / 2;
+        if (!cal_before(&c->heap[i], &c->heap[p])) break;
+        cal_ent t = c->heap[p]; c->heap[p] = c->heap[i]; c->heap[i] = t; i = p;
+    }
+    return 0;
+}
+static int cal_peek(calendar_t* c, uint64_t* at) { if (c->n == 0) return -1; *at = c->heap[0].at; return 0; }
+static uint16_t cal_pop(calendar_t* c) {
+    uint16_t idx = c->heap[0].idx;
+    c->n--;
+    c->heap[0] = c->heap[c->n];
+    uint32_t i = 0;
+    for (;;) {
+        uint32_t l = 2 * i + 1, r = l + 1, m = i;
+        if (l < c->n && cal_before(&c->heap[l], &c->heap[m])) m = l;
+        if (r < c->n && cal_before(&c->heap[r], &c->heap[m])) m = r;
+        if (m == i) break;
+        cal_ent t = c->heap[m]; c->heap[m] = c->heap[i]; c->heap[i] = t; i = m;
+    }
+    return idx;
+}
+|}
 
 
 (* the raw-socket library is a simple inline block to open, rx, and tx from a
@@ -339,8 +381,51 @@ static void do_dispatch(void) {
 |}]
 
 (* ===== TX: clone packets and route recircs back to dispatch input queue  ===== *)
-let tx = dforiegn [%string {|
+(* A program that delays holds a delayed clone in the calendar until the sender's
+   stamp plus the delay; do_timers then emits it as the transmit stage would. *)
+let tx has_delays =
+  let timers = if has_delays then {|
+// release the delayed out-events whose departure time has come, earliest first
+static void do_timers(uint64_t now) {
+    uint64_t at;
+    while (cal_peek(&g_calendar, &at) == 0 && at <= now) {
+        uint16_t cidx = cal_pop(&g_calendar);
+        emit_clone(cidx, slot(&g_slab, cidx)->out_port);
+    }
+}|} else "" in
+  let hold = if has_delays then {|
+            if (oe->delay > 0) {                         // hold it until the sender's stamp + delay
+                c->out_port = oe->port;
+                if (cal_push(&g_calendar, (uint64_t)in->ev.meta.timestamp + (uint64_t)oe->delay, cidx) != 0) {
+                    fprintf(stderr, "calendar full: a delayed event was dropped\n");
+                    slot_free(&g_slab, cidx);
+                }
+                continue;
+            }|} else "" in
+  dforiegn [%string {|
 #define PORT_RECIRC %{port_recirc}u // out_event.port sentinel: recirculate, don't egress
+
+// the clone in slot cidx leaves: recirculated (re-enqueued for dispatch), or
+// deparsed in front of its payload and sent out of `port`
+static void emit_clone(uint16_t cidx, uint32_t port) {
+    qe_t* c = slot(&g_slab, cidx);
+    if (port == PORT_RECIRC) {                       // recirculation (generate_self)
+        c->ev.meta.in_port = %{recirc_port_var}; // it arrives on the recirculation port
+        if (ring_push(&dispatch_in, cidx) != 0) slot_free(&g_slab, cidx);
+    } else {                                         // output to a port: deparse + send
+        %{packet_t_ty} view;
+        init_cursor(c->data + HEADROOM, c->pkt_len, &view); // cursor at the payload boundary (front)
+        %{deparse_event_fn}(&c->ev, &view);      // writes the header backwards into headroom
+        // a no-payload event emits only its header (drop the tail); a payload event keeps it.
+        uint8_t* dump_end = c->ev.meta.has_payload ? (c->data + HEADROOM + c->pkt_len) : (c->data + HEADROOM);
+        size_t out_len = (size_t)(dump_end - view.cursor);
+        // resolve egress port -> descriptor (mirrors do_rx's ingress lookup) and send;
+        // send_frame drops if the port is unknown.
+        send_frame(get_out_descriptor(&g_port_map, (int)port), view.cursor, out_len);
+        slot_free(&g_slab, cidx);                    // egress done
+    }
+}
+%{timers}
 
 /******** TX: fan out each element into one copy per output, then route/deparse/send ********/
 static void do_tx(void) {
@@ -359,29 +444,26 @@ static void do_tx(void) {
             uint32_t plen = oe->ev.meta.has_payload ? (in->pkt_len - in->payload_off) : 0;
             if (plen) memcpy(c->data + HEADROOM, in->data + HEADROOM + in->payload_off, plen);
             c->pkt_len = plen;
-            c->payload_off = 0;                          // the payload now sits at the front of c
-            if (oe->port == PORT_RECIRC) {               // recirculation (generate_self)
-                c->ev.meta.in_port = %{recirc_port_var}; // it arrives on the recirculation port
-                if (ring_push(&dispatch_in, cidx) != 0) slot_free(&g_slab, cidx);
-            } else {                                     // output to a port: deparse + send
-                %{packet_t_ty} view;
-                init_cursor(c->data + HEADROOM, plen, &view); // cursor at the payload boundary (front)
-                %{deparse_event_fn}(&c->ev, &view);      // writes the header backwards into headroom
-                // a no-payload event emits only its header (drop the tail); a payload event keeps it.
-                uint8_t* dump_end = oe->ev.meta.has_payload ? (c->data + HEADROOM + plen) : (c->data + HEADROOM);
-                size_t out_len = (size_t)(dump_end - view.cursor);
-                // resolve egress port -> descriptor (mirrors do_rx's ingress lookup) and send;
-                // send_frame drops if the port is unknown.
-                send_frame(get_out_descriptor(&g_port_map, (int)oe->port), view.cursor, out_len);
-                slot_free(&g_slab, cidx);                // egress done
-            }
+            c->payload_off = 0;                          // the payload now sits at the front of c%{hold}
+            emit_clone(cidx, oe->port);
         }
         slot_free(&g_slab, idx);                         // input consumed (cloned per output)
     }
 }
 |}]
 
-let main = dforiegn {|
+let main has_delays =
+  let wake = if has_delays then {|
+        struct timeval until; uint64_t due;
+        if (!have_work && cal_peek(&g_calendar, &due) == 0) {   // wake for the next delayed event
+            uint64_t now = now_ns();
+            uint64_t wait = due > now ? due - now : 0;
+            until.tv_sec = (time_t)(wait / 1000000000ull); until.tv_usec = (suseconds_t)((wait % 1000000000ull) / 1000);
+            timeout = &until;
+        }|} else "" in
+  let timers = if has_delays then {|
+        do_timers(now_ns()); // release delayed out-events that are due|} else "" in
+  dforiegn [%string {|
 static volatile int g_running = 1;
 
 int main(int argc, char** argv) {
@@ -415,8 +497,9 @@ int main(int argc, char** argv) {
             if (g_port_map.ports[i].fd > maxfd) maxfd = g_port_map.ports[i].fd;
         }
         struct timeval zero = {0, 0};
-        int r = select(maxfd + 1, &rfds, NULL, NULL, have_work ? &zero : NULL);
-        if (r < 0) { if (errno == EINTR) continue; perror("select"); break; }
+        struct timeval* timeout = have_work ? &zero : NULL;%{wake}
+        int r = select(maxfd + 1, &rfds, NULL, NULL, timeout);
+        if (r < 0) { if (errno == EINTR) continue; perror("select"); break; }%{timers}
         do_rx();        // read available frames into slots, enqueue on dispatch_in
         do_dispatch();  // handle a bounded burst, forward to tx_in
         do_tx();        // fan out a bounded burst: deparse+send; recirc re-enqueues
@@ -424,18 +507,20 @@ int main(int argc, char** argv) {
     printf("Processed %llu packets\n", (unsigned long long)pkt_ct);
     return 0;
 }
-|}
+|}]
 
 let package_prog decls =
+    let d = !CCoreHandlers.has_delays in
     let imports = [imports] in
     let decls = [section_marker "program code"] @ decls in
     let driver_config = [section_marker "driver config"; config] in
     (* order within the libs is dependency-driven: socket_lib's port_rx allocates from the
        slab (so after slab_lib), and port_map_lib's init_port_map calls raw_open (so after
        socket_lib). *)
-    let driver_libs = [section_marker "driver libraries"; helpers_lib; ring_lib; slab_lib; socket_lib; port_map_lib;] in
-    let pipe = [section_marker "driver pipeline"; pipe_state; rx; dispatch; tx;] in
-    let main = [section_marker "driver main"; main] in
+    let driver_libs = [section_marker "driver libraries"; helpers_lib; ring_lib; slab_lib d]
+      @ (if d then [calendar_lib] else []) @ [socket_lib; port_map_lib;] in
+    let pipe = [section_marker "driver pipeline"; pipe_state; rx; dispatch; tx d;] in
+    let main = [section_marker "driver main"; main d] in
   [
     "lucidprog.c", `Decls (imports @ decls @ driver_config @ driver_libs @ pipe @ main);
     "makefile", `String "all: lucidprog\n\nlucidprog: lucidprog.c\n\tgcc -O2 -o lucidprog lucidprog.c\n\n"

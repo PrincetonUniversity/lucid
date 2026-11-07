@@ -109,7 +109,12 @@ static void send_frame(pcap_dumper_t* out, uint8_t* buf, size_t len) {
 }
 |}
 
-let main = dforiegn {|
+(* A program that delays keeps the pipeline loop going while the calendar holds
+   anything, releasing delayed out-events as their departure times come. *)
+let main has_delays =
+  let pending = if has_delays then " || g_calendar.n > 0" else "" in
+  let timers = if has_delays then "\n            do_timers(now_ns());" else "" in
+  dforiegn [%string {|
 int main(int argc, char** argv) {
     if (init_port_map(&g_port_map, argc, argv) != 0) { fprintf(stderr, "failed to init port map\n"); return 1; }
     if (g_port_map.nports == 0) {
@@ -130,7 +135,7 @@ int main(int argc, char** argv) {
     // bursts -- backpressure is correct when the wire sets the pace.)
     for (;;) {
         do_rx();
-        while (!ring_empty(&dispatch_in) || !ring_empty(&tx_in)) {
+        while (!ring_empty(&dispatch_in) || !ring_empty(&tx_in)%{pending}) {%{timers}
             do_dispatch();
             do_tx();
         }
@@ -146,18 +151,20 @@ int main(int argc, char** argv) {
     }
     return 0;
 }
-|}
+|}]
 
 let package_prog decls =
+    let d = !CCoreHandlers.has_delays in
     let sm = section_marker in
     [
         "lucidprog.c", `Decls (
             [imports]
             @ [sm "program code"] @ decls
             @ [sm "driver config"; R.config]
-            @ [sm "driver libraries"; R.helpers_lib; R.ring_lib; R.slab_lib; port_map_lib; pcap_lib]
-            @ [sm "driver pipeline"; R.pipe_state; R.rx; R.dispatch; R.tx]
-            @ [sm "driver main"; main]);
+            @ [sm "driver libraries"; R.helpers_lib; R.ring_lib; R.slab_lib d]
+            @ (if d then [R.calendar_lib] else []) @ [port_map_lib; pcap_lib]
+            @ [sm "driver pipeline"; R.pipe_state; R.rx; R.dispatch; R.tx d]
+            @ [sm "driver main"; main d]);
         "makefile", `String "all: lucidprog\n\nlucidprog: lucidprog.c\n\tgcc -O2 -o lucidprog lucidprog.c -lpcap\n\n"
     ]
 ;;

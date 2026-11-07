@@ -108,4 +108,11 @@ test_case("recircport",
     [lucid_frame(3, 1, 7),
      lucid_frame(3, 196, 7)])
 
+# delay: ping(0) sends out(100), out(101), out(102) at once from pings 100 us
+# apart, and out(0), out(1), out(2) 250 us after each ping. Tags from
+# delay.dpt's declaration order: ping=1, out=2.
+test_case("delay",
+    [lucid_frame(1, 0)],
+    [lucid_frame(2, x) for x in [100, 101, 102, 0, 1, 2]])
+
 print("wrote pcap test cases to", PCAPS)

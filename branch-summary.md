@@ -74,7 +74,7 @@ tests to check the generated C.
 
 ## Drivers
 
-- Factored generated code into: 
+- The branch refactors generated code into: 
   1) a runtime library of data structures and builtins; 
   2) per-program event structs, handler functions, and other user code; 
   3) a fixed-function "driver" pipeline for runtime operations such as 
