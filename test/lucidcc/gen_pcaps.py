@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-# Generate the pcap test cases for test_pcap.py (which runs this first) into _pcaps/.
-#
-# Each test case is <program>.in.pcap + <program>.expected.pcap. The expected output is
-# computed here from what the program should do, never captured from lucidcc's output,
-# so each test case is an independent check rather than a snapshot.
+# Generate the pcap test cases for test_pcap.py into _pcaps/.
+# Each test case is an input and output pcap pair: <program>.in.pcap + <program>.expected.pcap. 
+# They are both generated from scratch here. 
 import struct
 import os
 
@@ -58,15 +56,14 @@ ins = [eth("aabbccddeeff", "112233445566", 0x0800)]
 test_case("headeronly", ins, [f[:14] for f in ins])
 
 # csum: recompute the IPv4 header checksum (hash<16>(checksum, ...)). The input's
-# checksum field is wrong (0xdead); the program zeroes and recomputes it over the
-# wire-format header bits. The expected checksum is RFC 1071, computed here.
+# checksum field is wrong (0xdead); the program zeroes and recomputes it.
 def ipv4(ver=4, ihl=5, dscp=0, ecn=0, total_len=32, pkt_id=0x1c46, flags=2, frag=0,
          ttl=64, proto=17, csum=0, src="0a350101", dst="0a350105"):
     return struct.pack(">BBHHHBBH", (ver << 4) | ihl, (dscp << 2) | ecn, total_len,
                        pkt_id, (flags << 13) | frag, ttl, proto, csum) \
         + bytes.fromhex(src) + bytes.fromhex(dst)
 
-def rfc1071(data):
+def csum_rfc1071(data):
     s = sum(struct.unpack(">%dH" % (len(data) // 2), data))
     while s >> 16:
         s = (s & 0xFFFF) + (s >> 16)
@@ -75,25 +72,19 @@ def rfc1071(data):
 arp = eth("aabbccddeeff", "112233445566", 0x0806, b"arp-payload.")  # non-IP -> reflected as-is
 test_case("csum",
     [eth("aabbccddeeff", "112233445566", 0x0800, ipv4(csum=0xdead) + b"PAYLOAD-DATA"), arp],
-    [eth("aabbccddeeff", "112233445566", 0x0800, ipv4(csum=rfc1071(ipv4())) + b"PAYLOAD-DATA"), arp])
+    [eth("aabbccddeeff", "112233445566", 0x0800, ipv4(csum=csum_rfc1071(ipv4())) + b"PAYLOAD-DATA"), arp])
 
 # tables1_pcap: Table.install + Table.lookup end-to-end. Event tags are hardcoded from
 # tables1_pcap.dpt's declaration order: query_result=1, do_install=2, do_query=3.
-# Expected query_result(key, val, hit) frames on port 1:
-#   (42, 1000, 0)  miss before install (default miss_acn echoes the lookup arg)
-#   (42, 7, 1)     hit after install
-#   (43, 1000, 0)  miss -- 43 & 42 == 42, catches an install that masks with the key
-#                  instead of all-ones
-#   (1, 1000, 0)   miss -- other keys unaffected
 test_case("tables1_pcap",
-    [lucid_frame(3, 42),      # do_query(42)
-     lucid_frame(2, 42, 7),   # do_install(42, 7): hit_acn(7) for key 42, no output
-     lucid_frame(3, 42),      # do_query(42)
-     lucid_frame(3, 43),      # do_query(43)
-     lucid_frame(3, 1)],      # do_query(1)
-    [lucid_frame(1, 42, 1000, 0),
-     lucid_frame(1, 42, 7, 1),
-     lucid_frame(1, 43, 1000, 0),
-     lucid_frame(1, 1, 1000, 0)])
+    [lucid_frame(3, 42),            # do_query(42)
+     lucid_frame(2, 42, 7),         # do_install(42, 7): hit_acn(7) for key 42, no output
+     lucid_frame(3, 42),            # do_query(42)
+     lucid_frame(3, 43),            # do_query(43)
+     lucid_frame(3, 1)],            # do_query(1)
+    [lucid_frame(1, 42, 1000, 0),   # miss before install 
+     lucid_frame(1, 42, 7, 1),      # hit after install 
+     lucid_frame(1, 43, 1000, 0),   # miss, would hit if an install masked with key
+     lucid_frame(1, 1, 1000, 0)])   # miss, other keys shouldn't be affected
 
 print("wrote pcap test cases to", PCAPS)
