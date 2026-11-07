@@ -127,6 +127,13 @@ static inline uint16_t dpdk_of_prog(uint32_t prog) {  // PORT_NONE when unbound
 	return PORT_NONE;
 }
 
+/******** the clock: nanoseconds since the driver started (Sys.time) ********/
+static uint64_t tsc_hz, tsc0;
+static inline uint64_t now_ns(void) {
+	uint64_t d = rte_rdtsc() - tsc0;   // split so that d * 1e9 cannot overflow
+	return (d / tsc_hz) * 1000000000ull + ((d % tsc_hz) * 1000000000ull) / tsc_hz;
+}
+
 /******** the program's arguments (after the EAL's `--`) ********/
 static uint64_t idle_exit_ms = 0;   // --idle-exit, 0 = never
 static uint64_t stats_s = 0;        // --stats, 0 = never
@@ -272,6 +279,8 @@ void dpdk_init(cfg_t* cfg, int argc, char *argv[]) {
 	}
 	if (parse_prog_args(argc - eal_args, argv + eal_args) != 0)
 		rte_exit(EXIT_FAILURE, "bad program arguments\n");
+	tsc_hz = rte_get_tsc_hz();
+	tsc0 = rte_rdtsc();
 	return;
 }
 
@@ -330,7 +339,7 @@ static void do_dispatch(void) {
 	for (unsigned b = 0; b < nb; b++) {
 		struct rte_mbuf *m = (struct rte_mbuf *)batch[b];
 		qe_priv_t *p = qe(m);
-		p->ev.meta.timestamp = rte_get_tsc_cycles() & 0xFFFFFFFFFFFFull; // stamp at dequeue (Sys.time())
+		p->ev.meta.timestamp = now_ns() & 0xFFFFFFFFFFFFull; // stamp at dequeue (Sys.time())
 		p->n_out = %{handle_event_fn}(&p->ev, p->out_events);   // ingress read from p->ev.meta.in_port
 		if (rte_ring_enqueue(tx_in, m) != 0) { st.ring_drop++; rte_pktmbuf_free(m); } // ring full -> drop the element
 	}
@@ -408,7 +417,7 @@ static void print_stats(uint64_t now, uint64_t hz) {
 
 static void lcore_main(void) {
 	fprintf(stderr, "handler loop running -- ctrl-c to quit\n");
-	uint64_t hz = rte_get_tsc_hz();
+	uint64_t hz = tsc_hz;
 	uint64_t idle_cycles = idle_exit_ms * hz / 1000;
 	uint64_t stats_cycles = stats_s * hz, stats_next = rte_rdtsc() + stats_cycles;
 	if (stats_cycles) print_stats(rte_rdtsc(), hz);
