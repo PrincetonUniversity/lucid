@@ -9,7 +9,7 @@ DPDK), over a few programs (in `./programs`).
 
 - **PCAP tests** `test_pcap.sh`: compile and test programs with the PCAP driver; 
   byte compare program output against `pcaps/<name>.expected.pcap`. The expected 
-  outputs are computed in python by `gen_inputs.py`, not captured from lucidcc. 
+  outputs are computed in python by `gen_pcaps.py`, not captured from lucidcc. 
 
 - **RAWSOCK tests** `test_rawsock.py`: compile and test certain programs 
   with the raw socket driver over a veth (or feth for macos) pair. 
@@ -22,7 +22,7 @@ DPDK), over a few programs (in `./programs`).
 
 - `programs/` — the `.dpt` sources under test.
 - `expected/` — checked-in expected C, one `<name>.cc` per program (for `test_compiler.sh`).
-- `gen_inputs.py` — generates the pcap fixtures (`<name>.in.pcap` + `<name>.expected.pcap`)
+- `gen_pcaps.py` — generates the pcap fixtures (`<name>.in.pcap` + `<name>.expected.pcap`)
   for `test_pcap.sh`, which runs it first.
 - `pcaps/` — untracked; generated fixtures plus the live tests' captures.
 - `_rawsock_build/`, `_dpdk_build/` — per-driver build dirs.

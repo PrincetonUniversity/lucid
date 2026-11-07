@@ -3,7 +3,7 @@
 // (version/ihl/dscp/ecn, flags/frag) must be packed bit-concatenated MSB-first
 // (not as C container bytes) before the RFC 1071 ones-complement fold. The
 // fixture's input has a wrong checksum; the expected output has the correct one
-// (computed independently in python by ctests/gen_inputs.py).
+// (computed independently in python by ctests/gen_pcaps.py).
 type eth_t = {
   int<48> dst_mac;
   int<48> src_mac;

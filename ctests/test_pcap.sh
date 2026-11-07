@@ -2,7 +2,7 @@
 #
 # pcap driver run tests.
 #
-# Generate the fixtures (gen_inputs.py -> pcaps/<name>.{in,expected}.pcap), then for
+# Generate the fixtures (gen_pcaps.py -> pcaps/<name>.{in,expected}.pcap), then for
 # each program with a fixture, generate + compile the binary, run it on the input,
 # and byte-compare its output against the expected pcap. On a mismatch the output
 # is kept as pcaps/<name>.actual.pcap.
@@ -38,7 +38,7 @@ if [ "$BUILD" -eq 1 ]; then
 fi
 [ -x "$LUCIDCC" ] || { echo "lucidcc not found at $LUCIDCC (run \`make\` first)" >&2; exit 1; }
 
-python3 "$SCRIPT_DIR/gen_inputs.py" >/dev/null || { echo "pcap fixture generation failed" >&2; exit 1; }
+python3 "$SCRIPT_DIR/gen_pcaps.py" >/dev/null || { echo "pcap fixture generation failed" >&2; exit 1; }
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
