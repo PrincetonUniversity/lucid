@@ -29,11 +29,11 @@ tests to check the generated C.
   behavior in generated C code: pointer-cast type punning; 
   unaligned loads and store; and incorrectly calculated event container sizes.
 - (**bug fix**) **Unsupported feature detection.** Features the backend doesn't 
-  yet support (multicast, saturating arithmetic, bit concat, certain field layouts)
-  now cause compiler errors instead of incorrect C code. 
+  yet support (multicast, saturating arithmetic, bit concat, certain field layouts, 
+  int types wider than 64 bits) now cause compiler errors instead of incorrect C code. 
 - (**bug fix**) **Smaller issues.** Fixed C operator precedence and `mod` name 
   collision; bit-aligned hash calc semantics; made printf behavior 
-  consistent with interpreter.
+  consistent with interpreter; clea
 - (**bug fix**) **Support large internal values** Fixed a bug causing compiler crash for 
   values larger than 63 bits.
 

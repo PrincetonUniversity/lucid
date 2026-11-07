@@ -182,6 +182,10 @@ let op_checker = object
     | _ when is_egen_group exp ->
       err_in_decl cur_decl_opt "generate_ports (multicast) is not supported by the C backend"
     | _ -> ()
+  method! visit_TInt () n =
+    if n > 64 then
+      err_in_decl cur_decl_opt @@ Printf.sprintf
+        "int<%d> is wider than 64 bits, the widest int the C backend supports" n
 end
 
 

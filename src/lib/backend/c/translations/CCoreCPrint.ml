@@ -46,9 +46,11 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * stri
     (* non-standard width: print as the smallest standard container that holds it
        (uint8/16/32/64). The value is kept in range by the mask-insertion pass
        (CCoreMaskWidths), so no C bitfield (": n") is needed -- and a container is
-       legal in every position (local, param, return, field), unlike a bitfield.
-       (Widths > 64 are unsupported; List.find raises, same as before.) *)
-    let container = List.find (fun i -> i > n) [8; 16; 32; 64] in
+       legal in every position (local, param, return, field), unlike a bitfield. *)
+    let container = match List.find_opt (fun i -> i > n) [8; 16; 32; 64] with
+      | Some c -> c
+      | None -> err (sprintf "int<%d> is wider than the C backend supports (64 bits)" n)
+    in
     sprintf "uint%i_t" container, ""
   | TBool -> "uint8_t", ""
   | TUnion(labels, ts) -> 
