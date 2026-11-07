@@ -1,0 +1,48 @@
+// hash<16>(checksum, ...): recompute an IPv4 header checksum and write it back.
+// End-to-end check of the wire-format checksum: the header's sub-byte fields
+// (version/ihl/dscp/ecn, flags/frag) must be packed bit-concatenated MSB-first
+// (not as C container bytes) before the RFC 1071 ones-complement fold. The
+// fixture's input has a wrong checksum; the expected output has the correct one
+// (computed independently in python by ctests/gen_inputs.py).
+type eth_t = {
+  int<48> dst_mac;
+  int<48> src_mac;
+  int<16> etype;
+}
+
+type ip_t = {
+  int<4> version;
+  int<4> ihl;
+  int<6> dscp;
+  int<2> ecn;
+  int<16> total_len;
+  int<16> id;
+  int<3> flags;
+  int<13> frag_offset;
+  int<8> ttl;
+  int<8> protocol;
+  int<16> hdr_csum;
+  int<32> src;
+  int<32> dst;
+}
+
+packet event ippkt(eth_t eth, ip_t ip, Payload.t pl) {
+  auto zeroed = {ip with hdr_csum = 0};
+  auto fixed = {zeroed with hdr_csum = hash<16>(checksum, zeroed)};
+  generate_port(ingress_port, ippkt(eth, fixed, pl));
+}
+
+packet event other(eth_t eth, Payload.t pl) {
+  generate_port(ingress_port, this);
+}
+
+parser main(bitstring pkt) {
+  eth_t e = read(pkt);
+  match e#etype with
+  | LUCID_ETHERTY -> { do_lucid_parsing(pkt); }
+  | 0x0800 -> {
+    ip_t ip = read(pkt);
+    generate ippkt(e, ip, Payload.parse(pkt));
+  }
+  | _ -> { generate other(e, Payload.parse(pkt)); }
+}

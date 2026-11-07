@@ -8,10 +8,10 @@
 # checked to be rejected by lucidcc (it uses a feature the C backend does not support).
 #
 # Usage:
-#   ./ctests/run_tests.sh             normal: compile + diff each program vs expected/
-#   ./ctests/run_tests.sh --update    (re)generate expected/ (compile-checked first)
-#   ./ctests/run_tests.sh --no-build  skip `make`, reuse the current ./lucidcc
-#   ./ctests/run_tests.sh --help      show this help
+#   ./ctests/test_compiler.sh             normal: compile + diff each program vs expected/
+#   ./ctests/test_compiler.sh --update    (re)generate expected/ (compile-checked first)
+#   ./ctests/test_compiler.sh --no-build  skip `make`, reuse the current ./lucidcc
+#   ./ctests/test_compiler.sh --help      show this help
 #
 # Exits non-zero on any failure. Update mode still fails on a compile error or a bad rejection.
 set -uo pipefail
