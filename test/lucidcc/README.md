@@ -27,7 +27,7 @@ This directory contains 4 harnesses for regression testing the
 
 - `programs/` — the `.dpt` sources under test.
 - `expected/` — checked-in expected C, one `<name>.cc` per program (for `test_compiler.py`).
-- `gen_pcaps.py` — generates the pcap fixtures (`<name>.in.pcap` + `<name>.expected.pcap`).
+- `gen_pcaps.py` — generates the pcap test cases (`<name>.in.pcap` + `<name>.expected.pcap`).
 - `_rawsock_build/`, `_dpdk_build/`, and `_pcaps` — untracked staging dirs.
 
 ## Usage
@@ -36,16 +36,14 @@ This directory contains 4 harnesses for regression testing the
 live-traffic tests. Or run each directly:
 
 ```sh
-# codegen gate (compile + golden) -- fast, local
-./test/lucidcc/test_compiler.py              # build lucidcc, then compile + diff every program
-./test/lucidcc/test_compiler.py --update     # accept new C as golden (compile-checked first)
-./test/lucidcc/test_compiler.py --no-build   # reuse the existing ./lucidcc, skip `make`
+# compiler tests
+./test/lucidcc/test_compiler.py              # build lucidcc and compile + diff every program
+./test/lucidcc/test_compiler.py --update     # update expected C output
 
-# pcap run fixtures -- local
-./test/lucidcc/test_pcap.py              # generate fixtures, run + compare each
-./test/lucidcc/test_pcap.py --no-build   # reuse ./lucidcc
+# pcap test cases
+./test/lucidcc/test_pcap.py                  # generate test cases, run + compare each
 
-# live-traffic drivers -- in the Linux container
+# harness tests
 sudo python3 test/lucidcc/test_rawsock.py     # reflector + scanloop over veths
 sudo python3 test/lucidcc/test_dpdk.py        # reflector + af_packet + events + scanloop
 ```

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-# Generate the pcap fixtures for test_pcap.py (which runs this first) into _pcaps/.
+# Generate the pcap test cases for test_pcap.py (which runs this first) into _pcaps/.
 #
-# Each fixture is <program>.in.pcap + <program>.expected.pcap. The expected output is
+# Each test case is <program>.in.pcap + <program>.expected.pcap. The expected output is
 # computed here from what the program should do, never captured from lucidcc's output,
-# so each fixture is an independent check rather than a snapshot.
+# so each test case is an independent check rather than a snapshot.
 import struct
 import os
 
 from driverlib import PCAPS, write_pcap, lucid_frame
 
-def fixture(name, ins, outs):
+def test_case(name, ins, outs):
     write_pcap(os.path.join(PCAPS, name + ".in.pcap"), ins)
     write_pcap(os.path.join(PCAPS, name + ".expected.pcap"), outs)
 
@@ -29,7 +29,7 @@ ins = [
     eth("aabbccddeeff", "112233445566", 0x0800),   # IPv4
     eth("001122334455", "665544332211", 0x86dd),   # IPv6
 ]
-fixture("ethswaprefl", ins, [swap_macs(f) for f in ins])
+test_case("ethswaprefl", ins, [swap_macs(f) for f in ins])
 
 # ipv4refl: reflect only IPv4 (ethertype 0x0800); drop everything else. Tests
 # that the ethertype is compared in network byte order.
@@ -37,7 +37,7 @@ ins = [
     eth("aabbccddeeff", "112233445566", 0x0800),   # IPv4  -> reflected
     eth("001122334455", "665544332211", 0x0806),   # ARP   -> dropped
 ]
-fixture("ipv4refl", ins, [swap_macs(f) for f in ins if ethertype(f) == 0x0800])
+test_case("ipv4refl", ins, [swap_macs(f) for f in ins if ethertype(f) == 0x0800])
 
 # bitfields: a 4-bit `ver` + 12-bit `len` packed into the first 2 bytes (len straddles
 # the byte boundary, R1' aligned-end), then dst/src/ety. ver=0x5, len=0x123 ->
@@ -48,14 +48,14 @@ def bitfields_pkt(ver, length, dst, src, ety, payload=b"PAYLOAD-DATA"):
     b1 = length & 0xFF
     return bytes([b0, b1]) + bytes.fromhex(dst) + bytes.fromhex(src) + struct.pack(">H", ety) + payload
 
-fixture("bitfields",
+test_case("bitfields",
     [bitfields_pkt(0x5, 0x123, "aabbccddeeff", "112233445566", 0x0800)],
     [bitfields_pkt(0x5, 0x124, "aabbccddeeff", "112233445566", 0x0800)])
 
 # headeronly: no Payload.t -> the output keeps only the 14-byte eth header, dropping
 # the input payload.
 ins = [eth("aabbccddeeff", "112233445566", 0x0800)]
-fixture("headeronly", ins, [f[:14] for f in ins])
+test_case("headeronly", ins, [f[:14] for f in ins])
 
 # csum: recompute the IPv4 header checksum (hash<16>(checksum, ...)). The input's
 # checksum field is wrong (0xdead); the program zeroes and recomputes it over the
@@ -73,7 +73,7 @@ def rfc1071(data):
     return ~s & 0xFFFF
 
 arp = eth("aabbccddeeff", "112233445566", 0x0806, b"arp-payload.")  # non-IP -> reflected as-is
-fixture("csum",
+test_case("csum",
     [eth("aabbccddeeff", "112233445566", 0x0800, ipv4(csum=0xdead) + b"PAYLOAD-DATA"), arp],
     [eth("aabbccddeeff", "112233445566", 0x0800, ipv4(csum=rfc1071(ipv4())) + b"PAYLOAD-DATA"), arp])
 
@@ -85,7 +85,7 @@ fixture("csum",
 #   (43, 1000, 0)  miss -- 43 & 42 == 42, catches an install that masks with the key
 #                  instead of all-ones
 #   (1, 1000, 0)   miss -- other keys unaffected
-fixture("tables1_pcap",
+test_case("tables1_pcap",
     [lucid_frame(3, 42),      # do_query(42)
      lucid_frame(2, 42, 7),   # do_install(42, 7): hit_acn(7) for key 42, no output
      lucid_frame(3, 42),      # do_query(42)
@@ -96,4 +96,4 @@ fixture("tables1_pcap",
      lucid_frame(1, 43, 1000, 0),
      lucid_frame(1, 1, 1000, 0)])
 
-print("wrote pcap fixtures to", PCAPS)
+print("wrote pcap test cases to", PCAPS)

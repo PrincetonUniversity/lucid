@@ -1,4 +1,4 @@
-// Runtime pcap fixture for tables (run by test/lucidcc/test_pcap.py; input frames come
+// Runtime pcap test case for tables (run by test/lucidcc/test_pcap.py; input frames come
 // from test/lucidcc/gen_pcaps.py, which hardcodes this file's event tags -- they are
 // assigned in declaration order: query_result=1, do_install=2, do_query=3).
 //

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""pcap driver tests: generate the fixtures (gen_pcaps.py), then for each program with a
-fixture, compile it with the pcap driver, run it on _pcaps/<name>.in.pcap, and compare its
+"""pcap driver tests: generate the test cases (gen_pcaps.py), then for each program with a
+test case, compile it with the pcap driver, run it on _pcaps/<name>.in.pcap, and compare its
 output packets with _pcaps/<name>.expected.pcap. A mismatched output is kept as
 _pcaps/<name>.actual.pcap."""
 import os
@@ -51,12 +51,12 @@ def check(name, work):
 
 
 def main():
-    args = dl.local_test_args(__doc__).parse_args()
-    dl.prepare(args)
+    dl.local_test_args(__doc__).parse_args()
+    dl.build_lucid()
     gen = subprocess.run([sys.executable, os.path.join(dl.SCRIPT_DIR, "gen_pcaps.py")],
                          capture_output=True, text=True)
     if gen.returncode != 0:
-        sys.exit("pcap fixture generation failed:\n" + gen.stderr)
+        sys.exit("pcap test case generation failed:\n" + gen.stderr)
     names = sorted(f[:-len(".in.pcap")] for f in os.listdir(dl.PCAPS) if f.endswith(".in.pcap")
                    and os.path.exists(os.path.join(dl.PROGRAMS, f[:-len(".in.pcap")] + ".dpt")))
     with tempfile.TemporaryDirectory() as work:

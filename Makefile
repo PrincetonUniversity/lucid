@@ -75,10 +75,10 @@ test-promote: default
 	python3 ./test/runtests.py
 	cp test/output/* test/expected/
 
-# c compiler tests: codegen goldens + pcap runs
-test-cc: default
-	python3 ./test/lucidcc/test_compiler.py --no-build
-	python3 ./test/lucidcc/test_pcap.py --no-build
+# check for expected c output + pcap test cases
+test-cc:
+	python3 ./test/lucidcc/test_compiler.py
+	python3 ./test/lucidcc/test_pcap.py
 
 # c compiler live-traffic driver tests (Linux, root; see test/lucidcc/README.md)
 test-cc-wire: default

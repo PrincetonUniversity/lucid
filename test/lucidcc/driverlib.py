@@ -31,6 +31,7 @@ def tail(text, n):
 # ---- local tests (test_compiler.py, test_pcap.py) ----------------------------
 
 def build_lucid():
+    print("building lucidcc (make)...")
     r = subprocess.run(["make"], cwd=repo_root(), capture_output=True, text=True)
     if r.returncode != 0:
         sys.exit("make failed:\n" + tail(r.stdout + r.stderr, 20))
@@ -38,17 +39,7 @@ def build_lucid():
 
 def local_test_args(doc):
     import argparse
-    ap = argparse.ArgumentParser(description=doc, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--no-build", action="store_true", help="skip `make`, reuse the current ./lucidcc")
-    return ap
-
-
-def prepare(args):
-    if not args.no_build:
-        print("building lucidcc (make)...")
-        build_lucid()
-    if not os.access(lucidcc(), os.X_OK):
-        sys.exit(f"lucidcc not found at {lucidcc()} (run `make` first)")
+    return argparse.ArgumentParser(description=doc, formatter_class=argparse.RawDescriptionHelpFormatter)
 
 
 def run_lucidcc(dpt, cfile, *flags):

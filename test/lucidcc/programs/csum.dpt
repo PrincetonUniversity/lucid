@@ -2,7 +2,7 @@
 // End-to-end check of the wire-format checksum: the header's sub-byte fields
 // (version/ihl/dscp/ecn, flags/frag) must be packed bit-concatenated MSB-first
 // (not as C container bytes) before the RFC 1071 ones-complement fold. The
-// fixture's input has a wrong checksum; the expected output has the correct one
+// test case's input has a wrong checksum; the expected output has the correct one
 // (computed independently in python by test/lucidcc/gen_pcaps.py).
 type eth_t = {
   int<48> dst_mac;

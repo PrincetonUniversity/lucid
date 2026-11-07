@@ -57,7 +57,7 @@ def main():
     ap.add_argument("--update", action="store_true",
                     help="accept the generated C as expected/ (gcc-checked first)")
     args = ap.parse_args()
-    dl.prepare(args)
+    dl.build_lucid()
     os.makedirs(EXPECTED, exist_ok=True)
     with tempfile.TemporaryDirectory() as work:
         progs = sorted(glob.glob(os.path.join(dl.PROGRAMS, "*.dpt")))
