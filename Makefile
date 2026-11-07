@@ -82,7 +82,9 @@ test-cc: default
 
 # c compiler live-traffic driver tests (Linux, root; see test/lucidcc/README.md)
 test-cc-wire: default
+	python3 ./test/lucidcc/test_rawsock.py --gen
 	sudo python3 ./test/lucidcc/test_rawsock.py
+	python3 ./test/lucidcc/test_dpdk.py --gen
 	sudo python3 ./test/lucidcc/test_dpdk.py
 
 # tofino compiler tests

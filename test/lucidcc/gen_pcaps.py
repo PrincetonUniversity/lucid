@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Generate the pcap fixtures for test_pcap.py (which runs this first) into pcaps/.
+# Generate the pcap fixtures for test_pcap.py (which runs this first) into _pcaps/.
 #
 # Each fixture is <program>.in.pcap + <program>.expected.pcap. The expected output is
 # computed here from what the program should do, never captured from lucidcc's output,

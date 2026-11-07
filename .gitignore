@@ -46,7 +46,7 @@ examples/tofino_apps/__testbuilds/
 examples/tofino_apps/builds
 lucidCompilerOut/
 lucid_tofino_build/
-test/lucidcc/pcaps/
+test/lucidcc/_pcaps/
 test/lucidcc/_rawsock_build/
 test/lucidcc/_dpdk_build/
 __pycache__/

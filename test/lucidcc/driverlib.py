@@ -13,7 +13,7 @@ IS_LINUX = platform.system() == "Linux"
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROGRAMS = os.path.join(SCRIPT_DIR, "programs")
-PCAPS = os.path.join(SCRIPT_DIR, "pcaps")
+PCAPS = os.path.join(SCRIPT_DIR, "_pcaps")
 
 
 def repo_root():

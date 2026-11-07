@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """pcap driver tests: generate the fixtures (gen_pcaps.py), then for each program with a
-fixture, compile it with the pcap driver, run it on pcaps/<name>.in.pcap, and compare its
-output packets with pcaps/<name>.expected.pcap. A mismatched output is kept as
-pcaps/<name>.actual.pcap."""
+fixture, compile it with the pcap driver, run it on _pcaps/<name>.in.pcap, and compare its
+output packets with _pcaps/<name>.expected.pcap. A mismatched output is kept as
+_pcaps/<name>.actual.pcap."""
 import os
 import shutil
 import subprocess
@@ -47,7 +47,7 @@ def check(name, work):
     if expected == actual:
         return True, ""
     shutil.copy(out_pcap, actual_pcap)
-    return False, describe_mismatch(expected, actual) + f"\noutput kept as pcaps/{name}.actual.pcap"
+    return False, describe_mismatch(expected, actual) + f"\noutput kept as _pcaps/{name}.actual.pcap"
 
 
 def main():
