@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """pcap driver tests: generate the test cases (gen_pcaps.py), then for each program with a
 test case, compile it with the pcap driver, run it on _pcaps/<name>.in.pcap, and compare its
-output packets with _pcaps/<name>.expected.pcap. A mismatched output is kept as
+output packets with _pcaps/<name>.expected.pcap. Mismatched outputs are stored as 
 _pcaps/<name>.actual.pcap."""
 import os
 import shutil
@@ -10,7 +10,6 @@ import sys
 import tempfile
 
 import driverlib as dl
-
 
 def describe_mismatch(expected, actual):
     if len(expected) != len(actual):

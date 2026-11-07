@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
-# Wire tests for the C backend's raw-socket driver (lucidcc --rawsock), over a veth pair.
-#
-# Two sub-tests:
-#   - reflector: send 100 UDP packets, check the count + MAC swap on the way back (the
-#     switch binds port 0 to veth0; we send/capture on veth1);
+# Two tests for the raw-socket driver (lucidcc --rawsock):
+#   - reflector: send 100 UDP packets, check the count + MAC swap on the way back 
+#     (the switch binds port 0 to veth0; we send/capture on veth1);
 #   - scanloop:  feed one recirculating `tick` + 10 `pkt_in`, check all 10 `pkt_out` come back
 #     -- proving the pipeline interleaves the endless recirc with fresh input.
 #
-# Two-phase, so the in-container loop never rebuilds Lucid:
-#   sudo python3 test_rawsock.py --gen   # once, where lucidcc is built: .dpt -> lucidprog.c
-#   sudo python3 test_rawsock.py         # normal loop: gcc + run + check
-#
-# Needs root (raw sockets, veth, tcpdump/tcpreplay): run with sudo.
+# To test in a container, run lucidcc on the host to generate lucidprog.c, then run the test:
+#   sudo python3 test_rawsock.py --gen   # compile lucid to c
+#   sudo python3 test_rawsock.py         # gcc + run + check
+# Needs root.
 
 import os
 import sys
