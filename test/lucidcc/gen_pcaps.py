@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Generate the pcap fixtures for ctests/test_pcap.sh into ctests/pcaps/ (untracked;
+# Generate the pcap fixtures for test/lucidcc/test_pcap.sh into test/lucidcc/pcaps/ (untracked;
 # test_pcap.sh runs this first, so it never needs to be run by hand).
 #
 # Each fixture is <program>.in.pcap + <program>.expected.pcap. The expected output is

@@ -25,7 +25,7 @@ DEV_DEPENDENCIES = \
 merlin \
 ocamlformat
 
-.PHONY: test promote test-promote test-cc clean release-macos release-linux
+.PHONY: test promote test-promote test-cc test-cc-wire clean release-macos release-linux
 
 default:
 	dune build src/bin/interpMain.exe
@@ -75,9 +75,15 @@ test-promote: default
 	python3 ./test/runtests.py
 	cp test/output/* test/expected/
 
-# c compiler tests
+# c compiler tests: codegen goldens + pcap runs
 test-cc: default
-	python3 ./test/runtests.py --lucidcc
+	./test/lucidcc/test_compiler.sh --no-build
+	./test/lucidcc/test_pcap.sh --no-build
+
+# c compiler live-traffic driver tests (Linux, root; see test/lucidcc/README.md)
+test-cc-wire: default
+	sudo python3 ./test/lucidcc/test_rawsock.py
+	sudo python3 ./test/lucidcc/test_dpdk.py
 
 # tofino compiler tests
 # test compilation to P4 only

@@ -29,17 +29,20 @@ DPDK), over a few programs (in `./programs`).
 
 ## Usage
 
+`make test-cc` runs the compiler and pcap tests; `make test-cc-wire` runs the
+live-traffic tests. Or run each directly:
+
 ```sh
 # codegen gate (compile + golden) -- fast, local
-./ctests/test_compiler.sh              # build lucidcc, then compile + diff every program
-./ctests/test_compiler.sh --update     # accept new C as golden (compile-checked first)
-./ctests/test_compiler.sh --no-build   # reuse the existing ./lucidcc, skip `make`
+./test/lucidcc/test_compiler.sh              # build lucidcc, then compile + diff every program
+./test/lucidcc/test_compiler.sh --update     # accept new C as golden (compile-checked first)
+./test/lucidcc/test_compiler.sh --no-build   # reuse the existing ./lucidcc, skip `make`
 
 # pcap run fixtures -- local
-./ctests/test_pcap.sh              # generate fixtures, run + byte-compare each
-./ctests/test_pcap.sh --no-build   # reuse ./lucidcc
+./test/lucidcc/test_pcap.sh              # generate fixtures, run + byte-compare each
+./test/lucidcc/test_pcap.sh --no-build   # reuse ./lucidcc
 
 # live-traffic drivers -- in the Linux container
-sudo python3 ctests/test_rawsock.py     # reflector + scanloop over veths
-sudo python3 ctests/test_dpdk.py        # reflector + af_packet + events + scanloop
+sudo python3 test/lucidcc/test_rawsock.py     # reflector + scanloop over veths
+sudo python3 test/lucidcc/test_dpdk.py        # reflector + af_packet + events + scanloop
 ```

@@ -1,7 +1,7 @@
 import subprocess, os, filecmp, sys
 
 """
-This script is a simple test harness for the lucid interpreter and lucidcc compiler. 
+This script is a simple test harness for the lucid interpreter. 
 If you are adding an application as a test case, you should: 
     1. generate an expected output file by running `dpt --silent appname.dpt > appname_output.txt`
         and saving the output to the "test/expected" directory. 
@@ -16,14 +16,10 @@ If you are adding an application as a test case, you should:
        json test case file to prevent this. 
 """
 
-# parse a single command line argument: "--lucidcc" to test the c backend, otherwise test interpreter
-test_tgt = "interpreter"
+# (C backend tests: test/lucidcc)
 if len(os.sys.argv) > 1:
-    if os.sys.argv[1] == "--lucidcc":
-        test_tgt = "lucidcc"
-    else:
-        print("Unrecognized argument: "+os.sys.argv[1])
-        os.sys.exit(1)
+    print("Unrecognized argument: "+os.sys.argv[1])
+    os.sys.exit(1)
 
 
 interpdir = "examples/interp_tests/"
@@ -103,97 +99,33 @@ def interactive_test(fullfile, args):
             diffs.append(shortfile)
         outfile.close()
 
-def check_lucidcc_compat(incompat_keywords, fullfile):
-    fname = fullfile[0:-4]
-    outname = "{}.c".format(fname)
-    inname = interpdir+fullfile
-    # use a regex to check if fillfile has an incompat_keyword in it
-    with open(inname, "r") as infile:
-        for line in infile:
-            for keyword in incompat_keywords:
-                if keyword in line:
-                    return keyword
-    return None
 
-def lucidcc_test(n_tests, i, fullfile, args):
-    # |-| / |+| : saturating arithmetic; not yet lowered by the C backend
-    # (operators.dpt also uses concatenation `^`, which the C backend rejects too)
-    incompat_keywords = ["Counter.create", "PairArray.create", "Payload.t", "|-|", "|+|"]
-    # get the base of the fullfile without the directory
-    shortfile = os.path.splitext(os.path.basename(fullfile))[0] + ".dpt"
-    incompat = check_lucidcc_compat(incompat_keywords, shortfile)
-    if incompat != None:
-        print ("skipping lucidcc test on "+fullfile+" because it contains an incompatible feature: "+str(incompat))
-        return
-    if "wrong" in fullfile:
-        print ("skipping lucidcc test on "+fullfile+" because it is expected to fail")
-        return
-    print ("Running lucid cc test {}/{} on {}".format(str(i), str(n_tests), fullfile))
-    fname = shortfile[0:-4]
-    outname = "{}.c".format(fname)
-    inname = interpdir+shortfile
-    cmd = ["./lucidcc", inname, "-o", "test/ccoutput/"+outname] + args
-    # print("running command: {}".format(" ".join(cmd)))
-    ret = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if ret.returncode != 0: 
-        print("----- test failed -----")
-        print("----- stdout -----")
-        print(ret.stdout.decode("utf-8"))
-        print("----- stderr -----")
-        print(ret.stderr.decode("utf-8"))
-        print("failed command: ")
-        print(" ".join(cmd))
-        exit(1)
-    # fulloutfile = 
-    # cmd = ["./lucidcc", fullfile, "-o", outname] + args
-    # ret = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    # stdout_str = ret.stdout.decode("utf-8")
-    # check_return(ret, fullfile)
-    # if not filecmp.cmp("test/output/"+outname, "test/expected/"+outname):
-    #     print("test returned different output than expected: "+"./dpt --silent %s"%fullfile)
-    #     diffs.append(shortfile)
-    # outfile.close()
+print("--- interpreter tests ---")
+for file in interpfiles: interp_test(file, [])
+
+print("--- library tests ---")
+for file in libraryfiles: just_typecheck(librarydir, file)
+
+print("--- interactive interpreter tests ---")
+for file in interactivefiles: interactive_test(file, [])
+
+print("--- other tests ---")
+for file in regressionfiles: just_typecheck(regressiondir, file)
+
+for file in parserfiles: just_typecheck(parserdir, file)
+
+for file in poplfiles: just_typecheck(popldir, file)
+
+print("--- application tests ---")
+for file in appfiles: interp_test(file, [])
+
+print("--- p4 bmv2 example tests ---")
+bmv2_test = "examples/p4_bmv2_examples/test.py"
+bmv2_ret = subprocess.run([sys.executable, bmv2_test])
+if bmv2_ret.returncode != 0:
+    diffs.append("p4_bmv2_examples")
 
 
-if (test_tgt == "interpreter"):
-
-    print("--- interpreter tests ---")
-    for file in interpfiles: interp_test(file, [])
-
-    print("--- library tests ---")
-    for file in libraryfiles: just_typecheck(librarydir, file)
-
-    print("--- interactive interpreter tests ---")
-    for file in interactivefiles: interactive_test(file, [])
-
-    print("--- other tests ---")
-    for file in regressionfiles: just_typecheck(regressiondir, file)
-
-    for file in parserfiles: just_typecheck(parserdir, file)
-
-    for file in poplfiles: just_typecheck(popldir, file)
-
-    print("--- application tests ---")
-    for file in appfiles: interp_test(file, [])
-
-    print("--- p4 bmv2 example tests ---")
-    bmv2_test = "examples/p4_bmv2_examples/test.py"
-    bmv2_ret = subprocess.run([sys.executable, bmv2_test])
-    if bmv2_ret.returncode != 0:
-        diffs.append("p4_bmv2_examples")
-
-
-    print("Diffs:", diffs)
-    print("Unexpected error:", errors)
-    print("Unexpected success:", bad_successes)
-
-
-
-
-elif (test_tgt == "lucidcc"):
-    if not (os.path.isdir("test/ccoutput")):
-        os.mkdir("test/ccoutput")
-
-    print("testing lucid compiler")
-    n_tests = len(interpfiles)
-    for i, file in enumerate(interpfiles): lucidcc_test(n_tests, i, file, ["--lpcap","--debug"])
+print("Diffs:", diffs)
+print("Unexpected error:", errors)
+print("Unexpected success:", bad_successes)

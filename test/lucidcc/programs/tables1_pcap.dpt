@@ -1,5 +1,5 @@
-// Runtime pcap fixture for tables (run by ctests/test_pcap.sh; input frames come
-// from ctests/gen_pcaps.py, which hardcodes this file's event tags -- they are
+// Runtime pcap fixture for tables (run by test/lucidcc/test_pcap.sh; input frames come
+// from test/lucidcc/gen_pcaps.py, which hardcodes this file's event tags -- they are
 // assigned in declaration order: query_result=1, do_install=2, do_query=3).
 //
 // Same table / actions as tables1.dpt, but split into two control events and an

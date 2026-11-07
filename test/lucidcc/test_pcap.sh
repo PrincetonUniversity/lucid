@@ -7,14 +7,14 @@
 # and byte-compare its output against the expected pcap. On a mismatch the output
 # is kept as pcaps/<name>.actual.pcap.
 # Usage:
-#   ./ctests/test_pcap.sh            run + compare
-#   ./ctests/test_pcap.sh --no-build skip `make`, reuse the current ./lucidcc
-#   ./ctests/test_pcap.sh --help     show this help
+#   ./test/lucidcc/test_pcap.sh            run + compare
+#   ./test/lucidcc/test_pcap.sh --no-build skip `make`, reuse the current ./lucidcc
+#   ./test/lucidcc/test_pcap.sh --help     show this help
 set -uo pipefail
 shopt -s nullglob
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PROGRAMS_DIR="$SCRIPT_DIR/programs"
 PCAPS_DIR="$SCRIPT_DIR/pcaps"
 LUCIDCC="$ROOT/lucidcc"

@@ -2,23 +2,23 @@
 #
 # C backend (lucidcc) codegen gate.
 #
-# For each program in ctests/programs/, generate C with the pcap driver, check if it
+# For each program in test/lucidcc/programs/, generate C with the pcap driver, check if it
 # compiles (gcc -lpcap), and byte-diff the generated C text against the expected 
-# in ctests/expected/. A program marked `// LUCIDCC_REJECT: <substr>` is instead
+# in test/lucidcc/expected/. A program marked `// LUCIDCC_REJECT: <substr>` is instead
 # checked to be rejected by lucidcc (it uses a feature the C backend does not support).
 #
 # Usage:
-#   ./ctests/test_compiler.sh             normal: compile + diff each program vs expected/
-#   ./ctests/test_compiler.sh --update    (re)generate expected/ (compile-checked first)
-#   ./ctests/test_compiler.sh --no-build  skip `make`, reuse the current ./lucidcc
-#   ./ctests/test_compiler.sh --help      show this help
+#   ./test/lucidcc/test_compiler.sh             normal: compile + diff each program vs expected/
+#   ./test/lucidcc/test_compiler.sh --update    (re)generate expected/ (compile-checked first)
+#   ./test/lucidcc/test_compiler.sh --no-build  skip `make`, reuse the current ./lucidcc
+#   ./test/lucidcc/test_compiler.sh --help      show this help
 #
 # Exits non-zero on any failure. Update mode still fails on a compile error or a bad rejection.
 set -uo pipefail
 shopt -s nullglob
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PROGRAMS_DIR="$SCRIPT_DIR/programs"
 EXPECTED_DIR="$SCRIPT_DIR/expected"
 LUCIDCC="$ROOT/lucidcc"
@@ -38,9 +38,9 @@ done
 # Build the compiler first (unless skipped) so tests reflect the current code.
 if [ "$BUILD" -eq 1 ]; then
   echo "building lucidcc (make)..."
-  if ! ( cd "$ROOT" && make ) >/tmp/ctests_build.log 2>&1; then
-    echo "BUILD FAILED -- last lines of /tmp/ctests_build.log:" >&2
-    tail -20 /tmp/ctests_build.log >&2
+  if ! ( cd "$ROOT" && make ) >/tmp/test_compiler_build.log 2>&1; then
+    echo "BUILD FAILED -- last lines of /tmp/test_compiler_build.log:" >&2
+    tail -20 /tmp/test_compiler_build.log >&2
     exit 1
   fi
 fi
