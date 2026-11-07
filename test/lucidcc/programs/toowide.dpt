@@ -1,0 +1,8 @@
+// LUCIDCC_REJECT: wider than 64 bits
+// C has no unsigned integer type wider than 64 bits, so the C backend rejects
+// int<n> for n > 64 (the interpreter and Tofino accept it).
+packet event pkt(int<72> a, Payload.t pl);
+
+handle pkt(int<72> a, Payload.t pl) {
+    generate_port(ingress_port, pkt(a + 1, pl));
+}
