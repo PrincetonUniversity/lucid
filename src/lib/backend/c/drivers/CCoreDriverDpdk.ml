@@ -52,6 +52,7 @@ let deparse_event_fn = CCoreCPrint.cid_to_string CCoreParse.deparse_id
 let handle_event_fn  = CCoreCPrint.cid_to_string CCoreHandlers.handler_cid
 let out_events_cap   = string_of_int CCoreHandlers.out_events_cap
 let port_recirc      = string_of_int CCoreHandlers.port_recirc
+let recirc_port_var  = CCoreCPrint.cid_to_string (Cid.id Builtins.recirc_id)
 
 (* ===== includes (before the generated code, which needs stdint etc.) ===== *)
 let dpdk_includes = dforiegn {|
@@ -283,7 +284,7 @@ static void do_tx(void) {
 			cp->ev = oe->ev;
 			cp->payload_off = 0;                // the payload now sits at the front of c
 			if (oe->port == PORT_RECIRC) {          // recirculation (generate_self)
-				cp->ev.meta.in_port = ip->ev.meta.in_port; // recirc inherits ingress
+				cp->ev.meta.in_port = %{recirc_port_var}; // it arrives on the recirculation port
 				if (rte_ring_enqueue(dispatch_in, c) != 0) rte_pktmbuf_free(c);
 			} else if (oe->port >= cfg.num_ports) {
 				printf("WARNING: dropping packet to out-of-range port: %u\n", oe->port);

@@ -174,7 +174,7 @@ event_t mk_eth_ip(uint64_t e_0_1631 , uint64_t e_1_1632 , uint16_t e_2_1633 , ui
   event_t tmp_1803  = {.meta = {.len = 30, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = eth_ip_1639(e_0_1631, e_1_1632, e_2_1633, ip_0_1634, ip_1_1635, ip_2_1636, ip_3_1637)};
   return tmp_1803;
 }
-uint32_t recirculation_port  = 0;
+uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
 typedef tuple_1 eth_1623;
 typedef tuple_2 ip_1624;
@@ -549,7 +549,7 @@ static void do_tx(void) {
             c->pkt_len = plen;
             c->payload_off = 0;                          // the payload now sits at the front of c
             if (oe->port == PORT_RECIRC) {               // recirculation (generate_self)
-                c->ev.meta.in_port = in->ev.meta.in_port; // recirc inherits ingress
+                c->ev.meta.in_port = recirculation_port; // it arrives on the recirculation port
                 if (ring_push(&dispatch_in, cidx) != 0) slot_free(&g_slab, cidx);
             } else {                                     // output to a port: deparse + send
                 packet_t view;

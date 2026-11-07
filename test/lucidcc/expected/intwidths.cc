@@ -137,7 +137,7 @@ event_t mk_bg_cmd(uint8_t res_696 , uint8_t flag_697 ){
   event_t tmp_742  = {.meta = {.len = 1, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = bg_cmd_698(res_696, flag_697)};
   return tmp_742;
 }
-uint32_t recirculation_port  = 0;
+uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
 uint8_t parse_event(packet_t*  packet , event_t*  next_event , uint32_t ingress_port ){
   skip_bits(packet, 32);
@@ -465,7 +465,7 @@ static void do_tx(void) {
             c->pkt_len = plen;
             c->payload_off = 0;                          // the payload now sits at the front of c
             if (oe->port == PORT_RECIRC) {               // recirculation (generate_self)
-                c->ev.meta.in_port = in->ev.meta.in_port; // recirc inherits ingress
+                c->ev.meta.in_port = recirculation_port; // it arrives on the recirculation port
                 if (ring_push(&dispatch_in, cidx) != 0) slot_free(&g_slab, cidx);
             } else {                                     // output to a port: deparse + send
                 packet_t view;

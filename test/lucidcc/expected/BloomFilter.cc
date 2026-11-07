@@ -179,7 +179,7 @@ event_t mk_in(uint8_t add_5877 , uint8_t pad_5878 , uint32_t x_5879 ){
   event_t tmp_6335  = {.meta = {.len = 6, .is_packet = 1, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = in_5880(add_5877, pad_5878, x_5879)};
   return tmp_6335;
 }
-uint32_t recirculation_port  = 0;
+uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
 uint8_t bf1_0_0_5869 [256] = {0};
 uint8_t Array_update_complex_bf1_0_0_5869_set_set_memop_8_bit(uint8_t _idx , uint8_t new_val_set_memop_8_bit , uint8_t unused_set_memop_8_bit ){
@@ -641,7 +641,7 @@ static void do_tx(void) {
             c->pkt_len = plen;
             c->payload_off = 0;                          // the payload now sits at the front of c
             if (oe->port == PORT_RECIRC) {               // recirculation (generate_self)
-                c->ev.meta.in_port = in->ev.meta.in_port; // recirc inherits ingress
+                c->ev.meta.in_port = recirculation_port; // it arrives on the recirculation port
                 if (ring_push(&dispatch_in, cidx) != 0) slot_free(&g_slab, cidx);
             } else {                                     // output to a port: deparse + send
                 packet_t view;

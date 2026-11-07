@@ -100,4 +100,12 @@ test_case("wideints",
     [wideints_pkt(0, 1, 0, 1),
      wideints_pkt(6, 0, 8, 0)])
 
+# recircport: pkt(7) arriving on port 1 reports port 1, then recirculates bg(7),
+# which reports the recirculation port, 196. Tags from recircport.dpt's
+# declaration order: pkt=1, bg=2, report=3.
+test_case("recircport",
+    [lucid_frame(1, 7)],
+    [lucid_frame(3, 1, 7),
+     lucid_frame(3, 196, 7)])
+
 print("wrote pcap test cases to", PCAPS)

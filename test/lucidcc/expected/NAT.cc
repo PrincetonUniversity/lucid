@@ -185,7 +185,7 @@ event_t mk_add_to_nat(uint32_t src_ip_4047 , uint32_t src_port_4048 ){
   event_t tmp_4335  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = add_to_nat_4049(src_ip_4047, src_port_4048)};
   return tmp_4335;
 }
-uint32_t recirculation_port  = 0;
+uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
 uint32_t nat_to_ip_4035 [16] = {0};
 uint32_t Array_update_complex_nat_to_ip_4035_set_set_memop_32_bit(uint32_t _idx , uint32_t new_val_set_memop_32_bit , uint32_t unused_set_memop_32_bit ){
@@ -666,7 +666,7 @@ static void do_tx(void) {
             c->pkt_len = plen;
             c->payload_off = 0;                          // the payload now sits at the front of c
             if (oe->port == PORT_RECIRC) {               // recirculation (generate_self)
-                c->ev.meta.in_port = in->ev.meta.in_port; // recirc inherits ingress
+                c->ev.meta.in_port = recirculation_port; // it arrives on the recirculation port
                 if (ring_push(&dispatch_in, cidx) != 0) slot_free(&g_slab, cidx);
             } else {                                     // output to a port: deparse + send
                 packet_t view;

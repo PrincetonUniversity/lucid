@@ -126,7 +126,7 @@ event_t mk_foo(uint32_t p_0_1180 , uint32_t p_1_1181 ){
   event_t tmp_1266  = {.meta = {.len = 8, .is_packet = 1, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = foo_1182(p_0_1180, p_1_1181)};
   return tmp_1266;
 }
-uint32_t recirculation_port  = 0;
+uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
 typedef tuple_1 pair_t_1174;
 pair_t_1174 add_pair_1178(uint32_t c_1175 , pair_t_1174 p ){
@@ -464,7 +464,7 @@ static void do_tx(void) {
             c->pkt_len = plen;
             c->payload_off = 0;                          // the payload now sits at the front of c
             if (oe->port == PORT_RECIRC) {               // recirculation (generate_self)
-                c->ev.meta.in_port = in->ev.meta.in_port; // recirc inherits ingress
+                c->ev.meta.in_port = recirculation_port; // it arrives on the recirculation port
                 if (ring_push(&dispatch_in, cidx) != 0) slot_free(&g_slab, cidx);
             } else {                                     // output to a port: deparse + send
                 packet_t view;

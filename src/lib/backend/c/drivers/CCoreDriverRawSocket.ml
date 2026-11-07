@@ -28,6 +28,7 @@ let deparse_event_fn = CCoreCPrint.cid_to_string CCoreParse.deparse_id
 let handle_event_fn  = CCoreCPrint.cid_to_string CCoreHandlers.handler_cid
 let out_events_cap   = string_of_int CCoreHandlers.out_events_cap
 let port_recirc      = string_of_int CCoreHandlers.port_recirc
+let recirc_port_var  = CCoreCPrint.cid_to_string (Cid.id Builtins.recirc_id)
 
 
 
@@ -360,7 +361,7 @@ static void do_tx(void) {
             c->pkt_len = plen;
             c->payload_off = 0;                          // the payload now sits at the front of c
             if (oe->port == PORT_RECIRC) {               // recirculation (generate_self)
-                c->ev.meta.in_port = in->ev.meta.in_port; // recirc inherits ingress
+                c->ev.meta.in_port = %{recirc_port_var}; // it arrives on the recirculation port
                 if (ring_push(&dispatch_in, cidx) != 0) slot_free(&g_slab, cidx);
             } else {                                     // output to a port: deparse + send
                 %{packet_t_ty} view;

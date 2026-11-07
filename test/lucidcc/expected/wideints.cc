@@ -125,7 +125,7 @@ event_t mk_pkt(uint64_t a_1363 , uint8_t a_wrapped_1364 , uint64_t b_1365 , uint
   event_t tmp_1463  = {.meta = {.len = 16, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = pkt_1368(a_1363, a_wrapped_1364, b_1365, b_wrapped_1366)};
   return tmp_1463;
 }
-uint32_t recirculation_port  = 0;
+uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
 uint8_t parse_event(packet_t*  pkt , event_t*  next_event , uint32_t ingress_port ){
   uint64_t a_1363  = ((uint64_t)(read_bits(pkt, 62))) & 4611686018427387903;
@@ -417,7 +417,7 @@ static void do_tx(void) {
             c->pkt_len = plen;
             c->payload_off = 0;                          // the payload now sits at the front of c
             if (oe->port == PORT_RECIRC) {               // recirculation (generate_self)
-                c->ev.meta.in_port = in->ev.meta.in_port; // recirc inherits ingress
+                c->ev.meta.in_port = recirculation_port; // it arrives on the recirculation port
                 if (ring_push(&dispatch_in, cidx) != 0) slot_free(&g_slab, cidx);
             } else {                                     // output to a port: deparse + send
                 packet_t view;

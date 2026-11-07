@@ -1,0 +1,16 @@
+// A recirculated event arrives on the recirculation port (196), as in the
+// interpreter: `pkt` reports the port it arrived on and recirculates `bg`,
+// which reports its own ingress port. Event tags, in declaration order
+// (test/lucidcc/gen_pcaps.py relies on them): pkt=1, bg=2, report=3.
+event pkt(int<32> x);
+event bg(int<32> x);
+event report(int<32> port_in, int<32> x);
+
+handle pkt(int<32> x) {
+    generate_port(1, report(ingress_port, x));
+    generate(bg(x));
+}
+
+handle bg(int<32> x) {
+    generate_port(1, report(ingress_port, x));
+}

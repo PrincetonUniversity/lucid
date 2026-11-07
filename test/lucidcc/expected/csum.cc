@@ -224,7 +224,7 @@ event_t mk_other(uint64_t eth_0_3575 , uint64_t eth_1_3576 , uint16_t eth_2_3577
   event_t tmp_3913  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = other_3579(eth_0_3575, eth_1_3576, eth_2_3577)};
   return tmp_3913;
 }
-uint32_t recirculation_port  = 0;
+uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
 typedef tuple_1 eth_t_3555;
 typedef tuple_2 ip_t_3556;
@@ -600,7 +600,7 @@ static void do_tx(void) {
             c->pkt_len = plen;
             c->payload_off = 0;                          // the payload now sits at the front of c
             if (oe->port == PORT_RECIRC) {               // recirculation (generate_self)
-                c->ev.meta.in_port = in->ev.meta.in_port; // recirc inherits ingress
+                c->ev.meta.in_port = recirculation_port; // it arrives on the recirculation port
                 if (ring_push(&dispatch_in, cidx) != 0) slot_free(&g_slab, cidx);
             } else {                                     // output to a port: deparse + send
                 packet_t view;
