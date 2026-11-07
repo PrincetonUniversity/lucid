@@ -202,6 +202,9 @@ let generate_self_cid = Cid.create ["generate_self"]
 let generate_port_cid = Cid.create ["generate_port"]
 let generate_switch_cid = Cid.create ["generate_switch"]
 let generate_group_cid = Cid.create ["generate_group"]
+let generate_delay_cid = Cid.create ["generate_delay"]
+let generate_port_delay_cid = Cid.create ["generate_port_delay"]
+let delay_size = 32
 
 (* Sys functions *)
 let sys_time_cid = System.sys_time_cid ;;
@@ -231,6 +234,8 @@ let builtin_checkers =
     generate_port_cid, generate_arg_check "generate_port" [tint CConfig.c_cfg.port_id_size; tevent];
     generate_switch_cid, generate_arg_check "generate_switch" [tint CConfig.c_cfg.switch_id_size; tevent];
     generate_group_cid, generate_arg_check "generate_group" [tint CConfig.c_cfg.port_id_size; tevent];
+    generate_delay_cid, generate_arg_check "generate_delay" [tevent; tint delay_size];
+    generate_port_delay_cid, generate_arg_check "generate_port_delay" [tint CConfig.c_cfg.port_id_size; tevent; tint delay_size];
     sys_time_cid, sys_time_check;
     flood_cid, flood_check
   ]

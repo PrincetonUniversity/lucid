@@ -19,13 +19,18 @@ let id = Id.create
 let port_size = CConfig.c_cfg.port_id_size
 let port_recirc = (1 lsl port_size) - 1  (* all-ones sentinel: 0xFFFFFFFF at port_size=32 *)
 let out_event_cid = Cid.create ["out_event_t"]
-let out_event_def =
-  trecord [ cid"ev", tevent; cid"port", tint port_size ]
-let tout_event = tabstract_cid out_event_cid out_event_def
-let out_event_dty = dty out_event_cid out_event_def
+(* a program with a delayed generate carries the delay on the out-event record,
+   for the driver's calendar queue; a program without one gets the record it
+   always had. `process` sets the flag; the drivers read it when packaging. *)
+let has_delays = ref false
+let delay_size = 32
+let out_event_def () =
+  trecord ([ cid"ev", tevent; cid"port", tint port_size ] @ (if !has_delays then [ cid"delay", tint delay_size ] else []))
+let tout_event () = tabstract_cid out_event_cid (out_event_def ())
+let out_event_dty () = dty out_event_cid (out_event_def ())
 
 let out_events_cap = 64
-let tout_events = tlist tout_event out_events_cap
+let tout_events () = tlist (tout_event ()) out_events_cap
 let count_size = 16
 
 (* shared cids / vars for the handler body *)
@@ -33,21 +38,24 @@ let ev_in_cid = cid"ev_in"
 let out_events_cid = cid"out_events"
 let n_cid = cid"n"
 let v_ev_in = evar ev_in_cid tevent
-let v_out_events = evar out_events_cid tout_events
+let v_out_events () = evar out_events_cid (tout_events ())
 let v_n = evar n_cid (tint count_size)
 
 let handler_cid = Cid.create ["handle_event"] ;;
 let handler_ret_ty = tint count_size
 
-(* append one out_event: out_events[n] = { ev; port }; n = n + 1; *)
-let append_out_event ev_exp port_exp =
+(* append one out_event: out_events[n] = { ev; port[; delay] }; n = n + 1; *)
+let append_out_event ?delay ev_exp port_exp =
+  let delay_field =
+    if !has_delays then [ cid"delay", (match delay with Some d -> d | None -> eval (vint 0 delay_size)) ] else []
+  in
   let rec_exp =
-    { (erecord [ cid"ev", ev_exp;
-                 cid"port", port_exp ])
-      with ety = tout_event }
+    { (erecord ([ cid"ev", ev_exp;
+                  cid"port", port_exp ] @ delay_field))
+      with ety = tout_event () }
   in
   sseq
-    ((v_out_events, v_n) /<- rec_exp)
+    ((v_out_events (), v_n) /<- rec_exp)
     (sassign_exp v_n (v_n /+ eval (vint 1 count_size)))
 ;;
 
@@ -67,6 +75,16 @@ let transform_generate statement =
     let switch_exp, event_exp = unbox_egen_switch exp in
     let switch_exp = ecast (tint port_size) switch_exp in
     append_out_event event_exp switch_exp
+  | SUnit(exp) when is_egen_delay exp ->
+    let event_exp, delay_exp = unbox_egen_delay exp in
+    append_out_event ~delay:delay_exp event_exp (eval (vint port_recirc port_size))
+  | SUnit(exp) when is_egen_port_delay exp ->
+    let port_exp, event_exp, delay_exp = unbox_egen_port_delay exp in
+    let port_exp = if (size_of_ty port_exp.ety < size_of_ty (tint port_size))
+      then ecast (tint port_size) port_exp
+      else port_exp
+    in
+    append_out_event ~delay:delay_exp event_exp port_exp
   | SUnit(exp) when is_egen_group exp -> 
     failwith "compiler bug: generate_ports not supported"
   | _ -> statement
@@ -92,7 +110,7 @@ end
 
 let mk_main_handler handlers =
   let in_ev_val_param = ev_in_cid, tevent in
-  let out_events_param = out_events_cid, tout_events in
+  let out_events_param = out_events_cid, tout_events () in
   let branches = List.map
     (fun handler ->
       let pats = [pvariant handler.hcid handler.hparams] in
@@ -112,12 +130,26 @@ let mk_main_handler handlers =
     [in_ev_val_param; out_events_param] merged_body
 ;;
 
+(* does any handler generate with a delay? *)
+let uses_delays decls =
+  let found = ref false in
+  let v = object
+    inherit [_] s_iter as super
+    method! visit_exp () e =
+      (try if is_egen_delay e || is_egen_port_delay e then found := true with _ -> ());
+      super#visit_exp () e
+  end
+  in
+  v#visit_decls () decls;
+  !found
+
 let process decls =
+  has_delays := uses_delays decls;
   let handlers = List.filter_map extract_dhandle_opt decls
     |> List.map (fun (cid, _, params, body) -> {hcid=cid; hparams=params; hbody=body})
   in
   let decls = List.filter (fun d -> not (is_dhandler d)) decls in
-  decls @ [out_event_dty; mk_main_handler handlers]
+  decls @ [out_event_dty (); mk_main_handler handlers]
 ;;
 
 (* ev_in becomes a by-ref param (events ptr) *)

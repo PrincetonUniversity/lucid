@@ -294,6 +294,9 @@ let rec translate_exp (exp : C.exp) : F.exp =
   | _, C.EVal(v) -> translate_value_exp v
   | _, C.EVar(c) -> F.evar c (translate_ty exp.ety)
   | _, C.EOp(op, es) -> F.eop (translate_op op) (List.map translate_exp es)
+  | _, C.ECall(cid, _, _) when Cid.names cid = ["Event"; "delay"] ->
+    err ("Event.delay is supported by the C backend only as the event of a generate: "
+      ^ CorePrinting.exp_to_string exp)
   | {raw_ty=C.TEvent}, C.ECall(cid, es, _) ->
     (* call the event's monomorphic constructor mk_<cid>(args): it wraps the
        variant injection in the envelope with constant metadata (no tag dispatch
@@ -409,6 +412,15 @@ let rec translate_statement (stmt:C.statement) : F.statement =
     let stmt1 = translate_statement stmt1 in
     let stmt2 = translate_statement stmt2 in
     F.sif exp stmt1 stmt2 |> F.swrap stmt.sspan
+  | C.SGen(GSingle(None), { e = C.ECall(cid, [ev; d], _); _ }) when Cid.names cid = ["Event"; "delay"] ->
+    F.egen_delay (translate_exp ev) (translate_exp d) |> F.sunit |> F.swrap stmt.sspan
+  | C.SGen(GPort(port), { e = C.ECall(cid, [ev; d], _); _ }) when Cid.names cid = ["Event"; "delay"] ->
+    let port = translate_exp port in
+    let port = if CCoreSyntax.bitsizeof_ty_exn port.ety < CConfig.c_cfg.switch_id_size 
+      then CCoreSyntax.ecast (F.tint CConfig.c_cfg.switch_id_size) port
+      else port
+    in
+    F.egen_port_delay port (translate_exp ev) (translate_exp d) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GSingle(None), ev) -> 
     F.egen_self (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GSingle(Some(loc)), ev) -> 

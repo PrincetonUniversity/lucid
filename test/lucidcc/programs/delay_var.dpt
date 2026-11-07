@@ -1,0 +1,9 @@
+// LUCIDCC_REJECT: only as the event of a generate
+// The C backend implements Event.delay as part of the generate that sends
+// it; a delayed event held in a variable is rejected.
+event ping(int<32> x);
+
+handle ping(int<32> x) {
+    event e = Event.delay(ping(x + 1), 1000);
+    generate(e);
+}

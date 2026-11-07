@@ -27,7 +27,6 @@ let compile ds =
   let ds = PartialInterpretation.interp_prog ds in
   let ds = AddIngressParser.add_simple_parser None ds in 
   let ds = MiscCorePasses.this_eliminator#visit_decls () ds in
-  let ds = MiscCorePasses.delete_event_combinators ds in
   let ds = MiscCorePasses.noop_deleter#visit_decls () ds in
   let ds = MiscCorePasses.pack_hash_args#visit_decls () ds in
 
@@ -82,6 +81,8 @@ let compile ds =
   CCoreWellformed.check_c_compat cds;
 
   (*** 8. add target-specific driver interface *)
+  if !CCoreHandlers.has_delays then
+    err "Event.delay is not yet supported by the C drivers (delayed generates need a calendar queue)";
   let progbundle = match CConfig.c_cfg.driver with
     | "lpcap" -> CCoreDriverPcap.package_prog cds
     | "dpdk" -> CCoreDriverDpdk.package_prog cds

@@ -55,6 +55,10 @@ tests to check the generated C.
   drops is the recirculation ring, which keeps recirculation from stalling it.
   There are other reasonable policies, so this should become configurable once
   we've looked at them more.
+- (**feature**) **Delayed events.** Lucid's interpreter has a mechanism for 
+  scheduling asynchronous operations, where an event is generated with a delay 
+  that limits how soon it will be processed. We have added support for delayed 
+  events in the C compiler backend, with a calendar queue for delayed events.
 - (**feature**) **Missing builtins.** Added `Sys.time()` (per-event timestamp set by the 
   driver) and standard IP checksums (currently expressed as `hash<16>(checksum, ...)`).
 - (**feature**) **Records for event args and globals.** Records can now be used as event 

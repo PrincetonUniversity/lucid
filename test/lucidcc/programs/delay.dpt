@@ -1,0 +1,12 @@
+// LUCIDCC_REJECT: not yet supported by the C drivers
+// Delayed generates: a recirculation and a port output, each with
+// Event.delay. The translation carries the delay on the out-event; the
+// drivers' calendar queue is not there yet, so the program is rejected
+// rather than compiled with the delays dropped.
+event ping(int<32> x);
+packet event out(int<32> x);
+
+handle ping(int<32> x) {
+    generate_port(1, Event.delay(out(x), 2000));
+    generate(Event.delay(ping(x + 1), 1000));
+}

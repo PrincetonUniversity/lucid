@@ -547,6 +547,23 @@ let egen_group loc ev =
 let egen_port loc ev = 
   ecall (efunref (Cid.create ["generate_port"]) fake_fgen_ty) [loc; ev]
 ;;
+(* delayed generates: Event.delay(ev, d) as the event of a generate *)
+let egen_delay ev d =
+  ecall (efunref (Cid.create ["generate_delay"]) fake_fgen_ty) [ev; d]
+let egen_port_delay loc ev d =
+  ecall (efunref (Cid.create ["generate_port_delay"]) fake_fgen_ty) [loc; ev; d]
+let is_egen_delay exp = match exp.e with
+  | ECall {f; _} -> Cid.equal (extract_evar f |> fst) (Cid.create ["generate_delay"])
+  | _ -> false
+let is_egen_port_delay exp = match exp.e with
+  | ECall {f; _} -> Cid.equal (extract_evar f |> fst) (Cid.create ["generate_port_delay"])
+  | _ -> false
+let unbox_egen_delay exp = match exp.e with
+  | ECall {args=[eevent; edelay]} -> (eevent, edelay)
+  | _ -> failwith "unbox_egen_delay: invalid form for generate_delay"
+let unbox_egen_port_delay exp = match exp.e with
+  | ECall {args=[eport; eevent; edelay]} -> (eport, eevent, edelay)
+  | _ -> failwith "unbox_egen_port_delay: invalid form for generate_port_delay"
 let is_egen_self exp = match exp.e with 
   | ECall {f; _} -> Cid.equal (extract_evar f |> fst) (Cid.create ["generate_self"])
   | _ -> false
