@@ -23,12 +23,12 @@ def reject_pattern(dpt):
 def check(dpt, work, update):
     name = os.path.splitext(os.path.basename(dpt))[0]
     cfile = os.path.join(work, name + ".c")
-    gen = dl.run_lucidcc(dpt, "-o", cfile, "--lpcap")
+    gen = dl.run_lucidcc(dpt, cfile, "--lpcap")
 
     pat = reject_pattern(dpt)
     if pat:
         if gen.returncode == 0:
-            return False, "expected rejection, but codegen succeeded"
+            return False, "expected rejection, but compilation succeeded"
         if pat not in gen.stdout:
             return False, f"rejected, but error did not mention '{pat}'"
         return True, f"correctly rejected: {pat}"

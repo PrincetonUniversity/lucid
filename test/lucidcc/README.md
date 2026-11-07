@@ -20,8 +20,7 @@ This directory contains 4 harnesses for regression testing the
 - **DPDK tests** `test_dpdk.py`: run the reflector test in the DPDK 
   driver in PCAP mode and af_packet mode; run the recirc. loop test 
   in PCAP mode; run an event test with a slightly more complicated 
-  forwarding behavior. Works in the container at 
-  `$REPO_ROOT/docker/dev`.
+  forwarding behavior. Runs in the `docker/dpdk` image.
 
 ## Layout
 
@@ -32,8 +31,8 @@ This directory contains 4 harnesses for regression testing the
 
 ## Usage
 
-`make test-cc` runs the compiler and pcap tests; `make test-cc-wire` runs the
-live-traffic tests. Or run each directly:
+`make test-cc` runs the compiler and pcap tests; `make test-cc-rawsock` and
+`make test-cc-dpdk` run the driver tests. Or run each directly:
 
 ```sh
 # compiler tests
@@ -43,7 +42,9 @@ live-traffic tests. Or run each directly:
 # pcap test cases
 ./test/lucidcc/test_pcap.py                  # generate test cases, run + compare each
 
-# harness tests
-sudo python3 test/lucidcc/test_rawsock.py     # reflector + scanloop over veths
-sudo python3 test/lucidcc/test_dpdk.py        # reflector + af_packet + events + scanloop
+# driver tests: generate the C on the host (--gen), then run
+python3 test/lucidcc/test_rawsock.py --gen
+sudo python3 test/lucidcc/test_rawsock.py                    # reflector + scanloop over veths
+python3 test/lucidcc/test_dpdk.py --gen
+docker/dpdk/run.sh test/lucidcc python3 test_dpdk.py         # reflector + af_packet + events + scanloop
 ```

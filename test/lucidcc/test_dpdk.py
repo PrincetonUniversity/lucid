@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
-# Wire tests for the C backend's DPDK driver (lucidcc --dpdk).
-#
-# Four sub-tests:
+# A few tests for the C backend's DPDK driver (lucidcc --dpdk).
 #   - reflector: reflect 100 UDP packets over the pcap PMD (net_pcap: file in/out);
-#   - af_packet: the same reflector over a real interface (net_af_packet vdev on a veth),
-#                the DPDK analogue of the raw-socket on-wire test;
-#   - events:    events.dpt -- one handler emits a recirc (generate_self) AND a port
-#                output (generate_port); ingress on port 1, egress on port 0. Checks
-#                multi-out dispatch, recirc drain, framing, and multi-port rx;
-#   - scanloop:  endless `tick` + 10 `pkt_in`, check all 10 `pkt_out` (no starvation).
+#   - af_packet: reflector over a net_af_packet vdev on a veth,
+#   - events:    events.dpt -- one handler does a generate_self and a generate_port; 
+#                ingress on port 1, egress on port 0. 
+#                Checks multi-out dispatch, recirc drain, framing, and multi-port rx;
+#   - scanloop:  looping `tick` event + 10 `pkt_in`, check all 10 `pkt_out` (no starvation).
 #
-# Runs with hugepages disabled (--no-huge). Needs root.
+# Runs with hugepages disabled (--no-huge), as root in the docker/dpdk image.
 #
 # Usage:
-#   sudo python3 test_dpdk.py --gen   # where lucidcc is built: .dpt -> build dirs
-#   sudo python3 test_dpdk.py         # normal loop: make + run + check
+#   python3 test_dpdk.py --gen                                # host: .dpt -> build dirs
+#   docker/dpdk/run.sh test/lucidcc python3 test_dpdk.py      # image: make + run + check
 
 import os
 import sys

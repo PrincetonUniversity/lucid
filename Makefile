@@ -25,7 +25,7 @@ DEV_DEPENDENCIES = \
 merlin \
 ocamlformat
 
-.PHONY: test promote test-promote test-cc test-cc-wire clean release-macos release-linux
+.PHONY: test promote test-promote test-cc test-cc-rawsock test-cc-dpdk clean release-macos release-linux
 
 default:
 	dune build src/bin/interpMain.exe
@@ -80,12 +80,15 @@ test-cc:
 	python3 ./test/lucidcc/test_compiler.py
 	python3 ./test/lucidcc/test_pcap.py
 
-# c compiler live-traffic driver tests (Linux, root; see test/lucidcc/README.md)
-test-cc-wire: default
+# c compiler raw-socket driver tests (veth on Linux, feth on macOS; needs root)
+test-cc-rawsock: default
 	python3 ./test/lucidcc/test_rawsock.py --gen
 	sudo python3 ./test/lucidcc/test_rawsock.py
+
+# c compiler dpdk driver tests, in the docker/dpdk image
+test-cc-dpdk: default
 	python3 ./test/lucidcc/test_dpdk.py --gen
-	sudo python3 ./test/lucidcc/test_dpdk.py
+	docker/dpdk/run.sh test/lucidcc python3 test_dpdk.py
 
 # tofino compiler tests
 # test compilation to P4 only
