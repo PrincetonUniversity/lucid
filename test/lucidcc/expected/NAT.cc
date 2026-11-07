@@ -380,7 +380,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       event_t this  = mk_add_to_nat(src_ip_4053, src_port_4054);
       tuple_1 tmp_4336  = {._0 = src_ip_4053, ._1 = src_port_4054,};
       uint32_t NAT_port_4055  = ((uint32_t)(hash_32((uint32_t)1234, (uint8_t* )&tmp_4336, 64) & 15));
-      printf("Mapped (ip: %d, port: %d) to port %d\n", src_ip_4053, src_port_4054, NAT_port_4055);
+      printf("Mapped (ip: %u, port: %u) to port %u\n", src_ip_4053, src_port_4054, NAT_port_4055);
       Array_update_complex_nat_to_ip_4035_set_set_memop_32_bit(NAT_port_4055, src_ip_4053, 0);
       Array_update_complex_nat_to_port_4036_set_set_memop_32_bit(NAT_port_4055, src_port_4054, 0);
       out_event_t tmp_4337  = {.ev = mk_inside_continue(NAT_port_4055), .port = 4294967295};
@@ -405,7 +405,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       if (ret_4059 == true) {
         tuple_1 tmp_4339  = {._0 = src_ip_4056, ._1 = src_port_4057,};
         uint32_t NAT_port_4064  = ((uint32_t)(hash_32((uint32_t)1234, (uint8_t* )&tmp_4339, 64) & 15));
-        printf("IP already in NAT, maps to port %d\n", NAT_port_4064);
+        printf("IP already in NAT, maps to port %u\n", NAT_port_4064);
         out_event_t tmp_4340  = {.ev = mk_inside_continue(NAT_port_4064), .port = 4294967295};
         out_events[n] = tmp_4340;
         n = n + 1;
@@ -422,7 +422,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       event_t this  = mk_outside_packet(dst_port_4065);
       uint32_t ip_4066  = Array_update_complex_nat_to_ip_4035_get_get_memop_32_bit(dst_port_4065, 0, 0);
       uint32_t port_4067  = Array_update_complex_nat_to_port_4036_get_get_memop_32_bit(dst_port_4065, 0, 0);
-      printf("Mapped port %d to (ip: %d, port: %d)\n", dst_port_4065, ip_4066, port_4067);
+      printf("Mapped port %u to (ip: %u, port: %u)\n", dst_port_4065, ip_4066, port_4067);
       if (ip_4066 == 0) {
         printf("dropped\n");
       }else {

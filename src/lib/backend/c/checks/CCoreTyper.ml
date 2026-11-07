@@ -334,8 +334,8 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
     let size2 = extract_tint_size inf_exp2.ety in
     env, op, [inf_exp1; inf_exp2], tint (size1 + size2)
 
-  | Cast(new_ty), [exp] when is_tint new_ty ->
-    (* casting from int to int is allowed *)
+  | Cast(new_ty), [exp] when is_tint (base_type new_ty) ->
+    (* casting from int to int is allowed, including to a named int type *)
     let env, inf_exp = infer_exp env exp in
     if (not (is_tint inf_exp.ety)) then 
       raise (TypeError("cast from int to non-int"));

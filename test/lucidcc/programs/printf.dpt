@@ -1,0 +1,10 @@
+// printf prints what the interpreter prints: integers as unsigned decimal at
+// any width (a 32-bit value past 2^31, 48- and 64-bit values), booleans as
+// true / false.
+packet event pkt(int<32> a, int<48> b, int<64> c, Payload.t pl);
+
+handle pkt(int<32> a, int<48> b, int<64> c, Payload.t pl) {
+    bool big = a == 0xFFFFFFF0;
+    printf("a=%d b=%d c=%d big=%b", a, b, c, big);
+    generate_port(ingress_port, pkt(a, b, c, pl));
+}

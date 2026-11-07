@@ -29,6 +29,41 @@ let printf = Printf.printf
 let cid s = s |> Id.create |> Cid.id
 let err = Console.error ;;
 
+(* printf formats for C, printing what the interpreter prints: integers as
+   unsigned decimal, booleans as true / false. Each %d becomes %u, or %llu when
+   its argument is wider than 32 bits (the argument is then cast to unsigned
+   long long: uint64_t is unsigned long on LP64 Linux, which %llu mismatches);
+   each %b becomes %s, the argument going through `lucid_bool_str`. *)
+type conv = Narrow | Wide | Bool
+
+let bool_str_cid = Cid.create [ "lucid_bool_str" ]
+let cstr = F.tname (Cid.create [ "cstr" ])
+let ullong = F.tname ~def:(F.tint 64) (Cid.create [ "unsigned long long" ])
+let prints_bool = ref false   (* some printf has a %b: the helper is declared *)
+
+let bool_str_decls () =
+  [ F.dforiegn "typedef const char* cstr;";
+    F.dfun_foriegn bool_str_cid cstr [ (Cid.create [ "b" ], F.tint 8) ] "{ return b ? \"true\" : \"false\"; }" ]
+
+let conv_of (a : F.exp) = match (F.base_type a.ety).raw_ty with
+  | F.TInt w when w > 32 -> Wide
+  | F.TBool -> Bool
+  | _ -> Narrow
+
+let c_format (s : string) (convs : conv list) =
+  let b = Buffer.create (String.length s + 2) in
+  let n = String.length s in
+  let i = ref 0 and args = ref convs in
+  while !i < n do
+    if s.[!i] = '%' && !i + 1 < n && (s.[!i + 1] = 'd' || s.[!i + 1] = 'b') then (
+      let c = match !args with c :: rest -> args := rest; c | [] -> Narrow in
+      Buffer.add_string b (match c with Wide -> "%llu" | Narrow -> "%u" | Bool -> "%s");
+      i := !i + 2)
+    else if s.[!i] = '%' && !i + 1 < n && s.[!i + 1] = '%' then (Buffer.add_string b "%%"; i := !i + 2)
+    else (Buffer.add_char b s.[!i]; incr i)
+  done;
+  Buffer.contents b
+
 (* declare builtin functions as externs in CCore *)
 (* TODO: add more *)
 (* note that config for port and switch sizes is inferred during translation *)
@@ -354,8 +389,15 @@ let rec translate_statement (stmt:C.statement) : F.statement =
        so append a newline escape to the emitted C format string -- also makes
        line-buffered logs flush per printf instead of accumulating one endless
        unflushable line. *)
-    let str_exp = F.eval (F.string_to_value (fmt_str ^ "\\n")) in
-    let args = str_exp::List.map (fun arg -> (translate_exp arg)) args in
+    let args = List.map translate_exp args in
+    let convs = List.map conv_of args in
+    if List.mem Bool convs then prints_bool := true;
+    let str_exp = F.eval (F.string_to_value (c_format fmt_str convs ^ "\\n")) in
+    let args = str_exp :: List.map2 (fun (a : F.exp) c -> match c with
+      | Wide -> F.ecast ullong a
+      | Bool -> F.ecall (F.efunref bool_str_cid (F.tfun [ F.tint 8 ] cstr)) [ a ]
+      | Narrow -> a) args convs
+    in
     let arg_tys = List.map (fun (arg:F.exp) -> arg.ety) args in
     let ret_ty = F.ty@@TUnit in
     let fty = F.tfun arg_tys ret_ty in
@@ -655,6 +697,7 @@ let mk_event_dfuns (event_defs : ev_def list) : F.decls =
 ;;
 
 let translate ?(payload_event_names=[]) (ds : C.decls) : F.decls =
+  prints_bool := false;
   (* translate declarations first in case something in there uses a port.. *)
   (* if (CConfig.c_cfg.driver == "interp") then  *)  
   (* infer_loc_id_sizes ds; *)
@@ -699,5 +742,6 @@ let translate ?(payload_event_names=[]) (ds : C.decls) : F.decls =
   let events_dty = F.decl (F.DTy(F.events_cid, Some(F.tevent_def))) Span.default in
   (* the per-event monomorphic constructors, generated from the event defs *)
   let mk_event_decls = mk_event_dfuns event_defs in
-  meta_dty :: variant_dty :: events_dty :: mk_event_decls @ (builtin_externs ()) @ ds
+  meta_dty :: variant_dty :: events_dty :: mk_event_decls @ (builtin_externs ())
+  @ (if !prints_bool then bool_str_decls () else []) @ ds
 ;;

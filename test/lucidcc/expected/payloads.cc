@@ -288,7 +288,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
     case 1: {
       uint16_t x_1654  = ev_in->data.args.background_1626.x_1625;
       event_t this  = mk_background(x_1654);
-      printf("%d\n", x_1654);
+      printf("%u\n", x_1654);
       break;
     }
     case 2: {

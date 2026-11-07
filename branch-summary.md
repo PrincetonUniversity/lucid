@@ -32,8 +32,8 @@ tests to check the generated C.
   yet support (multicast, saturating arithmetic, bit concat, certain field layouts, 
   int types wider than 64 bits) now cause compiler errors instead of incorrect C code. 
 - (**bug fix**) **Smaller issues.** Fixed C operator precedence and `mod` name 
-  collision; bit-aligned hash calc semantics; made printf behavior 
-  consistent with interpreter; set correct port on event recirculate.
+  collision; bit-aligned hash calc semantics; fixed numerous printf and formatter 
+  bugs; set correct port on event recirculate.
 - (**bug fix**) **Support large internal values** Fixed a bug causing compiler    
   crash for values larger than 63 bits.
 

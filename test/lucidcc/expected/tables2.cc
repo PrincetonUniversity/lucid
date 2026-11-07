@@ -347,14 +347,14 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       uint32_t v_4330  = ev_in->data.args.do_set_4326.v_4325;
       event_t this  = mk_do_set(k_4329, v_4330);
       uint8_t idx_4331  = hash_32((uint32_t)1, (uint8_t* )&k_4329, 32);
-      printf("hash size arg: %d\n", 8);
-      printf("[set] index: %d\n", idx_4331);
+      printf("hash size arg: %u\n", 8);
+      printf("[set] index: %u\n", idx_4331);
       uint32_t cache_key_4332  = Array_update_complex_global_cached_table_0_4321_combined_memop_WriteCacheTable_set_if_empty_WriteCacheTable_set_if_empty_4592(idx_4331, k_4329, k_4329);
       if (cache_key_4332 == k_4329) {
-        printf("installing entry for %d into CACHE at index %d\n", k_4329, idx_4331);
+        printf("installing entry for %u into CACHE at index %u\n", k_4329, idx_4331);
         Array_update_complex_global_cached_table_1_4322_set_set_memop_32_bit(idx_4331, v_4330, 0);
       }else {
-        printf("installing entry for %d into TABLE\n", k_4329);
+        printf("installing entry for %u into TABLE\n", k_4329);
         install_global_cached_table_2_4323(k_4329, tag_WriteCacheTable_hit_acn_4315, v_4330);
       }
       false;
@@ -378,9 +378,9 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
         WriteCacheTable_get_ret_1_4335 = tup_4595._1;
       }
       if (WriteCacheTable_get_ret_1_4335) {
-        printf("key: %d result: %d\n", k_4333, WriteCacheTable_get_ret_0_4334);
+        printf("key: %u result: %u\n", k_4333, WriteCacheTable_get_ret_0_4334);
       }else {
-        printf("key: %d result: NOT FOUND\n", k_4333);
+        printf("key: %u result: NOT FOUND\n", k_4333);
       }
       break;
     }

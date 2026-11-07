@@ -263,7 +263,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       uint32_t src_ip_1195  = ev_in->data.args.pkt_in_1186.src_ip_1184;
       uint32_t src_port_1196  = ev_in->data.args.pkt_in_1186.src_port_1185;
       event_t this  = mk_pkt_in(src_ip_1195, src_port_1196);
-      printf("Received packet from (ip: %d, port: %d)\n", src_ip_1195, src_port_1196);
+      printf("Received packet from (ip: %u, port: %u)\n", src_ip_1195, src_port_1196);
       event_t MY_EVENT_1197  = mk_pkt_out(src_ip_1195, src_port_1196);
       out_event_t tmp_1273  = {.ev = mk_bg_cmd(src_port_1196), .port = 4294967295};
       out_events[n] = tmp_1273;
@@ -272,7 +272,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
         case 3: {
           uint32_t ip_1198  = MY_EVENT_1197.data.args.pkt_out_1191.src_ip_1189;
           uint32_t port_1199  = MY_EVENT_1197.data.args.pkt_out_1191.src_port_1190;
-          printf("Sending packet to (ip: %d, port: %d)\n", ip_1198, port_1199);
+          printf("Sending packet to (ip: %u, port: %u)\n", ip_1198, port_1199);
           out_event_t tmp_1274  = {.ev = mk_pkt_out(src_ip_1195, src_port_1196), .port = 0};
           out_events[n] = tmp_1274;
           n = n + 1;

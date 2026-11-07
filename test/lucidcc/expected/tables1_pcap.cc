@@ -339,7 +339,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       uint32_t key_2397  = ev_in->data.args.do_install_2391.key_2389;
       uint32_t val_2398  = ev_in->data.args.do_install_2391.val_2390;
       event_t this  = mk_do_install(key_2397, val_2398);
-      printf("installing entry: key=%d -> hit_acn(%d)\n", key_2397, val_2398);
+      printf("installing entry: key=%u -> hit_acn(%u)\n", key_2397, val_2398);
       install_ftbl_2384(key_2397, tag_hit_acn_2380, val_2398);
       break;
     }
@@ -353,7 +353,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       if (r_1_2401 == true) {
         hit_2402 = 1;
       }
-      printf("query key=%d -> val=%d hit=%d\n", key_2399, r_0_2400, hit_2402);
+      printf("query key=%u -> val=%u hit=%u\n", key_2399, r_0_2400, hit_2402);
       out_event_t tmp_2564  = {.ev = mk_query_result(key_2399, r_0_2400, hit_2402), .port = 1};
       out_events[n] = tmp_2564;
       n = n + 1;
