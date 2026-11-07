@@ -178,7 +178,8 @@ def scanloop_check(recv_pcap, pkt_out_tag, n):
     print(f"[*] fed 1 endless tick + {n} pkt_in; got {len(got)} distinct pkt_out x")
     if got == set(range(1, n + 1)):
         print("[+] PASS: all inputs served despite the endless recirc (no starvation)"); return True
-    print(f"[-] FAIL: missing pkt_out for x={sorted(set(range(1, n + 1)) - got)} "
+    missing = sorted(set(range(1, n + 1)) - got)
+    print(f"[-] FAIL: missing pkt_out for {len(missing)} x, first {missing[:10]} "
           f"-- input starved by the recirc loop?")
     return False
 

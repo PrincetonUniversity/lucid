@@ -6,6 +6,9 @@
 #                ingress on port 1, egress on port 0. 
 #                Checks multi-out dispatch, recirc drain, framing, and multi-port rx;
 #   - scanloop:  looping `tick` event + 10 `pkt_in`, check all 10 `pkt_out` (no starvation).
+#   - recircstorm: a `tick` that recirculates twice per event, so the recirculation
+#                queue stays full, + 2000 `pkt_in`: all 2000 `pkt_out` must come back
+#                (overload drops recirculations, never arrivals).
 #
 # Runs with hugepages disabled (--no-huge), as root in the docker/dpdk image.
 #
@@ -24,11 +27,13 @@ SWITCH_IFACE, SEND_IFACE = "veth0", "veth1"
 NUM = 100          # reflector packets
 NUM_EVENTS = 5     # events pkt_in packets
 NUM_SCAN = 10      # scanloop pkt_in packets
+NUM_STORM = 2000   # recircstorm pkt_in packets: enough to keep arriving while the storm runs
 
 BUILD = os.path.join(dl.SCRIPT_DIR, "_dpdk_build")   # one subdir per sub-test
 REFL_BUILD = os.path.join(BUILD, "refl")             # ethswaprefl (reflector + af_packet)
 EVENTS_BUILD = os.path.join(BUILD, "events")         # events.dpt
 SCAN_BUILD = os.path.join(BUILD, "scanloop")         # scanloop.dpt
+STORM_BUILD = os.path.join(BUILD, "recircstorm")     # recircstorm.dpt
 
 
 def _gen(prog, build):
@@ -42,6 +47,7 @@ def gen():
     _gen("ethswaprefl.dpt", REFL_BUILD)
     _gen("events.dpt", EVENTS_BUILD)
     _gen("scanloop.dpt", SCAN_BUILD)
+    _gen("recircstorm.dpt", STORM_BUILD)
     print("[+] regenerated build dirs -- run without --gen to make + run + check")
 
 
@@ -183,7 +189,20 @@ def test_scanloop():
     return dl.scanloop_check(out_pcap, tags["pkt_out"], NUM_SCAN)
 
 
-TESTS = [test_reflector, test_afpacket, test_events, test_scanloop]
+def test_recircstorm():
+    print("=== recircstorm ===")
+    binf = _build(STORM_BUILD)
+    tags = dl.event_tags(STORM_BUILD, "tick", "pkt_in", "pkt_out")
+    in_pcap = os.path.join(dl.PCAPS, "dpdk_recircstorm.in.pcap")
+    out_pcap = os.path.join(dl.PCAPS, "dpdk_recircstorm.out.pcap")
+    dl.write_frames(in_pcap, dl.scanloop_frames(tags, NUM_STORM))
+    print(f"[+] wrote 1 multiplying tick + {NUM_STORM} pkt_in frames")
+    _run_pcap_pmd(binf, [f"net_pcap0,rx_pcap={in_pcap},tx_pcap={out_pcap}"], out_pcap, NUM_STORM,
+                  extra_eal=["-m", "512"])
+    return dl.scanloop_check(out_pcap, tags["pkt_out"], NUM_STORM)
+
+
+TESTS = [test_reflector, test_afpacket, test_events, test_scanloop, test_recircstorm]
 
 if __name__ == "__main__":
     os.makedirs(dl.PCAPS, exist_ok=True)
