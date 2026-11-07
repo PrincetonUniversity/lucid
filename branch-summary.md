@@ -34,6 +34,8 @@ tests to check the generated C.
 - (**bug fix**) **Smaller issues.** Fixed C operator precedence and `mod` name 
   collision; bit-aligned hash calc semantics; made printf behavior 
   consistent with interpreter.
+- (**bug fix**) **Support large internal values** Fixed a bug causing compiler crash for 
+  values larger than 63 bits.
 
 
 ## Core feature and execution model support
@@ -115,7 +117,7 @@ tests to check the generated C.
 ## Known limits / next
 
 - Not yet supported: multicast (`generate_ports`), saturating arithmetic, bit
-  concatenation, timers (`Event.delay`), 62- and 63-bit integers, and integers wider
+  concatenation, timers (`Event.delay`), and integers wider
   than 64 bits.
 - `Sys.time()` reads the wall clock, so offline pcap runs that use it aren't
   reproducible.

@@ -1,0 +1,15 @@
+// 62- and 63-bit ints, stored in 64-bit containers: an increment past the
+// largest value must wrap to 0. Each counter is followed by a flag the
+// handler sets when the incremented value compares equal to 0, which it only
+// does if the sum is masked to the field's width.
+packet event pkt(int<62> a, int<2> a_wrapped, int<63> b, int<1> b_wrapped, Payload.t pl);
+
+handle pkt(int<62> a, int<2> a_wrapped, int<63> b, int<1> b_wrapped, Payload.t pl) {
+    int<62> na = a + 1;
+    int<63> nb = b + 1;
+    int<2> wa = 0;
+    int<1> wb = 0;
+    if (na == 0) { wa = 1; }
+    if (nb == 0) { wb = 1; }
+    generate_port(ingress_port, pkt(na, wa, nb, wb, pl));
+}

@@ -18,11 +18,8 @@ open CCoreSyntax
 
 let is_standard n = List.mem n [8; 16; 32; 64]
 
-(* the low-n-bit mask as an int<n> constant. OCaml's native int is 63-bit, so
-   (1 lsl n)-1 is only exact for n <= 61; the wider non-standard widths (62, 63)
-   are left unmasked for now -- they sit in the deferred ">= 62-bit" bucket along
-   with >64. *)
-let maskable n = (not (is_standard n)) && n <= 61
+(* widths past 64 have no C container (CCoreCPrint rejects them) *)
+let maskable n = (not (is_standard n)) && n < 64
 
 let mask_const n = eval (vbig (Z.pred (Z.shift_left Z.one n)) n)
 let mask_to n e = eop BitAnd [e; mask_const n]   (* result type = e.ety = int<n> *)

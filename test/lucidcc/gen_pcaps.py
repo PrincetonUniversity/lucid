@@ -87,4 +87,17 @@ test_case("tables1_pcap",
      lucid_frame(1, 43, 1000, 0),   # miss, would hit if an install masked with key
      lucid_frame(1, 1, 1000, 0)])   # miss, other keys shouldn't be affected
 
+# wideints: a 62-bit counter and a 2-bit flag, then a 63-bit counter and a 1-bit
+# flag. The handler increments each counter and sets its flag when the result is 0,
+# so an increment from the largest value must wrap (be masked to 62 or 63 bits).
+def wideints_pkt(a, a_wrapped, b, b_wrapped, payload=b"PAYLOAD-DATA"):
+    return (struct.pack(">Q", (a << 2) | a_wrapped)
+            + struct.pack(">Q", (b << 1) | b_wrapped) + payload)
+
+test_case("wideints",
+    [wideints_pkt(2**62 - 1, 0, 2**63 - 1, 0),    # both wrap
+     wideints_pkt(5, 0, 7, 0)],                    # neither wraps
+    [wideints_pkt(0, 1, 0, 1),
+     wideints_pkt(6, 0, 8, 0)])
+
 print("wrote pcap test cases to", PCAPS)
