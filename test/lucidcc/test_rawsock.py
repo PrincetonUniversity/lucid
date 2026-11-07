@@ -34,53 +34,80 @@ SCAN_BUILD = os.path.join(BUILD, "scanloop")
 def _cfile(build): return os.path.join(build, "lucidprog.c")
 def _bin(build):   return os.path.join(build, "lucidprog")
 
+def _gen(prog, build):
+    os.makedirs(build, exist_ok=True)
+    r = dl.run_lucidcc(os.path.join(dl.PROGRAMS, prog), "-o", _cfile(build), "--rawsock")
+    if r.returncode != 0:
+        sys.exit(f"[-] lucidcc failed on {prog}:\n" + dl.tail(r.stdout, 5))
+    print(f"[+] lucidcc --rawsock {prog} -> {os.path.relpath(_cfile(build))}")
+
 def gen():
-    dl.gen_single(os.path.join(dl.PROGRAMS, "ethswaprefl.dpt"), "--rawsock", _cfile(REFL_BUILD))
-    dl.gen_single(os.path.join(dl.PROGRAMS, "scanloop.dpt"), "--rawsock", _cfile(SCAN_BUILD))
+    _gen("ethswaprefl.dpt", REFL_BUILD)
+    _gen("scanloop.dpt", SCAN_BUILD)
     print("[+] regenerated lucidprog.c, rerun without --gen to test")
 
+def _build(build):
+    if not os.path.exists(_cfile(build)):
+        sys.exit(f"[-] {_cfile(build)} not found -- run with --gen first")
+    r = dl.run_gcc(_cfile(build), _bin(build))
+    if r.returncode != 0:
+        sys.exit("[-] gcc failed:\n" + dl.gcc_errors(r.stdout))
+    return _bin(build)
+
+def _wait_for_line(switch, needle, timeout=30):
+    """Echo switch stdout until `needle` appears; exit if the switch dies first."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        line = switch.stdout.readline().decode(errors="replace")
+        if not line:
+            err = switch.stderr.read().decode(errors="replace")
+            sys.exit(f"[-] switch exited early (rc={switch.poll()}): {err}")
+        print("    switch: " + line.strip())
+        if needle in line:
+            return
+    raise TimeoutError(f"switch did not print {needle!r} within {timeout}s")
+
 def _start_switch(binf):
-    """Start the switch (port 0 -> veth0) and wait for its readiness line."""
     sw = subprocess.Popen(dl.sudo([binf, "--interface", f"0:{SWITCH_IFACE}"]),
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    dl.wait_for_line(sw, "Init complete.")
+    _wait_for_line(sw, "Init complete.")
     time.sleep(1)
     return sw
 
 
 def test_reflector():
     print("=== reflector ===")
-    binf = dl.build_gcc(_cfile(REFL_BUILD), _bin(REFL_BUILD))
+    binf = _build(REFL_BUILD)
     dl.ensure_veths(SWITCH_IFACE, SEND_IFACE)
     send = os.path.join(dl.PCAPS, "rawsock.send.pcap")
     recv = os.path.join(dl.PCAPS, "rawsock.recv.pcap")
     dl.reflector_pcap(send, NUM)
-    cap = dl.start_capture(SEND_IFACE, recv, count=NUM)          # inbound UDP flow only
+    cap = dl.start_capture(SEND_IFACE, recv, "udp port 5000", count=NUM)
     sw = _start_switch(binf)
     dl.replay(SEND_IFACE, send)
     try:
         cap.wait(timeout=15)
     except subprocess.TimeoutExpired:
         cap.terminate(); cap.wait()
-    dl.stop_switch(sw, binf)
+    dl.stop(sw, binf)
     return dl.reflector_check(send, recv)
 
 
 def test_scanloop():
     print("=== scanloop ===")
-    binf = dl.build_gcc(_cfile(SCAN_BUILD), _bin(SCAN_BUILD))
+    binf = _build(SCAN_BUILD)
     tags = dl.event_tags(SCAN_BUILD, "tick", "pkt_in", "pkt_out")
     dl.ensure_veths(SWITCH_IFACE, SEND_IFACE)
     send = os.path.join(dl.PCAPS, "rawsock_scanloop.send.pcap")
     recv = os.path.join(dl.PCAPS, "rawsock_scanloop.recv.pcap")
     dl.write_frames(send, dl.scanloop_frames(tags, NUM_SCAN))
     print(f"[+] wrote 1 tick + {NUM_SCAN} pkt_in frames to {os.path.basename(send)}")
-    cap = dl.start_capture(SEND_IFACE, recv, bpf="")            # all inbound (pkt_out is ethertype 666)
+    cap = dl.start_capture(SEND_IFACE, recv, "")   # everything: pkt_out is ethertype 666, not UDP
     sw = _start_switch(binf)
     dl.replay(SEND_IFACE, send)
     time.sleep(3)                                               # serve all pkt_in despite the endless tick
     cap.terminate(); cap.wait()
-    dl.stop_switch(sw, binf)
+    dl.stop(sw, binf)
     return dl.scanloop_check(recv, tags["pkt_out"], NUM_SCAN)
 
 

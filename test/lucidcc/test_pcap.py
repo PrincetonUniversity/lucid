@@ -27,7 +27,7 @@ def check(name, work):
         os.remove(actual_pcap)
 
     cfile, binfile = os.path.join(work, name + ".c"), os.path.join(work, name)
-    gen = dl.run_lucidcc(dpt, cfile, "--lpcap")
+    gen = dl.run_lucidcc(dpt, "-o", cfile, "--lpcap")
     if gen.returncode != 0:
         return False, "lucidcc failed\n" + dl.tail(gen.stdout, 3)
     cc = dl.run_gcc(cfile, binfile, ["-lpcap"])

@@ -34,11 +34,46 @@ EVENTS_BUILD = os.path.join(BUILD, "events")         # events.dpt
 SCAN_BUILD = os.path.join(BUILD, "scanloop")         # scanloop.dpt
 
 
+def _gen(prog, build):
+    os.makedirs(build, exist_ok=True)
+    r = dl.run_lucidcc(os.path.join(dl.PROGRAMS, prog), "--dpdk", "--build", build)
+    if r.returncode != 0:
+        sys.exit(f"[-] lucidcc failed on {prog}:\n" + dl.tail(r.stdout, 5))
+    print(f"[+] lucidcc --dpdk {prog} --build {os.path.relpath(build)}")
+
 def gen():
-    dl.gen_dpdk(os.path.join(dl.PROGRAMS, "ethswaprefl.dpt"), REFL_BUILD)
-    dl.gen_dpdk(os.path.join(dl.PROGRAMS, "events.dpt"), EVENTS_BUILD)
-    dl.gen_dpdk(os.path.join(dl.PROGRAMS, "scanloop.dpt"), SCAN_BUILD)
+    _gen("ethswaprefl.dpt", REFL_BUILD)
+    _gen("events.dpt", EVENTS_BUILD)
+    _gen("scanloop.dpt", SCAN_BUILD)
     print("[+] regenerated build dirs -- run without --gen to make + run + check")
+
+
+def _build(build):
+    if not os.path.exists(os.path.join(build, "lucidprog.c")):
+        sys.exit(f"[-] {build}/lucidprog.c not found -- run with --gen first")
+    print("[+] make")
+    subprocess.run(["make", "-C", build], check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    binfile = os.path.join(build, "build", "lucidprog")
+    if not os.path.exists(binfile):
+        sys.exit(f"[-] {binfile} not built")
+    return binfile
+
+
+def _poll_until(pcap_path, n, switch, timeout=15):
+    """Wait until pcap_path holds >= n packets; False if the switch exited first."""
+    from scapy.all import rdpcap
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if switch.poll() is not None:
+            return False
+        time.sleep(0.5)
+        try:
+            if len(rdpcap(pcap_path)) >= n:
+                break
+        except Exception:
+            pass
+    return switch.poll() is None
 
 
 def _run_pcap_pmd(binf, vdevs, poll_pcap, n, extra_eal=()):
@@ -51,16 +86,16 @@ def _run_pcap_pmd(binf, vdevs, poll_pcap, n, extra_eal=()):
         cmd += ["--vdev", v]
     print(f"[+] run: {' '.join(cmd[1:])}")
     sw = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
-    if not dl.poll_until(poll_pcap, n, sw):
+    if not _poll_until(poll_pcap, n, sw):
         out = sw.stdout.read().decode(errors="replace")
         print("[-] switch exited early:\n" + "\n".join("    " + l for l in out.strip().splitlines()[-8:]))
         sys.exit(1)
-    dl.stop_switch(sw, binf)
+    dl.stop(sw, binf)
 
 
 def test_reflector():
     print("=== reflector (pcap PMD) ===")
-    binf = dl.build_make(REFL_BUILD)
+    binf = _build(REFL_BUILD)
     send = os.path.join(dl.PCAPS, "dpdk.send.pcap")
     recv = os.path.join(dl.PCAPS, "dpdk.recv.pcap")
     dl.reflector_pcap(send, NUM)
@@ -70,12 +105,12 @@ def test_reflector():
 
 def test_afpacket():
     print("=== af_packet (live veth) ===")
-    binf = dl.build_make(REFL_BUILD)   # same reflector program, different vdev
+    binf = _build(REFL_BUILD)   # same reflector program, different vdev
     dl.ensure_veths(SWITCH_IFACE, SEND_IFACE)
     send = os.path.join(dl.PCAPS, "afpacket.send.pcap")
     recv = os.path.join(dl.PCAPS, "afpacket.recv.pcap")
     dl.reflector_pcap(send, NUM)
-    cap = dl.start_capture(SEND_IFACE, recv, count=NUM)
+    cap = dl.start_capture(SEND_IFACE, recv, "udp port 5000", count=NUM)
 
     logf = open(os.path.join(REFL_BUILD, "afpacket.switch.log"), "w")
     sw = subprocess.Popen(
@@ -93,14 +128,15 @@ def test_afpacket():
         cap.wait(timeout=15)
     except subprocess.TimeoutExpired:
         cap.terminate(); cap.wait()
-    dl.stop_switch(sw, binf)
+    dl.stop(sw, binf)
     logf.close()
     return dl.reflector_check(send, recv)
 
 
 def test_events():
     print("=== events (recirc + port, multi-port rx) ===")
-    binf = dl.build_make(EVENTS_BUILD)
+    from scapy.all import rdpcap
+    binf = _build(EVENTS_BUILD)
     tags = dl.event_tags(EVENTS_BUILD, "pkt_in", "pkt_out")
     in_pcap = os.path.join(dl.PCAPS, "dpdk_events.in.pcap")
     empty = os.path.join(dl.PCAPS, "dpdk_events.empty.pcap")
@@ -108,7 +144,7 @@ def test_events():
     port1 = os.path.join(dl.PCAPS, "dpdk_events.port1.pcap")   # input
     ins = [(0x0A000001 + i, 5000 + i) for i in range(NUM_EVENTS)]  # vary fields to check passthrough
     dl.write_frames(in_pcap, [dl.lucid_frame(tags["pkt_in"], ip, port) for ip, port in ins])
-    dl.empty_pcap(empty)
+    dl.write_pcap(empty, [])
     if os.path.exists(port1):
         os.remove(port1)
     print(f"[+] wrote {NUM_EVENTS} Lucid-framed pkt_in frames")
@@ -119,11 +155,11 @@ def test_events():
                   port0, NUM_EVENTS, extra_eal=["-m", "512"])
     expected = [dl.lucid_frame(tags["pkt_out"], ip, port) for ip, port in ins]
     try:
-        recv = [bytes(p) for p in dl.rdpcap(port0)]
+        recv = [bytes(p) for p in rdpcap(port0)]
     except Exception:
         recv = []
     try:
-        p1 = list(dl.rdpcap(port1))
+        p1 = list(rdpcap(port1))
     except Exception:
         p1 = []
     print(f"[*] fed {NUM_EVENTS} pkt_in on port 1, port0 got {len(recv)} pkt_out, port1 got {len(p1)}")
@@ -140,7 +176,7 @@ def test_events():
 
 def test_scanloop():
     print("=== scanloop ===")
-    binf = dl.build_make(SCAN_BUILD)
+    binf = _build(SCAN_BUILD)
     tags = dl.event_tags(SCAN_BUILD, "tick", "pkt_in", "pkt_out")
     in_pcap = os.path.join(dl.PCAPS, "dpdk_scanloop.in.pcap")
     out_pcap = os.path.join(dl.PCAPS, "dpdk_scanloop.out.pcap")

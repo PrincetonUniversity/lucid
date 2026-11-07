@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Shared helpers for the C-backend tests. scapy is imported only by the live-traffic helpers.
+# Shared helpers for the C-backend tests
 
 import os
 import platform
@@ -19,16 +19,14 @@ PCAPS = os.path.join(SCRIPT_DIR, "_pcaps")
 def repo_root():
     return subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
 
-
 def lucidcc():
     return os.path.join(repo_root(), "lucidcc")
-
 
 def tail(text, n):
     return "\n".join(text.rstrip().splitlines()[-n:])
 
 
-# ---- local tests (test_compiler.py, test_pcap.py) ----------------------------
+# ---- build, compile, report ----------------------------------------------------
 
 def build_lucid():
     print("building lucidcc (make)...")
@@ -42,8 +40,8 @@ def local_test_args(doc):
     return argparse.ArgumentParser(description=doc, formatter_class=argparse.RawDescriptionHelpFormatter)
 
 
-def run_lucidcc(dpt, cfile, *flags):
-    return subprocess.run([lucidcc(), dpt, "-o", cfile, *flags],
+def run_lucidcc(dpt, *args):
+    return subprocess.run([lucidcc(), dpt, *args],
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
 
@@ -57,7 +55,7 @@ def gcc_errors(out, n=3):
 
 
 def report(results):
-    """results: iterable of (name, ok, detail). Prints each as it arrives; returns an exit code."""
+    """results: iterable of (name, ok, detail); returns an exit code"""
     passed = failed = 0
     for name, ok, detail in results:
         lines = detail.splitlines() if detail else []
@@ -69,48 +67,6 @@ def report(results):
     print("-----")
     print(f"{passed} passed, {failed} failed")
     return 1 if failed or not passed else 0
-
-
-# ---- codegen (--gen) + build --------------------------------------------------
-# compile Lucid programs to C
-
-def gen_single(dpt, driver_flag, cfile):
-    """lucidcc <dpt> <driver_flag> -o cfile  (single-file drivers: --rawsock)."""
-    os.makedirs(os.path.dirname(cfile), exist_ok=True)
-    print(f"[+] lucidcc {driver_flag} {os.path.basename(dpt)} -> {os.path.relpath(cfile)}")
-    subprocess.run([lucidcc(), dpt, "-o", cfile, driver_flag], check=True,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-
-
-def gen_dpdk(dpt, build_dir):
-    """lucidcc <dpt> --dpdk --build <build_dir>  (dpdk emits a whole build dir)."""
-    os.makedirs(build_dir, exist_ok=True)
-    print(f"[+] lucidcc --dpdk {os.path.basename(dpt)} --build {os.path.relpath(build_dir)}")
-    subprocess.run([lucidcc(), dpt, "--dpdk", "--build", build_dir], check=True,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-
-
-def build_gcc(cfile, binfile, libs=()):
-    """gcc the (committed) single-file C into a binary. No lucidcc."""
-    if not os.path.exists(cfile):
-        sys.exit(f"[-] {cfile} not found -- run with --gen first (needs lucidcc).")
-    print("[+] gcc")
-    subprocess.run(["gcc", "-O2", "-o", binfile, cfile, *libs], check=True)
-    return binfile
-
-
-def build_make(build_dir):
-    """make the (committed) DPDK build dir. No lucidcc; needs DPDK."""
-    cfile = os.path.join(build_dir, "lucidprog.c")
-    if not os.path.exists(cfile):
-        sys.exit(f"[-] {cfile} not found -- run with --gen first (needs lucidcc).")
-    print("[+] make")
-    subprocess.run(["make", "-C", build_dir], check=True,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    binfile = os.path.join(build_dir, "build", "lucidprog")
-    if not os.path.exists(binfile):
-        sys.exit(f"[-] {binfile} not built")
-    return binfile
 
 
 # ---- Lucid frame building -----------------------------------------------------
@@ -193,15 +149,6 @@ def read_pcap(path):
     return frames
 
 
-def rdpcap(path):
-    from scapy.all import rdpcap
-    return rdpcap(path)
-
-
-def empty_pcap(path):
-    write_pcap(path, [])
-
-
 def write_frames(path, frames):
     """Write raw frame bytes as an ethernet pcap."""
     from scapy.all import Ether, wrpcap
@@ -239,16 +186,12 @@ def scanloop_check(recv_pcap, pkt_out_tag, n):
 # ---- veth / subprocess plumbing (Linux + macOS, root) --------------------------
 
 def sudo(cmd):
-    """Prefix cmd with sudo only when not already root. An inner sudo holding the
-    terminal (`Defaults use_pty`, on by default in recent Ubuntu/Debian) puts the tty
-    into raw mode for its whole lifetime, staircasing all test output to the right."""
+    """Prefix cmd with sudo if not already root. Redundant sudos garble output."""
     return cmd if os.geteuid() == 0 else ["sudo"] + cmd
 
 
 def ensure_veths(a, b):
-    """(Re)create + bring up a virtual ethernet pair (a <-> b).
-    Linux: veth pair, IPv6 disabled to cut ND/MLD noise.
-    macOS: feth (fake ethernet) pair via ifconfig create/peer."""
+    """(Re)create + bring up a veth(linux)/feth(macos) pair (a <-> b)."""
     if IS_LINUX:
         subprocess.run(sudo(["ip", "link", "del", a]), capture_output=True)
         subprocess.run(sudo(["ip", "link", "add", a, "type", "veth", "peer", "name", b]),
@@ -269,20 +212,15 @@ def ensure_veths(a, b):
     print(f"[+] {a} <-> {b} up")
 
 
-def start_capture(iface, out_pcap, count=None, bpf="udp port 5000"):
-    """tcpdump the INBOUND (-Q in) traffic on iface to out_pcap, filtered to bpf so link
-    noise (IPv6 ND, ARP) is excluded. Returns the Popen. count -> -c (stop after N)."""
+def start_capture(iface, out_pcap, capture_filter, count=None):
+    """tcpdump inbound traffic on iface matching capture_filter (tcpdump syntax) to
+    out_pcap, stopping after `count` packets if given. Returns the Popen."""
     if os.path.exists(out_pcap):
         os.remove(out_pcap)
-    base = ["tcpdump", "-i", iface, "-w", out_pcap, "-B", "4096"]
-    if IS_LINUX:
-        base[3:3] = ["-Q", "in"]          # inbound only; feth on macOS lacks direction metadata
-    else:
-        base[3:3] = ["-Q", "in"]          # inbound only; feth on macOS lacks direction metadata
-    cmd = sudo(base)
+    cmd = sudo(["tcpdump", "-i", iface, "-Q", "in", "-w", out_pcap, "-B", "4096"])
     if count is not None:
         cmd += ["-c", str(count)]
-    cmd += bpf.split()
+    cmd += capture_filter.split()
     p = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(1)
     return p
@@ -294,50 +232,14 @@ def replay(iface, send_pcap, pps=1000):
     print(f"[+] replayed {os.path.basename(send_pcap)} on {iface}")
 
 
-def stop_switch(switch, switch_bin):
-    """The switch runs as root (possibly re-parented into its own session), so signal
-    it by its unique binary path via pkill, then reap our Popen handle."""
-    subprocess.run(sudo(["pkill", "-INT", "-f", switch_bin]), capture_output=True)
+def stop(proc, fn):
+    """Stop the process running fn by sending it SIGINT (then SIGKILL if it ignores it)."""
+    subprocess.run(sudo(["pkill", "-INT", "-f", fn]), capture_output=True)
     try:
-        switch.wait(timeout=5)
+        proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
-        subprocess.run(sudo(["pkill", "-9", "-f", switch_bin]), capture_output=True)
+        subprocess.run(sudo(["pkill", "-9", "-f", fn]), capture_output=True)
         try:
-            switch.wait(timeout=5)
+            proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             pass
-
-
-def wait_for_line(switch, needle, timeout=30):
-    """Read switch stdout (echoing it) until `needle` appears; fail if it exits or times
-    out first. Used for drivers that print a readiness line (e.g. rawsock's 'Init complete')."""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        line = switch.stdout.readline().decode(errors="replace")
-        if not line:
-            rc = switch.poll()
-            err = switch.stderr.read().decode(errors="replace") if switch.stderr else ""
-            print(f"[-] switch exited early (rc={rc}): {err}")
-            sys.exit(1)
-        print("    switch: " + line.strip())
-        if needle in line:
-            return
-    raise TimeoutError(f"switch did not print {needle!r} within {timeout}s")
-
-
-def poll_until(pcap_path, n, switch, timeout=15):
-    """Poll pcap_path until it holds >= n packets or the switch exits or timeout. Returns
-    True if the switch is still running (drained N in time), False if it exited early.
-    (Offline pcap-PMD transports flush per TX burst, so this ends the run promptly.)"""
-    from scapy.all import rdpcap
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        if switch.poll() is not None:
-            return False
-        time.sleep(0.5)
-        try:
-            if len(rdpcap(pcap_path)) >= n:
-                break
-        except Exception:
-            pass
-    return switch.poll() is None

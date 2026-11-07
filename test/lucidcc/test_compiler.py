@@ -23,7 +23,7 @@ def reject_pattern(dpt):
 def check(dpt, work, update):
     name = os.path.splitext(os.path.basename(dpt))[0]
     cfile = os.path.join(work, name + ".c")
-    gen = dl.run_lucidcc(dpt, cfile, "--lpcap")
+    gen = dl.run_lucidcc(dpt, "-o", cfile, "--lpcap")
 
     pat = reject_pattern(dpt)
     if pat:
