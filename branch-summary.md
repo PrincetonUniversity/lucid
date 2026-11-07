@@ -49,6 +49,12 @@ tests to check the generated C.
   between an input packet queue and the recirculated event queue. Previously, 
   recirculated events were implemented as tail calls, so a recursive event/handler 
   would block incoming packets.
+- (**feature**) **Backpressure / early drops.** Under overload, arriving packets 
+  wait in the NIC (which drops and counts them) rather than being dropped inside the
+  pipeline, so work already done isn't thrown away; the one place the pipeline
+  drops is the recirculation ring, which keeps recirculation from stalling it.
+  There are other reasonable policies, so this should become configurable once
+  we've looked at them more.
 - (**feature**) **Missing builtins.** Added `Sys.time()` (per-event timestamp set by the 
   driver) and standard IP checksums (currently expressed as `hash<16>(checksum, ...)`).
 - (**feature**) **Records for event args and globals.** Records can now be used as event 
@@ -74,12 +80,14 @@ tests to check the generated C.
   - **pcap.** The pcap driver is intended for deterministic offline testing. 
     It processes all packets in the recirculation queue before pulling the next input 
     packet. 
-  - **raw socket.** The raw socket driver runs on any AF_PACKET (Linux) or BPF (macOS)
-    interface. It introduces simple packet buffer with a slab allocator and ring-buffer 
-    queues, intended as reference implementations. 
   - **dpdk.** The DPDK implementation uses rte_rings, embeds event structures into 
-    mbufs, and deparses packets in place. There are significant performance optimization 
-    in this driver. 
+    mbufs, and deparses packets in place. This is the primary C driver, it implements 
+    the full asynchronous event generation and early drop semantics. 
+  - **raw socket.** The raw socket driver is experimental for cases where DPDK cannot 
+    be supported. It runs on any AF_PACKET (Linux) or BPF (macOS) interface. 
+    It introduces simple packet buffer with a slab allocator and ring-buffer 
+    queues. It has worse performance than the DPDK driver and does not yet implement 
+    the early drop / backpressure.
 
 
 ## Testing

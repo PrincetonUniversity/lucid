@@ -3,13 +3,6 @@ open CCoreExceptions
 open CCoreUtils
 
 (* 
-	TODO: single producer is not correct for the dispatch stage bc it gets 
-	events from both the rx stage and the tx stage (recirculation).
-
-	TODO: internal ringbufs should block / poll on insert, not drop in the middle
-	e.g., this is wrong in parser:
-		"if (rte_ring_enqueue(dispatch_in, m) != 0) rte_pktmbuf_free(m); // ring full -> drop"
-
 	TODO: TX should not copy mbuf of the first event 
 			// loop: start with b = 1, do all the stuff for the copies
 			// after loop: if nb > 0, do event 0 else free the packet (drop)
@@ -27,11 +20,24 @@ open CCoreUtils
 	The architecture is a pipeline with 3 stages: rx -> dispatch -> tx, 
 	using DPDK rings carrying mbufs between the stages. 
 	Each mbuf carries an event, and program-generated output events, in its private area. 
-	The stages are the same as the raw socket driver.
-      RX   : poll every port, parse each frame into the mbuf's event, push to dispatch_in.
-      DISP : execute event handlers, fill the mbuf's out_events list, send to tx_in.
-      TX   : clone / route each output event, including recirculations. 
+      RX   : poll every port for at most what fits on rx_in, parse each frame
+             into the mbuf's event, push to rx_in.
+      DISP : a burst from recirc_in and one from rx_in: execute event handlers,
+             fill the mbuf's out_events list, send to tx_in.
+      TX   : drain tx_in: clone / route each output event; a recirculation
+             goes onto recirc_in.
 	Stages operate on bursts of mbufs (<= BURST_SIZE)
+
+  The queues. Arrivals and recirculations have separate rings into dispatch,
+  served a burst each, so neither starves the other. Receive pulls only what
+  fits on rx_in, so under overload packets wait in the NIC's descriptor ring
+  (the NIC drops and counts them, or pauses the sender) and nothing arriving is
+  dropped inside. recirc_in is drop-tail: it is the one edge that closes the
+  loop, so it never waits, which keeps the pipeline free of deadlock, and a
+  program whose recirculation multiplies drops there, as at a switch's
+  recirculation port. tx_in is drained whole every iteration and cannot fill.
+  Every drop is counted by cause. Multi-segment frames are dropped at receive:
+  the packet view is one segment.
   An output to a program port bound to no DPDK port is dropped and counted.
 
   Command line: the EAL's arguments, then `--`, then the program's:
@@ -89,7 +95,7 @@ typedef struct {
 
 static inline qe_priv_t *qe(struct rte_mbuf *m) { return (qe_priv_t *)rte_mbuf_to_priv(m); }
 
-// packet_t is a view of the mbuf's data. 
+// packet_t is a view of the mbuf's data (one segment: multi-segment frames are dropped at rx).
 static inline %{packet_t_ty} view_over(struct rte_mbuf *m) {
 	uint8_t *d = rte_pktmbuf_mtod(m, uint8_t *);
 	return (%{packet_t_ty}){ .start = d, .cursor = d, .end = d + rte_pktmbuf_pkt_len(m), .bit_off = 0 };
@@ -97,22 +103,24 @@ static inline %{packet_t_ty} view_over(struct rte_mbuf *m) {
 
 /******** pipeline rings (DPDK rte_ring, single-producer / single-consumer) ********/
 #define RING_SIZE 1024
-#define BURST_SIZE 64   // max mbufs pulled per rx / dispatch / tx call (bounded, so a
-                        // self-recirculating handler can't starve the RX path)
+#define BURST_SIZE 64   // max mbufs pulled per port per rx call and per ring per dispatch call
 #define PORT_RECIRC %{port_recirc}u  // out_event.port sentinel: recirculate, don't egress
 
 // The rings carry mbuf POINTERS (the queue elements themselves).
-static struct rte_ring *dispatch_in;  // parsed + recirculated event-mbufs awaiting handling
-static struct rte_ring *tx_in;        // handled event-mbufs awaiting fan-out + deparse + TX
+static struct rte_ring *rx_in;      // parsed arrivals awaiting handling (rx pulls only what fits)
+static struct rte_ring *recirc_in;  // recirculated events awaiting handling (drop-tail when full)
+static struct rte_ring *tx_in;      // handled event-mbufs awaiting fan-out (drained whole each iteration)
 
 /******** counters, printed at exit ********/
 static struct {
 	uint64_t rx, tx, recirc;     // frames received / sent / recirculated
 	uint64_t parse_drop;         // the entry parser refused the bytes
-	uint64_t ring_drop;          // dispatch_in or tx_in full
+	uint64_t seg_drop;           // a multi-segment (jumbo) frame
+	uint64_t recirc_drop;        // recirc_in full (the program recirculates faster than it drains)
 	uint64_t alloc_drop;         // no mbuf for an output
 	uint64_t port_drop;          // an output to a program port bound to no DPDK port
 	uint64_t tx_drop;            // the NIC's transmit queue full
+	uint64_t bug_drop;           // a ring the design says cannot fill was full
 } st;
 
 /******** ports (program port number <-> DPDK port id) ********/
@@ -262,11 +270,10 @@ void dpdk_init(cfg_t* cfg, int argc, char *argv[]) {
 
 	// single core -> single producer / single consumer rings (lockless); they carry
 	// mbuf pointers, so plain rte_ring (not the value-carrying _elem variant).
-	dispatch_in = rte_ring_create("dispatch_in", RING_SIZE, rte_socket_id(),
-		RING_F_SP_ENQ | RING_F_SC_DEQ);
-	tx_in = rte_ring_create("tx_in", RING_SIZE, rte_socket_id(),
-		RING_F_SP_ENQ | RING_F_SC_DEQ);
-	if (dispatch_in == NULL || tx_in == NULL)
+	rx_in     = rte_ring_create("rx_in",     RING_SIZE, rte_socket_id(), RING_F_SP_ENQ | RING_F_SC_DEQ);
+	recirc_in = rte_ring_create("recirc_in", RING_SIZE, rte_socket_id(), RING_F_SP_ENQ | RING_F_SC_DEQ);
+	tx_in     = rte_ring_create("tx_in",     RING_SIZE, rte_socket_id(), RING_F_SP_ENQ | RING_F_SC_DEQ);
+	if (rx_in == NULL || recirc_in == NULL || tx_in == NULL)
 		rte_exit(EXIT_FAILURE, "failed to create pipeline rings\n");
 
 	uint16_t portid;
@@ -295,27 +302,31 @@ static void dpdk_shutdown(void) {
 		rte_eth_dev_close(port);   // a pcap device flushes its output file here
 	}
 	rte_eal_cleanup();
-	fprintf(stderr, "rx %"PRIu64" tx %"PRIu64" recirc %"PRIu64" dropped: parse %"PRIu64" ring-full %"PRIu64
-		" alloc %"PRIu64" no-port %"PRIu64" tx-full %"PRIu64"\n",
-		st.rx, st.tx, st.recirc, st.parse_drop, st.ring_drop, st.alloc_drop, st.port_drop, st.tx_drop);
+	fprintf(stderr, "rx %"PRIu64" tx %"PRIu64" recirc %"PRIu64" dropped: parse %"PRIu64" jumbo %"PRIu64
+		" recirc-full %"PRIu64" alloc %"PRIu64" no-port %"PRIu64" tx-full %"PRIu64" bug %"PRIu64"\n",
+		st.rx, st.tx, st.recirc, st.parse_drop, st.seg_drop, st.recirc_drop, st.alloc_drop, st.port_drop,
+		st.tx_drop, st.bug_drop);
 }
 |}]
 
 (* ===== pipeline stages ===== *)
 
-(* RX: poll all ports, call the program's parser, enqueue mbuf to dispatch_in. *)
+(* RX: poll every port for at most what fits on rx_in, parse, enqueue. *)
 let dpdk_do_rx = dforiegn [%string {|
-/******** RX: poll every port, parse, enqueue the event-mbuf on dispatch_in ********/
+/******** RX: poll every port for what fits on rx_in, parse, enqueue ********/
 static uint64_t last_active;   // rdtsc of the last packet received, sent or recirculated
 static unsigned do_rx(void) {
 	unsigned total = 0;
 	uint16_t port;
 	RTE_ETH_FOREACH_DEV(port) {
+		unsigned room = rte_ring_free_count(rx_in);   // pull only what fits: the rest waits in the NIC
+		if (room == 0) break;
 		struct rte_mbuf *bufs[BURST_SIZE];
-		const uint16_t nb_rx = rte_eth_rx_burst(port, 0, bufs, BURST_SIZE);
+		const uint16_t nb_rx = rte_eth_rx_burst(port, 0, bufs, room < BURST_SIZE ? (uint16_t)room : BURST_SIZE);
 		total += nb_rx;
 		for (uint16_t i = 0; i < nb_rx; i++) {
 			struct rte_mbuf *m = bufs[i];
+			if (unlikely(m->nb_segs > 1)) { st.seg_drop++; rte_pktmbuf_free(m); continue; } // the view is one segment
 			qe_priv_t *p = qe(m);
 			uint32_t in_port = prog_of_dpdk[port];                 // the program's number for it
 			%{packet_t_ty} view = view_over(m);
@@ -323,71 +334,74 @@ static unsigned do_rx(void) {
 			p->payload_off = (uint32_t)(view.cursor - view.start); // where the payload begins
 			p->ev.meta.in_port = in_port;                          // stamp ingress (read by the handler)
 			st.rx++;
-			if (rte_ring_enqueue(dispatch_in, m) != 0) { st.ring_drop++; rte_pktmbuf_free(m); } // ring full -> drop
+			if (unlikely(rte_ring_enqueue(rx_in, m) != 0)) { st.bug_drop++; rte_pktmbuf_free(m); } // room was checked
 		}
 	}
 	return total;
 }
 |}]
 
-(* DISPATCH: process a burst of mbufs, populate the out_event list and continue to tx stage. *)
+(* DISPATCH: a burst from each input ring; handle each, populate the out_event
+   list and continue to the tx stage. *)
 let dpdk_do_dispatch = dforiegn [%string {|
-/******** DISPATCH: handle a burst of event-mbufs; hand each to tx_in (no copy) ********/
+/******** DISPATCH: a burst from recirc_in and one from rx_in; handle each, hand it to tx_in ********/
+static inline void handle_one(struct rte_mbuf *m) {
+	qe_priv_t *p = qe(m);
+	p->ev.meta.timestamp = now_ns() & 0xFFFFFFFFFFFFull; // stamp at dequeue (Sys.time())
+	p->n_out = %{handle_event_fn}(&p->ev, p->out_events);   // ingress read from p->ev.meta.in_port
+	if (unlikely(rte_ring_enqueue(tx_in, m) != 0)) { st.bug_drop++; rte_pktmbuf_free(m); } // tx_in is drained every iteration
+}
 static void do_dispatch(void) {
 	void *batch[BURST_SIZE];
-	unsigned nb = rte_ring_dequeue_burst(dispatch_in, batch, BURST_SIZE, NULL);
-	for (unsigned b = 0; b < nb; b++) {
-		struct rte_mbuf *m = (struct rte_mbuf *)batch[b];
-		qe_priv_t *p = qe(m);
-		p->ev.meta.timestamp = now_ns() & 0xFFFFFFFFFFFFull; // stamp at dequeue (Sys.time())
-		p->n_out = %{handle_event_fn}(&p->ev, p->out_events);   // ingress read from p->ev.meta.in_port
-		if (rte_ring_enqueue(tx_in, m) != 0) { st.ring_drop++; rte_pktmbuf_free(m); } // ring full -> drop the element
-	}
+	unsigned nb = rte_ring_dequeue_burst(recirc_in, batch, BURST_SIZE, NULL);
+	for (unsigned b = 0; b < nb; b++) handle_one((struct rte_mbuf *)batch[b]);
+	nb = rte_ring_dequeue_burst(rx_in, batch, BURST_SIZE, NULL);
+	for (unsigned b = 0; b < nb; b++) handle_one((struct rte_mbuf *)batch[b]);
 }
 |}]
 
 (* TX: copy mbufs to output and recirculation ports. For events leaving 
    on ports, deparse the event into the mbuf's headroom and transmit.
-	 Recirculated events are re-enqueued on dispatch_in without deparsing. *)
+	 Recirculated events are enqueued on recirc_in without deparsing. *)
 let dpdk_do_tx = dforiegn [%string {|
 /******** TX: fan out each event-mbuf into one copy per output, then route/deparse/send ********/
 static void do_tx(void) {
 	void *batch[BURST_SIZE];
-	unsigned nb = rte_ring_dequeue_burst(tx_in, batch, BURST_SIZE, NULL);
-	// loop: start with b = 1, do all the stuff for the copies
-	// after loop: if nb > 0, do event 0 else free the packet (drop)
-	for (unsigned b = 0; b < nb; b++) { 
-		struct rte_mbuf *m = (struct rte_mbuf *)batch[b];
-		qe_priv_t *ip = qe(m);
-		uint32_t pkt_len = rte_pktmbuf_pkt_len(m);
-		for (uint16_t i = 0; i < ip->n_out; i++) {
-			%{out_event_ty} *oe = &ip->out_events[i];
-			// each output gets its own copy of the input's payload (or none), with
-			// headroom in front for the deparsed header.
-			uint32_t plen = oe->ev.meta.has_payload ? (pkt_len - ip->payload_off) : 0;
-			struct rte_mbuf *c = plen > 0
-				? rte_pktmbuf_copy(m, mbuf_pool, ip->payload_off, plen)
-				: rte_pktmbuf_alloc(mbuf_pool);
-			if (unlikely(c == NULL)) { st.alloc_drop++; continue; }
-			qe_priv_t *cp = qe(c);
-			cp->ev = oe->ev;
-			cp->payload_off = 0;                // the payload now sits at the front of c
-			if (oe->port == PORT_RECIRC) {          // recirculation (generate_self)
-				cp->ev.meta.in_port = %{recirc_port_var}; // it arrives on the recirculation port
-				if (rte_ring_enqueue(dispatch_in, c) != 0) { st.ring_drop++; rte_pktmbuf_free(c); continue; }
-				st.recirc++;
-			} else {                                // output to a port: deparse + transmit
-				uint16_t dport = dpdk_of_prog(oe->port);
-				if (dport == PORT_NONE) { st.port_drop++; rte_pktmbuf_free(c); continue; }
-				%{packet_t_ty} view = view_over(c); // cursor at the payload boundary (front of c)
-				%{deparse_event_fn}(&cp->ev, &view); // writes the header backwards into headroom
-				rte_pktmbuf_prepend(c, (uint16_t)(view.start - view.cursor)); // include the header
-				if (unlikely(rte_eth_tx_burst(dport, 0, &c, 1) < 1)) { st.tx_drop++; rte_pktmbuf_free(c); continue; }
-				st.tx++;
+	unsigned nb;
+	while ((nb = rte_ring_dequeue_burst(tx_in, batch, BURST_SIZE, NULL)) > 0) { // drain it whole
+		for (unsigned b = 0; b < nb; b++) {
+			struct rte_mbuf *m = (struct rte_mbuf *)batch[b];
+			qe_priv_t *ip = qe(m);
+			uint32_t pkt_len = rte_pktmbuf_pkt_len(m);
+			for (uint16_t i = 0; i < ip->n_out; i++) {
+				%{out_event_ty} *oe = &ip->out_events[i];
+				// each output gets its own copy of the input's payload (or none), with
+				// headroom in front for the deparsed header.
+				uint32_t plen = oe->ev.meta.has_payload ? (pkt_len - ip->payload_off) : 0;
+				struct rte_mbuf *c = plen > 0
+					? rte_pktmbuf_copy(m, mbuf_pool, ip->payload_off, plen)
+					: rte_pktmbuf_alloc(mbuf_pool);
+				if (unlikely(c == NULL)) { st.alloc_drop++; continue; }
+				qe_priv_t *cp = qe(c);
+				cp->ev = oe->ev;
+				cp->payload_off = 0;                // the payload now sits at the front of c
+				if (oe->port == PORT_RECIRC) {          // recirculation (generate_self)
+					cp->ev.meta.in_port = %{recirc_port_var}; // it arrives on the recirculation port
+					if (rte_ring_enqueue(recirc_in, c) != 0) { st.recirc_drop++; rte_pktmbuf_free(c); continue; } // drop-tail
+					st.recirc++;
+				} else {                                // output to a port: deparse + transmit
+					uint16_t dport = dpdk_of_prog(oe->port);
+					if (dport == PORT_NONE) { st.port_drop++; rte_pktmbuf_free(c); continue; }
+					%{packet_t_ty} view = view_over(c); // cursor at the payload boundary (front of c)
+					%{deparse_event_fn}(&cp->ev, &view); // writes the header backwards into headroom
+					rte_pktmbuf_prepend(c, (uint16_t)(view.start - view.cursor)); // include the header
+					if (unlikely(rte_eth_tx_burst(dport, 0, &c, 1) < 1)) { st.tx_drop++; rte_pktmbuf_free(c); continue; }
+					st.tx++;
+				}
+				last_active = rte_rdtsc();
 			}
-			last_active = rte_rdtsc();
+			rte_pktmbuf_free(m); // input consumed (copied per output)
 		}
-		rte_pktmbuf_free(m); // input consumed (copied per output)
 	}
 }
 |}]
@@ -424,9 +438,9 @@ static void lcore_main(void) {
 	last_active = rte_rdtsc();
 	while (!force_quit) {
 		if (stats_cycles && rte_rdtsc() >= stats_next) { print_stats(rte_rdtsc(), hz); stats_next += stats_cycles; }
-		if (do_rx() > 0) last_active = rte_rdtsc(); // poll all ports, parse, enqueue on dispatch_in
-		do_dispatch();  // handle a bounded burst, forward to tx_in
-		do_tx();        // fan out a bounded burst: deparse+send; recirc re-enqueues
+		if (do_rx() > 0) last_active = rte_rdtsc(); // poll the ports for what fits, parse, enqueue on rx_in
+		do_dispatch();  // a burst from each input ring, handled and forwarded to tx_in
+		do_tx();        // drain tx_in: clone, deparse, send; a recirculation goes onto recirc_in
 		if (idle_cycles && rte_rdtsc() - last_active > idle_cycles) break;
 	}
 }
