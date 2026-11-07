@@ -32,9 +32,11 @@ open CCoreUtils
       DISP : execute event handlers, fill the mbuf's out_events list, send to tx_in.
       TX   : clone / route each output event, including recirculations. 
 	Stages operate on bursts of mbufs (<= BURST_SIZE)
-  Assumes every output port id used by the program is bound to a valid device.
+  An output to a program port bound to no DPDK port is dropped and counted.
 
   Command line: the EAL's arguments, then `--`, then the program's:
+    --port PROG:DPDK bind the program's port number PROG to DPDK port id DPDK
+                     (a DPDK port not named maps to its own number)
     --idle-exit MS   exit after MS milliseconds without a packet received, sent
                      or recirculated (for runs over pcap devices; 0 = never)
     --stats S        every S seconds, a line on stderr with the period's rates
@@ -109,9 +111,21 @@ static struct {
 	uint64_t parse_drop;         // the entry parser refused the bytes
 	uint64_t ring_drop;          // dispatch_in or tx_in full
 	uint64_t alloc_drop;         // no mbuf for an output
-	uint64_t port_drop;          // an output to a port with no device
+	uint64_t port_drop;          // an output to a program port bound to no DPDK port
 	uint64_t tx_drop;            // the NIC's transmit queue full
 } st;
+
+/******** ports (program port number <-> DPDK port id) ********/
+#define PORT_NONE 0xFFFFu
+static uint32_t prog_of_dpdk[RTE_MAX_ETHPORTS];  // ingress stamp, by DPDK port id
+static uint16_t dpdk_ports[RTE_MAX_ETHPORTS];    // the available DPDK port ids
+static unsigned n_dpdk_ports;
+
+static inline uint16_t dpdk_of_prog(uint32_t prog) {  // PORT_NONE when unbound
+	for (unsigned i = 0; i < n_dpdk_ports; i++)
+		if (prog_of_dpdk[dpdk_ports[i]] == prog) return dpdk_ports[i];
+	return PORT_NONE;
+}
 
 /******** the program's arguments (after the EAL's `--`) ********/
 static uint64_t idle_exit_ms = 0;   // --idle-exit, 0 = never
@@ -121,12 +135,20 @@ static uint64_t stats_s = 0;        // --stats, 0 = never
 // name where the `--` was, so the caller passes argv from there and this starts at 1.
 static int parse_prog_args(int argc, char *argv[]) {
 	for (int i = 1; i < argc; i++) {
-		if (strcmp(argv[i], "--idle-exit") == 0 && i + 1 < argc) {
+		if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
+			char *spec = argv[++i], *colon = strchr(spec, ':');
+			if (!colon) { fprintf(stderr, "bad --port '%s' (expected PROG:DPDK)\n", spec); return 1; }
+			uint32_t prog = (uint32_t)strtoul(spec, NULL, 10);
+			uint16_t dpdk = (uint16_t)strtoul(colon + 1, NULL, 10);
+			if (!rte_eth_dev_is_valid_port(dpdk)) { fprintf(stderr, "--port %s: no DPDK port %u\n", spec, dpdk); return 1; }
+			prog_of_dpdk[dpdk] = prog;
+			fprintf(stderr, "bound port %u to DPDK port %u\n", prog, dpdk);
+		} else if (strcmp(argv[i], "--idle-exit") == 0 && i + 1 < argc) {
 			idle_exit_ms = strtoull(argv[++i], NULL, 10);
 		} else if (strcmp(argv[i], "--stats") == 0 && i + 1 < argc) {
 			stats_s = strtoull(argv[++i], NULL, 10);
 		} else {
-			fprintf(stderr, "unknown argument '%s' (after --: --idle-exit MS, --stats S)\n", argv[i]);
+			fprintf(stderr, "unknown argument '%s' (after --: --port PROG:DPDK, --idle-exit MS, --stats S)\n", argv[i]);
 			return 1;
 		}
 	}
@@ -145,7 +167,6 @@ typedef struct cfg_t {
 	uint16_t tx_ring_size;
 	int      num_mbufs;
 	int      mbuf_cache_size;
-	unsigned num_ports;
 } cfg_t;
 
 cfg_t cfg = {
@@ -153,7 +174,6 @@ cfg_t cfg = {
 	.tx_ring_size = 1024,
 	.num_mbufs = 8191,
 	.mbuf_cache_size = 512,
-	.num_ports = 0 // filled in by dpdk_init
 };
 
 static inline int
@@ -223,13 +243,10 @@ void dpdk_init(cfg_t* cfg, int argc, char *argv[]) {
 	int eal_args = rte_eal_init(argc, argv);
 	if (eal_args < 0)
 		rte_exit(EXIT_FAILURE, "Error with EAL initialization\n");
-	if (parse_prog_args(argc - eal_args, argv + eal_args) != 0)
-		rte_exit(EXIT_FAILURE, "bad program arguments\n");
 	unsigned nb_ports = rte_eth_dev_count_avail();
 	fprintf(stderr, "number of ports: %u\n", nb_ports);
 	if (nb_ports == 0)
 		rte_exit(EXIT_FAILURE, "No Ethernet ports - bye\n");
-	cfg->num_ports = nb_ports;
 	// priv_size carries qe_priv_t (the event + output list) alongside each mbuf's data.
 	uint16_t priv_size = RTE_ALIGN(sizeof(qe_priv_t), RTE_MBUF_PRIV_ALIGN);
 	mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL", cfg->num_mbufs * nb_ports,
@@ -246,9 +263,15 @@ void dpdk_init(cfg_t* cfg, int argc, char *argv[]) {
 		rte_exit(EXIT_FAILURE, "failed to create pipeline rings\n");
 
 	uint16_t portid;
-	RTE_ETH_FOREACH_DEV(portid)
+	n_dpdk_ports = 0;
+	RTE_ETH_FOREACH_DEV(portid) {
 		if (port_init(*cfg, portid, mbuf_pool) != 0)
 			rte_exit(EXIT_FAILURE, "Cannot init port %"PRIu16 "\n", portid);
+		prog_of_dpdk[portid] = portid;   // identity unless --port says otherwise
+		dpdk_ports[n_dpdk_ports++] = portid;
+	}
+	if (parse_prog_args(argc - eal_args, argv + eal_args) != 0)
+		rte_exit(EXIT_FAILURE, "bad program arguments\n");
 	return;
 }
 
@@ -285,10 +308,11 @@ static unsigned do_rx(void) {
 		for (uint16_t i = 0; i < nb_rx; i++) {
 			struct rte_mbuf *m = bufs[i];
 			qe_priv_t *p = qe(m);
+			uint32_t in_port = prog_of_dpdk[port];                 // the program's number for it
 			%{packet_t_ty} view = view_over(m);
-			if (%{parse_event_fn}(&view, &p->ev, (uint32_t)port) != 1) { st.parse_drop++; rte_pktmbuf_free(m); continue; } // drop
+			if (%{parse_event_fn}(&view, &p->ev, in_port) != 1) { st.parse_drop++; rte_pktmbuf_free(m); continue; } // drop
 			p->payload_off = (uint32_t)(view.cursor - view.start); // where the payload begins
-			p->ev.meta.in_port = port;                             // stamp ingress (read by the handler)
+			p->ev.meta.in_port = in_port;                          // stamp ingress (read by the handler)
 			st.rx++;
 			if (rte_ring_enqueue(dispatch_in, m) != 0) { st.ring_drop++; rte_pktmbuf_free(m); } // ring full -> drop
 		}
@@ -343,15 +367,13 @@ static void do_tx(void) {
 				cp->ev.meta.in_port = %{recirc_port_var}; // it arrives on the recirculation port
 				if (rte_ring_enqueue(dispatch_in, c) != 0) { st.ring_drop++; rte_pktmbuf_free(c); continue; }
 				st.recirc++;
-			} else if (oe->port >= cfg.num_ports) {
-				st.port_drop++;
-				rte_pktmbuf_free(c);
-				continue;
 			} else {                                // output to a port: deparse + transmit
+				uint16_t dport = dpdk_of_prog(oe->port);
+				if (dport == PORT_NONE) { st.port_drop++; rte_pktmbuf_free(c); continue; }
 				%{packet_t_ty} view = view_over(c); // cursor at the payload boundary (front of c)
 				%{deparse_event_fn}(&cp->ev, &view); // writes the header backwards into headroom
 				rte_pktmbuf_prepend(c, (uint16_t)(view.start - view.cursor)); // include the header
-				if (unlikely(rte_eth_tx_burst(oe->port, 0, &c, 1) < 1)) { st.tx_drop++; rte_pktmbuf_free(c); continue; }
+				if (unlikely(rte_eth_tx_burst(dport, 0, &c, 1) < 1)) { st.tx_drop++; rte_pktmbuf_free(c); continue; }
 				st.tx++;
 			}
 			last_active = rte_rdtsc();
