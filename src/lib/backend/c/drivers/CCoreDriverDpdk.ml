@@ -14,14 +14,6 @@ open CCoreUtils
 			// loop: start with b = 1, do all the stuff for the copies
 			// after loop: if nb > 0, do event 0 else free the packet (drop)
 
-	TODO: Printfs should be deleted or guarded by #ifdefs
-			- Also, does printf from inside of DPDK work?
-				- DPDK log function write, maybe with certain debug level
-					- RTE_LOG_LINE macro 
-						- to console by default
-							#include <rte_log.h> // defines macros + USER1
-							// Syntax: RTE_LOG_LINE(level, type, "format string", ...)
-							RTE_LOG_LINE(INFO, USER1, "hello");					
 	TODO: 
 		- Multiple cores for each stage as default
 		- Then, the more interesting questions avout how to parallelize and balance
@@ -40,7 +32,16 @@ open CCoreUtils
       DISP : execute event handlers, fill the mbuf's out_events list, send to tx_in.
       TX   : clone / route each output event, including recirculations. 
 	Stages operate on bursts of mbufs (<= BURST_SIZE)
-  Assumes every output port id used by the program is bound to a valid device. *)
+  Assumes every output port id used by the program is bound to a valid device.
+
+  Command line: the EAL's arguments, then `--`, then the program's:
+    --idle-exit MS   exit after MS milliseconds without a packet received, sent
+                     or recirculated (for runs over pcap devices; 0 = never)
+    --stats S        every S seconds, a line on stderr with the period's rates
+  SIGINT and SIGTERM stop the loop; then the ports are stopped and closed (a
+  pcap device flushes its output there) and the counters go to stderr. The
+  driver's own messages go to stderr, so stdout carries only the program's
+  prints. *)
 
 (* compiler-generated constructs referenced in the driver's raw C *)
 let events_ty        = CCoreCPrint.cid_to_string events_cid
@@ -62,6 +63,7 @@ let dpdk_includes = dforiegn {|
 #include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 // dpdk imports
 #include <rte_eal.h>
 #include <rte_ethdev.h>
@@ -100,6 +102,36 @@ static inline %{packet_t_ty} view_over(struct rte_mbuf *m) {
 // The rings carry mbuf POINTERS (the queue elements themselves).
 static struct rte_ring *dispatch_in;  // parsed + recirculated event-mbufs awaiting handling
 static struct rte_ring *tx_in;        // handled event-mbufs awaiting fan-out + deparse + TX
+
+/******** counters, printed at exit ********/
+static struct {
+	uint64_t rx, tx, recirc;     // frames received / sent / recirculated
+	uint64_t parse_drop;         // the entry parser refused the bytes
+	uint64_t ring_drop;          // dispatch_in or tx_in full
+	uint64_t alloc_drop;         // no mbuf for an output
+	uint64_t port_drop;          // an output to a port with no device
+	uint64_t tx_drop;            // the NIC's transmit queue full
+} st;
+
+/******** the program's arguments (after the EAL's `--`) ********/
+static uint64_t idle_exit_ms = 0;   // --idle-exit, 0 = never
+static uint64_t stats_s = 0;        // --stats, 0 = never
+
+// rte_eal_init returns the number of arguments it consumed and puts the program
+// name where the `--` was, so the caller passes argv from there and this starts at 1.
+static int parse_prog_args(int argc, char *argv[]) {
+	for (int i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "--idle-exit") == 0 && i + 1 < argc) {
+			idle_exit_ms = strtoull(argv[++i], NULL, 10);
+		} else if (strcmp(argv[i], "--stats") == 0 && i + 1 < argc) {
+			stats_s = strtoull(argv[++i], NULL, 10);
+		} else {
+			fprintf(stderr, "unknown argument '%s' (after --: --idle-exit MS, --stats S)\n", argv[i]);
+			return 1;
+		}
+	}
+	return 0;
+}
 |}]
 
 (* ===== config + EAL / port / ring initialization ===== *)
@@ -127,7 +159,6 @@ cfg_t cfg = {
 static inline int
 port_init(cfg_t cfg, uint16_t port, struct rte_mempool *mbuf_pool)
 {
-	printf("initializing port %u\n", port);
 	struct rte_eth_conf port_conf;
 	const uint16_t rx_rings = 1, tx_rings = 1;
 	uint16_t nb_rxd = cfg.rx_ring_size;
@@ -144,7 +175,7 @@ port_init(cfg_t cfg, uint16_t port, struct rte_mempool *mbuf_pool)
 
 	retval = rte_eth_dev_info_get(port, &dev_info);
 	if (retval != 0) {
-		printf("Error during getting device (port %u) info: %s\n",
+		fprintf(stderr, "Error during getting device (port %u) info: %s\n",
 				port, strerror(-retval));
 		return retval;
 	}
@@ -184,14 +215,18 @@ port_init(cfg_t cfg, uint16_t port, struct rte_mempool *mbuf_pool)
 	if (retval != 0)
 		return retval;
 
+	fprintf(stderr, "DPDK port %u up (%s)\n", port, dev_info.driver_name);
 	return 0;
 }
 
 void dpdk_init(cfg_t* cfg, int argc, char *argv[]) {
-	if (rte_eal_init(argc, argv) < 0)
+	int eal_args = rte_eal_init(argc, argv);
+	if (eal_args < 0)
 		rte_exit(EXIT_FAILURE, "Error with EAL initialization\n");
+	if (parse_prog_args(argc - eal_args, argv + eal_args) != 0)
+		rte_exit(EXIT_FAILURE, "bad program arguments\n");
 	unsigned nb_ports = rte_eth_dev_count_avail();
-	printf("number of ports: %u\n", nb_ports);
+	fprintf(stderr, "number of ports: %u\n", nb_ports);
 	if (nb_ports == 0)
 		rte_exit(EXIT_FAILURE, "No Ethernet ports - bye\n");
 	cfg->num_ports = nb_ports;
@@ -216,6 +251,22 @@ void dpdk_init(cfg_t* cfg, int argc, char *argv[]) {
 			rte_exit(EXIT_FAILURE, "Cannot init port %"PRIu16 "\n", portid);
 	return;
 }
+
+static void dpdk_shutdown(void) {
+	uint16_t port;
+	RTE_ETH_FOREACH_DEV(port) {
+		struct rte_eth_stats es;   // the NIC's own counters
+		if (rte_eth_stats_get(port, &es) == 0)
+			fprintf(stderr, "DPDK port %u: rx %"PRIu64" tx %"PRIu64" rx-missed %"PRIu64" rx-nombuf %"PRIu64" tx-errors %"PRIu64"\n",
+				port, es.ipackets, es.opackets, es.imissed, es.rx_nombuf, es.oerrors);
+		rte_eth_dev_stop(port);
+		rte_eth_dev_close(port);   // a pcap device flushes its output file here
+	}
+	rte_eal_cleanup();
+	fprintf(stderr, "rx %"PRIu64" tx %"PRIu64" recirc %"PRIu64" dropped: parse %"PRIu64" ring-full %"PRIu64
+		" alloc %"PRIu64" no-port %"PRIu64" tx-full %"PRIu64"\n",
+		st.rx, st.tx, st.recirc, st.parse_drop, st.ring_drop, st.alloc_drop, st.port_drop, st.tx_drop);
+}
 |}]
 
 (* ===== pipeline stages ===== *)
@@ -223,21 +274,26 @@ void dpdk_init(cfg_t* cfg, int argc, char *argv[]) {
 (* RX: poll all ports, call the program's parser, enqueue mbuf to dispatch_in. *)
 let dpdk_do_rx = dforiegn [%string {|
 /******** RX: poll every port, parse, enqueue the event-mbuf on dispatch_in ********/
-static void do_rx(void) {
+static uint64_t last_active;   // rdtsc of the last packet received, sent or recirculated
+static unsigned do_rx(void) {
+	unsigned total = 0;
 	uint16_t port;
 	RTE_ETH_FOREACH_DEV(port) {
 		struct rte_mbuf *bufs[BURST_SIZE];
 		const uint16_t nb_rx = rte_eth_rx_burst(port, 0, bufs, BURST_SIZE);
+		total += nb_rx;
 		for (uint16_t i = 0; i < nb_rx; i++) {
 			struct rte_mbuf *m = bufs[i];
 			qe_priv_t *p = qe(m);
 			%{packet_t_ty} view = view_over(m);
-			if (%{parse_event_fn}(&view, &p->ev, (uint32_t)port) != 1) { rte_pktmbuf_free(m); continue; } // drop
+			if (%{parse_event_fn}(&view, &p->ev, (uint32_t)port) != 1) { st.parse_drop++; rte_pktmbuf_free(m); continue; } // drop
 			p->payload_off = (uint32_t)(view.cursor - view.start); // where the payload begins
 			p->ev.meta.in_port = port;                             // stamp ingress (read by the handler)
-			if (rte_ring_enqueue(dispatch_in, m) != 0) rte_pktmbuf_free(m); // ring full -> drop
+			st.rx++;
+			if (rte_ring_enqueue(dispatch_in, m) != 0) { st.ring_drop++; rte_pktmbuf_free(m); } // ring full -> drop
 		}
 	}
+	return total;
 }
 |}]
 
@@ -252,7 +308,7 @@ static void do_dispatch(void) {
 		qe_priv_t *p = qe(m);
 		p->ev.meta.timestamp = (uint32_t)rte_get_tsc_cycles(); // stamp at dequeue (Sys.time())
 		p->n_out = %{handle_event_fn}(&p->ev, p->out_events);   // ingress read from p->ev.meta.in_port
-		if (rte_ring_enqueue(tx_in, m) != 0) rte_pktmbuf_free(m); // ring full -> drop the element
+		if (rte_ring_enqueue(tx_in, m) != 0) { st.ring_drop++; rte_pktmbuf_free(m); } // ring full -> drop the element
 	}
 }
 |}]
@@ -279,22 +335,26 @@ static void do_tx(void) {
 			struct rte_mbuf *c = plen > 0
 				? rte_pktmbuf_copy(m, mbuf_pool, ip->payload_off, plen)
 				: rte_pktmbuf_alloc(mbuf_pool);
-			if (unlikely(c == NULL)) continue;
+			if (unlikely(c == NULL)) { st.alloc_drop++; continue; }
 			qe_priv_t *cp = qe(c);
 			cp->ev = oe->ev;
 			cp->payload_off = 0;                // the payload now sits at the front of c
 			if (oe->port == PORT_RECIRC) {          // recirculation (generate_self)
 				cp->ev.meta.in_port = %{recirc_port_var}; // it arrives on the recirculation port
-				if (rte_ring_enqueue(dispatch_in, c) != 0) rte_pktmbuf_free(c);
+				if (rte_ring_enqueue(dispatch_in, c) != 0) { st.ring_drop++; rte_pktmbuf_free(c); continue; }
+				st.recirc++;
 			} else if (oe->port >= cfg.num_ports) {
-				printf("WARNING: dropping packet to out-of-range port: %u\n", oe->port);
+				st.port_drop++;
 				rte_pktmbuf_free(c);
+				continue;
 			} else {                                // output to a port: deparse + transmit
 				%{packet_t_ty} view = view_over(c); // cursor at the payload boundary (front of c)
 				%{deparse_event_fn}(&cp->ev, &view); // writes the header backwards into headroom
 				rte_pktmbuf_prepend(c, (uint16_t)(view.start - view.cursor)); // include the header
-				if (unlikely(rte_eth_tx_burst(oe->port, 0, &c, 1) < 1)) rte_pktmbuf_free(c);
+				if (unlikely(rte_eth_tx_burst(oe->port, 0, &c, 1) < 1)) { st.tx_drop++; rte_pktmbuf_free(c); continue; }
+				st.tx++;
 			}
+			last_active = rte_rdtsc();
 		}
 		rte_pktmbuf_free(m); // input consumed (copied per output)
 	}
@@ -304,19 +364,49 @@ static void do_tx(void) {
 (* ===== main loop ===== *)
 let dpdk_main = dforiegn {|
 /******** main loop ********/
-static __rte_noreturn void lcore_main(void) {
-	printf("handler loop running -- ctrl-c to quit\n");
-	for (;;) {
-		do_rx();        // poll all ports, parse, enqueue on dispatch_in
+static volatile bool force_quit = false;
+static void on_signal(int sig) { (void)sig; force_quit = true; }
+
+// --stats: the period's rates, the program's and the NIC's (summed over its ports)
+static void print_stats(uint64_t now, uint64_t hz) {
+	static uint64_t t0, rx0, tx0, recirc0, nic_rx0, nic_missed0;
+	uint64_t nic_rx = 0, nic_missed = 0;
+	struct rte_eth_stats es;
+	uint16_t port;
+	RTE_ETH_FOREACH_DEV(port)
+		if (rte_eth_stats_get(port, &es) == 0) { nic_rx += es.ipackets; nic_missed += es.imissed; }
+	if (t0 != 0) {
+		double dt = (double)(now - t0) / (double)hz;
+		fprintf(stderr, "stats rx %.0f tx %.0f recirc %.0f nic-rx %.0f nic-missed %.0f pkt/s\n",
+			(st.rx - rx0) / dt, (st.tx - tx0) / dt, (st.recirc - recirc0) / dt,
+			(nic_rx - nic_rx0) / dt, (nic_missed - nic_missed0) / dt);
+	}
+	t0 = now; rx0 = st.rx; tx0 = st.tx; recirc0 = st.recirc; nic_rx0 = nic_rx; nic_missed0 = nic_missed;
+}
+
+static void lcore_main(void) {
+	fprintf(stderr, "handler loop running -- ctrl-c to quit\n");
+	uint64_t hz = rte_get_tsc_hz();
+	uint64_t idle_cycles = idle_exit_ms * hz / 1000;
+	uint64_t stats_cycles = stats_s * hz, stats_next = rte_rdtsc() + stats_cycles;
+	if (stats_cycles) print_stats(rte_rdtsc(), hz);
+	last_active = rte_rdtsc();
+	while (!force_quit) {
+		if (stats_cycles && rte_rdtsc() >= stats_next) { print_stats(rte_rdtsc(), hz); stats_next += stats_cycles; }
+		if (do_rx() > 0) last_active = rte_rdtsc(); // poll all ports, parse, enqueue on dispatch_in
 		do_dispatch();  // handle a bounded burst, forward to tx_in
 		do_tx();        // fan out a bounded burst: deparse+send; recirc re-enqueues
+		if (idle_cycles && rte_rdtsc() - last_active > idle_cycles) break;
 	}
 }
 
 int main(int argc, char *argv[]) {
+	setvbuf(stdout, NULL, _IOLBF, 0); // the program's prints, line by line even into a pipe
+	signal(SIGINT, on_signal);
+	signal(SIGTERM, on_signal);
 	dpdk_init(&cfg, argc, argv); // init dpdk, ports, memory pools, rings
 	lcore_main();                // the rx / dispatch / tx loop
-	rte_eal_cleanup();
+	dpdk_shutdown();
 	return 0;
 }
 |}
