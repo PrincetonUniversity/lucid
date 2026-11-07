@@ -85,13 +85,11 @@ let table_cell tbl_id key_param mask_param action_param const_arg_param =
   {exp with ety=table_cell_type tbl_id key_param.ety const_arg_param.ety;}
 ;;
 
-(* all-ones constant of a scalar type; -1 converts to all-ones in C for
-   widths too wide for an OCaml int *)
+(* all-ones constant of a scalar type *)
 let ones_scalar ty =
   match (base_type ty).raw_ty with
   | TBool -> vbool true
-  | TInt sz when sz >= 63 -> vint (-1) sz
-  | TInt sz -> vint ((1 lsl sz) - 1) sz
+  | TInt sz -> vbig (Z.pred (Z.shift_left Z.one sz)) sz
   | _ -> failwith "[ones_scalar] expected a scalar type"
 ;;
 

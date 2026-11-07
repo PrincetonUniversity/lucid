@@ -24,7 +24,7 @@ let is_standard n = List.mem n [8; 16; 32; 64]
    with >64. *)
 let maskable n = (not (is_standard n)) && n <= 61
 
-let mask_const n = eval (vint ((1 lsl n) - 1) n)
+let mask_const n = eval (vbig (Z.pred (Z.shift_left Z.one n)) n)
 let mask_to n e = eop BitAnd [e; mask_const n]   (* result type = e.ety = int<n> *)
 
 (* ops whose result can carry bits >= n *)

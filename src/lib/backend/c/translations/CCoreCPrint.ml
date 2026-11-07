@@ -119,7 +119,9 @@ let plain_ty_to_string ?(use_abstract_name=false) ty =
 
 let rec v_to_string (v: v) : string =
   match v with
-  | VInt {value; _} -> string_of_int value
+  (* a decimal constant past INT64_MAX needs a suffix to be unsigned in C *)
+  | VInt {value; _} when Z.gt value (Z.of_int64 Int64.max_int) -> Z.to_string value ^ "ULL"
+  | VInt {value; _} -> Z.to_string value
   | VBool b -> string_of_bool b
   | VSymbol (s, _) -> cid_to_string s
 

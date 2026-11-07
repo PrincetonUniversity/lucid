@@ -1,0 +1,9 @@
+// 64-bit integer constants past OCaml's native int: one with the top bit set,
+// and one at 2^62. Both must reach the C output exactly.
+packet event pkt(int<64> a, int<64> b, Payload.t pl);
+
+handle pkt(int<64> a, int<64> b, Payload.t pl) {
+    int<64> top = 0xFFFFFFFFFFFFFFFFw64;
+    int<64> big = 0x4000000000000000w64;
+    generate_port(ingress_port, pkt(a + top, b + big, pl));
+}

@@ -153,7 +153,7 @@ and translate_exp (e : S.exp) : C.exp =
         | C.Sz i -> i
         | _ -> S.error "[translate_exp] expected a constant size, but got something else"
       in
-      C.EVal (C.vint (Z.to_int z) core_szo_int)
+      C.EVal (C.vinteger (Integer.mod_by_size { size = Z.of_int core_szo_int; value = z }))
     | S.EVar cid -> C.EVar cid
     | S.EOp (op, es) -> C.EOp (translate_op op, List.map translate_exp es)
     | S.ECall (cid, es, unordered) when SyntaxUtils.is_ecall_builtin e -> 

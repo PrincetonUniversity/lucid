@@ -222,7 +222,7 @@ let rec translate_v (v : C.v) (vty:C.ty) : F.v =
   let _ = vty in
   match v with
   | C.VBool(b) -> (F.vbool b).v
-  | C.VInt({value; size}) -> (F.vint (Z.to_int value) (Z.to_int size)).v
+  | C.VInt({value; size}) -> (F.vbig value (Z.to_int size)).v
   | C.VEvent(_) ->
     err "event values are interpreter-internal and should not reach the C backend (a constant event is a constructor call expression)"
   | C.VGlobal(_) -> err "VGlobals should not appear outside of the interpreter's execution"
@@ -329,7 +329,7 @@ let translate_pat (pat:C.pat) (ty : C.ty) : F.pat =
       else F.PMask{value; mask; width}
   | C.PNum(z)  -> 
     let pat_sz = InterpHelpers.intwidth_from_raw_ty ty.raw_ty in
-    F.PVal(F.vint (Z.to_int z) pat_sz)
+    F.PVal(F.vbig z pat_sz)
   | PEvent(cid, params) ->
     (* resolve the frontend's name-only pattern cid to the real event id *)
     let cid = match Hashtbl.find_opt event_cid_of_name (Cid.name cid) with

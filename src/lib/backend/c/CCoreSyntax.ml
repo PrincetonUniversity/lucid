@@ -46,7 +46,7 @@ and ty = {raw_ty:raw_ty; tspan : sp}
 and params = (cid * ty) list
 (* values *)
 and v =
-  | VInt of {value : int; size : size;}
+  | VInt of {value : (Z.t[@opaque]); size : size;} (* arbitrary precision: 64-bit values with the top bit set, and wider *)
   | VBool of bool
   | VSymbol of cid * ty
 and value = {v:v; vty:ty; vspan : sp;}
@@ -325,7 +325,8 @@ let sizeof_ty ty =
 
 (* value constructors *)
 let value v vty = {v=v; vty=vty; vspan=Span.default}
-let vint value size = {v=VInt {value; size = sz size}; vty=ty (TInt(sz size)); vspan=Span.default}
+let vbig value size = {v=VInt {value; size = sz size}; vty=ty (TInt(sz size)); vspan=Span.default}
+let vint value size = vbig (Z.of_int value) size
 let vbool b = {v=VBool b; vty=ty TBool; vspan=Span.default}
 let venum tag ty = {v=VSymbol(tag, ty); vty=ty; vspan=Span.default}
 let vsymbol str ty = venum str ty
@@ -343,8 +344,13 @@ let string_to_value (s:string) =
   vsymbol (cid ("\"" ^ s ^ "\"")) str_ty
 ;;
 
-let extract_vint value = match value.v with
+let extract_vbig value = match value.v with
   | VInt {value; _} -> value
+  | _ -> failwith "expected VInt"
+let extract_vint value = match value.v with
+  | VInt {value; _} ->
+    if Z.fits_int value then Z.to_int value
+    else failwith ("a constant the C backend needs as a machine integer is too wide: " ^ Z.to_string value)
   | _ -> failwith "expected VInt"
 ;;
 let extract_vsymbol v = match v.v with 
