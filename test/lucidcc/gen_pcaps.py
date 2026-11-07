@@ -1,30 +1,17 @@
 #!/usr/bin/env python3
-# Generate the pcap fixtures for test/lucidcc/test_pcap.sh into test/lucidcc/pcaps/ (untracked;
-# test_pcap.sh runs this first, so it never needs to be run by hand).
+# Generate the pcap fixtures for test_pcap.py (which runs this first) into pcaps/.
 #
 # Each fixture is <program>.in.pcap + <program>.expected.pcap. The expected output is
-# computed here in python from what the program should do, never captured from
-# lucidcc's own output -- each fixture is an independent check, not a snapshot.
-# A program with no fixture here is compile-only (test_compiler.sh).
+# computed here from what the program should do, never captured from lucidcc's output,
+# so each fixture is an independent check rather than a snapshot.
 import struct
 import os
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-PCAPS = os.path.join(HERE, "pcaps")
-
-# pcap: little-endian global header, link type 1 (Ethernet), then per-packet
-# (16-byte record header + bytes). Wire bytes are big-endian (network order).
-# Zero timestamps, matching the pcap driver's output.
-def write_pcap(name, pkts):
-    with open(os.path.join(PCAPS, name), "wb") as f:
-        f.write(struct.pack("<IHHiIII", 0xa1b2c3d4, 2, 4, 0, 0, 65535, 1))
-        for p in pkts:
-            f.write(struct.pack("<IIII", 0, 0, len(p), len(p)))
-            f.write(p)
+from driverlib import PCAPS, write_pcap, lucid_frame
 
 def fixture(name, ins, outs):
-    write_pcap(name + ".in.pcap", ins)
-    write_pcap(name + ".expected.pcap", outs)
+    write_pcap(os.path.join(PCAPS, name + ".in.pcap"), ins)
+    write_pcap(os.path.join(PCAPS, name + ".expected.pcap"), outs)
 
 def eth(dst, src, ethertype, payload=b"PAYLOAD-DATA"):
     return bytes.fromhex(dst) + bytes.fromhex(src) + struct.pack(">H", ethertype) + payload
@@ -89,11 +76,6 @@ arp = eth("aabbccddeeff", "112233445566", 0x0806, b"arp-payload.")  # non-IP -> 
 fixture("csum",
     [eth("aabbccddeeff", "112233445566", 0x0800, ipv4(csum=0xdead) + b"PAYLOAD-DATA"), arp],
     [eth("aabbccddeeff", "112233445566", 0x0800, ipv4(csum=rfc1071(ipv4())) + b"PAYLOAD-DATA"), arp])
-
-# ---- Lucid background-event framing: dst=1 ++ src=2 ++ ety 666 ++ 16-bit tag ++ fields --
-def lucid_frame(tag, *fields):
-    return (bytes.fromhex("000000000001") + bytes.fromhex("000000000002")
-            + struct.pack(">HH", 666, tag) + b"".join(struct.pack(">I", f) for f in fields))
 
 # tables1_pcap: Table.install + Table.lookup end-to-end. Event tags are hardcoded from
 # tables1_pcap.dpt's declaration order: query_result=1, do_install=2, do_query=3.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Shared helpers for the C-backend driver tests (test_rawsock.py, test_dpdk.py).
+# Shared helpers for the C-backend tests. scapy is imported only by the live-traffic helpers.
 
 import os
 import platform
@@ -8,8 +8,6 @@ import struct
 import subprocess
 import sys
 import time
-
-from scapy.all import Ether, IP, UDP, Raw, wrpcap, rdpcap
 
 IS_LINUX = platform.system() == "Linux"
 
@@ -24,6 +22,62 @@ def repo_root():
 
 def lucidcc():
     return os.path.join(repo_root(), "lucidcc")
+
+
+def tail(text, n):
+    return "\n".join(text.rstrip().splitlines()[-n:])
+
+
+# ---- local tests (test_compiler.py, test_pcap.py) ----------------------------
+
+def build_lucid():
+    r = subprocess.run(["make"], cwd=repo_root(), capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit("make failed:\n" + tail(r.stdout + r.stderr, 20))
+
+
+def local_test_args(doc):
+    import argparse
+    ap = argparse.ArgumentParser(description=doc, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--no-build", action="store_true", help="skip `make`, reuse the current ./lucidcc")
+    return ap
+
+
+def prepare(args):
+    if not args.no_build:
+        print("building lucidcc (make)...")
+        build_lucid()
+    if not os.access(lucidcc(), os.X_OK):
+        sys.exit(f"lucidcc not found at {lucidcc()} (run `make` first)")
+
+
+def run_lucidcc(dpt, cfile, *flags):
+    return subprocess.run([lucidcc(), dpt, "-o", cfile, *flags],
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+
+def run_gcc(cfile, binfile, libs=()):
+    return subprocess.run(["gcc", "-O2", "-o", binfile, cfile, *libs],
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+
+def gcc_errors(out, n=3):
+    return "\n".join([l for l in out.splitlines() if "error:" in l][:n])
+
+
+def report(results):
+    """results: iterable of (name, ok, detail). Prints each as it arrives; returns an exit code."""
+    passed = failed = 0
+    for name, ok, detail in results:
+        lines = detail.splitlines() if detail else []
+        head = f"  ({lines[0]})" if lines else ""
+        print(f"{'PASS' if ok else 'FAIL'}  {name}{head}")
+        for l in lines[1:]:
+            print("      | " + l)
+        passed, failed = passed + ok, failed + (not ok)
+    print("-----")
+    print(f"{passed} passed, {failed} failed")
+    return 1 if failed or not passed else 0
 
 
 # ---- codegen (--gen) + build --------------------------------------------------
@@ -99,6 +153,7 @@ def event_tags(build_dir_or_cfile, *required):
 
 def reflector_pcap(path, n, pload_size=64):
     """N identical UDP packets (raw ethernet payload), the reflector's input."""
+    from scapy.all import Ether, IP, UDP, Raw, wrpcap
     pkts = [Ether(dst="ff:ff:ff:ff:ff:ff", src="00:11:22:33:44:55") /
             IP(dst="10.0.0.1") / UDP(dport=5000) / Raw(load=bytes(pload_size))
             for _ in range(n)]
@@ -109,6 +164,7 @@ def reflector_pcap(path, n, pload_size=64):
 def reflector_check(send_pcap, recv_pcap):
     """The reflector swaps src/dst MAC: every received packet must be a swapped copy,
     and counts must match."""
+    from scapy.all import Ether, rdpcap
     sent = rdpcap(send_pcap)
     try:
         recv = rdpcap(recv_pcap)
@@ -126,15 +182,38 @@ def reflector_check(send_pcap, recv_pcap):
     print("[+] PASS: counts match and MACs are swapped"); return True
 
 
-def empty_pcap(path):
-    """A valid pcap file with a global header and zero packets (e.g. for an rx port
-    that should receive nothing)."""
+def write_pcap(path, frames):
+    """Ethernet pcap with zero timestamps (what the pcap driver writes)."""
     with open(path, "wb") as f:
         f.write(struct.pack("<IHHiIII", 0xa1b2c3d4, 2, 4, 0, 0, 65535, 1))
+        for p in frames:
+            f.write(struct.pack("<IIII", 0, 0, len(p), len(p)))
+            f.write(p)
+
+
+def read_pcap(path):
+    """Frames of a little-endian, microsecond pcap (the format write_pcap and the drivers use)."""
+    data = open(path, "rb").read()
+    frames, off = [], 24
+    while off + 16 <= len(data):
+        incl = struct.unpack("<I", data[off + 8:off + 12])[0]
+        frames.append(data[off + 16:off + 16 + incl])
+        off += 16 + incl
+    return frames
+
+
+def rdpcap(path):
+    from scapy.all import rdpcap
+    return rdpcap(path)
+
+
+def empty_pcap(path):
+    write_pcap(path, [])
 
 
 def write_frames(path, frames):
     """Write raw frame bytes as an ethernet pcap."""
+    from scapy.all import Ether, wrpcap
     wrpcap(path, [Ether(f) for f in frames])
 
 
@@ -150,6 +229,7 @@ def scanloop_frames(tags, n):
 
 def scanloop_check(recv_pcap, pkt_out_tag, n):
     """Every pkt_out(x) for x in 1..N must have come back (order-independent)."""
+    from scapy.all import rdpcap
     try:
         recv = [bytes(p) for p in rdpcap(recv_pcap)]
     except Exception:
@@ -258,6 +338,7 @@ def poll_until(pcap_path, n, switch, timeout=15):
     """Poll pcap_path until it holds >= n packets or the switch exits or timeout. Returns
     True if the switch is still running (drained N in time), False if it exited early.
     (Offline pcap-PMD transports flush per TX burst, so this ends the run promptly.)"""
+    from scapy.all import rdpcap
     deadline = time.time() + timeout
     while time.time() < deadline:
         if switch.poll() is not None:

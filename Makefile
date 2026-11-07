@@ -77,8 +77,8 @@ test-promote: default
 
 # c compiler tests: codegen goldens + pcap runs
 test-cc: default
-	./test/lucidcc/test_compiler.sh --no-build
-	./test/lucidcc/test_pcap.sh --no-build
+	python3 ./test/lucidcc/test_compiler.py --no-build
+	python3 ./test/lucidcc/test_pcap.py --no-build
 
 # c compiler live-traffic driver tests (Linux, root; see test/lucidcc/README.md)
 test-cc-wire: default

@@ -4,11 +4,11 @@ Regression tests for the `lucidcc` C backend and its three drivers (pcap, raw-so
 DPDK), over a few programs (in `./programs`).
 
 
-- **Compiler tests** `test_compiler.sh`: run the Lucid-C compiler on the programs, 
+- **Compiler tests** `test_compiler.py`: run the Lucid-C compiler on the programs, 
   then compile the C and compare against expected output.
 
-- **PCAP tests** `test_pcap.sh`: compile and test programs with the PCAP driver; 
-  byte compare program output against `pcaps/<name>.expected.pcap`. The expected 
+- **PCAP tests** `test_pcap.py`: compile and test programs with the PCAP driver; 
+  compare output packets against `pcaps/<name>.expected.pcap`. The expected 
   outputs are computed in python by `gen_pcaps.py`, not captured from lucidcc. 
 
 - **RAWSOCK tests** `test_rawsock.py`: compile and test certain programs 
@@ -21,9 +21,9 @@ DPDK), over a few programs (in `./programs`).
 ## Layout
 
 - `programs/` — the `.dpt` sources under test.
-- `expected/` — checked-in expected C, one `<name>.cc` per program (for `test_compiler.sh`).
+- `expected/` — checked-in expected C, one `<name>.cc` per program (for `test_compiler.py`).
 - `gen_pcaps.py` — generates the pcap fixtures (`<name>.in.pcap` + `<name>.expected.pcap`)
-  for `test_pcap.sh`, which runs it first.
+  for `test_pcap.py`, which runs it first.
 - `pcaps/` — untracked; generated fixtures plus the live tests' captures.
 - `_rawsock_build/`, `_dpdk_build/` — per-driver build dirs.
 
@@ -34,13 +34,13 @@ live-traffic tests. Or run each directly:
 
 ```sh
 # codegen gate (compile + golden) -- fast, local
-./test/lucidcc/test_compiler.sh              # build lucidcc, then compile + diff every program
-./test/lucidcc/test_compiler.sh --update     # accept new C as golden (compile-checked first)
-./test/lucidcc/test_compiler.sh --no-build   # reuse the existing ./lucidcc, skip `make`
+./test/lucidcc/test_compiler.py              # build lucidcc, then compile + diff every program
+./test/lucidcc/test_compiler.py --update     # accept new C as golden (compile-checked first)
+./test/lucidcc/test_compiler.py --no-build   # reuse the existing ./lucidcc, skip `make`
 
 # pcap run fixtures -- local
-./test/lucidcc/test_pcap.sh              # generate fixtures, run + byte-compare each
-./test/lucidcc/test_pcap.sh --no-build   # reuse ./lucidcc
+./test/lucidcc/test_pcap.py              # generate fixtures, run + compare each
+./test/lucidcc/test_pcap.py --no-build   # reuse ./lucidcc
 
 # live-traffic drivers -- in the Linux container
 sudo python3 test/lucidcc/test_rawsock.py     # reflector + scanloop over veths
