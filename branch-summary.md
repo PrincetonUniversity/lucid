@@ -58,6 +58,8 @@ tests to check the generated C.
 - (**feature**) **Custom-width ints** Custom-width ints, `int<n>`, are now 
   stored in the smallest C int type that fits, and operations that can overflow 
   are automatically masked. 
+- (**feature**) **Timestamps** The DPDK driver now calculates nanosecond timestamps, 
+  at packet arrival, consistent with the interpreter and tofino targets.
 
 
 ## Drivers

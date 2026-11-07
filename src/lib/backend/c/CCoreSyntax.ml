@@ -176,8 +176,8 @@ let trecord pairs =
   ty (TRecord(cids, tys))
 (* event metadata fields: len = wire length; is_packet = packet vs
    background; has_payload = the event carried an explicit Payload.t; 
-   timestamp = a 32-bit nanosecond stamp at start of event handling *)
-let event_meta_def = trecord [ (Cid.create ["len"], ty (TInt 16)); (Cid.create ["is_packet"], ty (TInt 8)); (Cid.create ["has_payload"], ty (TInt 8)); (Cid.create ["timestamp"], ty (TInt 32)); (Cid.create ["in_port"], ty (TInt 32)) ]
+   timestamp = a 48-bit nanosecond stamp at start of event handling *)
+let event_meta_def = trecord [ (Cid.create ["len"], ty (TInt 16)); (Cid.create ["is_packet"], ty (TInt 8)); (Cid.create ["has_payload"], ty (TInt 8)); (Cid.create ["timestamp"], ty (TInt 48)); (Cid.create ["in_port"], ty (TInt 32)) ]
 (* the tagged variant is program dependent *)
 let tevent_variant = ty (TName(event_variant_cid, None))
 let tevent_meta = ty (TName(event_meta_cid, Some event_meta_def))
@@ -462,8 +462,8 @@ let event_data ev = exp (EOp(Project (cid"data"), [ev])) tevent_variant ev.espan
 let event_meta ev = exp (EOp(Project (cid"meta"), [ev])) tevent_meta ev.espan
 let event_is_packet ev = exp (EOp(Project (cid"is_packet"), [event_meta ev])) (ty (TInt 8)) ev.espan
 (* meta.timestamp -- the per-event nanosecond stamp written by the driver at dequeue;
-   Sys.time() lowers to a read of this on the handler's current event. *)
-let event_timestamp ev = exp (EOp(Project (cid"timestamp"), [event_meta ev])) (ty (TInt 32)) ev.espan
+   Sys.time() lowers to its low 32 bits on the handler's current event. *)
+let event_timestamp ev = exp (EOp(Project (cid"timestamp"), [event_meta ev])) (ty (TInt 48)) ev.espan
 (* meta.in_port -- the ingress port, written by the driver at RX (and inherited by
    recirculated events); the `ingress_port` builtin lowers to a read of this. *)
 let event_in_port ev = exp (EOp(Project (cid"in_port"), [event_meta ev])) (ty (TInt 32)) ev.espan

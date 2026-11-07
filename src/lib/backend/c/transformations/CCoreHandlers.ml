@@ -85,7 +85,7 @@ let replace_meta_builtins ev_exp = object
     let e = super#visit_exp () e in
     match e.e with
     | ECall{f = {e = EVar cid; _}; args = []; _} when Cid.equal cid System.sys_time_cid ->
-      event_timestamp ev_exp
+      ecast (tint 32) (event_timestamp ev_exp)
     | EVar cid when Cid.equal cid (Cid.Id Builtins.ingr_port_id) -> event_in_port ev_exp
     | _ -> e
 end

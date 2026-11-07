@@ -93,7 +93,7 @@ typedef struct {
   uint16_t len;
   uint8_t is_packet;
   uint8_t has_payload;
-  uint32_t timestamp;
+  uint64_t timestamp;
   uint32_t in_port;
 } event_meta;
 uint16_t pkt_tag  = 1;
@@ -216,11 +216,11 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
     bytes->end = buf + len;
     bytes->bit_off = 0;
 }
-// a 32-bit nanosecond timestamp, stamped onto each event at dispatch (Sys.time())
-static uint32_t now_ns(void) {
+// a 48-bit nanosecond timestamp, stamped onto each event at dispatch (Sys.time() is its low 32 bits)
+static uint64_t now_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint32_t)((uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec);
+    return ((uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec) & 0xFFFFFFFFFFFFull;
 }
 
 

@@ -330,7 +330,7 @@ static void do_dispatch(void) {
 	for (unsigned b = 0; b < nb; b++) {
 		struct rte_mbuf *m = (struct rte_mbuf *)batch[b];
 		qe_priv_t *p = qe(m);
-		p->ev.meta.timestamp = (uint32_t)rte_get_tsc_cycles(); // stamp at dequeue (Sys.time())
+		p->ev.meta.timestamp = rte_get_tsc_cycles() & 0xFFFFFFFFFFFFull; // stamp at dequeue (Sys.time())
 		p->n_out = %{handle_event_fn}(&p->ev, p->out_events);   // ingress read from p->ev.meta.in_port
 		if (rte_ring_enqueue(tx_in, m) != 0) { st.ring_drop++; rte_pktmbuf_free(m); } // ring full -> drop the element
 	}

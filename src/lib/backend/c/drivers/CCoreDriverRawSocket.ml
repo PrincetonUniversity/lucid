@@ -86,11 +86,11 @@ let helpers_lib = dforiegn [%string {|
     bytes->end = buf + len;
     bytes->bit_off = 0;
 }
-// a 32-bit nanosecond timestamp, stamped onto each event at dispatch (Sys.time())
-static uint32_t now_ns(void) {
+// a 48-bit nanosecond timestamp, stamped onto each event at dispatch (Sys.time() is its low 32 bits)
+static uint64_t now_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint32_t)((uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec);
+    return ((uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec) & 0xFFFFFFFFFFFFull;
 }
 |}]
 

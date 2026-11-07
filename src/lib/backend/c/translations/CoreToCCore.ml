@@ -642,7 +642,7 @@ let mk_event_dfuns (event_defs : ev_def list) : F.decls =
                    (cid"has_payload", eval (vint (if ed.has_payload then 1 else 0) 8));
                    (* placeholders; the driver overwrites timestamp at dequeue (Sys.time)
                       and in_port at RX (the ingress port) *)
-                   (cid"timestamp", eval (vint 0 32));
+                   (cid"timestamp", eval (vint 0 48));
                    (cid"in_port", eval (vint 0 32)) ])
         with ety = tevent_meta }
     in
