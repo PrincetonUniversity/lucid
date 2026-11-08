@@ -76,6 +76,9 @@ let config = dforiegn {|
 #define BURST 64                   // max frames/elements handled per rx/dispatch/tx call
 #define SLOT_NONE 0xFFFF           // slot_alloc's "pool exhausted" sentinel
 #define MAX_PORTS 64               // max interfaces (Lucid ports) bound at once
+// a platform latency, max'ed with each output's delay: the pcap driver's --latency-ns,
+// which models one; 0 on a real platform
+static uint64_t g_latency_ns = 0;
 |}
 
 (* misc helpers: the port table, packet counter, and Sys.time() clock *)
@@ -146,14 +149,18 @@ static int ring_pop(idx_ring* r, uint16_t* out) {
     if (r->tail == r->head) return -1;            // empty
     *out = r->buf[r->tail]; r->tail = (r->tail + 1) % RING_CAP; return 0;
 }
+static int ring_peek(idx_ring* r, uint16_t* out) {
+    if (r->tail == r->head) return -1;            // empty
+    *out = r->buf[r->tail]; return 0;
+}
 |}
 
 
 (* the slab allocator: a fixed pool of queue elements (a hand-rolled
-   rte_mempool) whose free-list is an idx_ring. A program that delays gives each
-   element the egress of a delayed out-event, kept while it waits in the calendar. *)
-let slab_lib has_delays =
-  let out_port_field = if has_delays
+   rte_mempool) whose free-list is an idx_ring. With a calendar, each element
+   also keeps the egress of a delayed out-event while it waits there. *)
+let slab_lib calendar =
+  let out_port_field = if calendar
     then "\n    uint32_t        out_port;       // a delayed out-event's egress, while it waits in the calendar"
     else "" in
   dforiegn [%string {|
@@ -166,7 +173,8 @@ typedef struct {
     %{out_event_ty} out_events[%{out_events_cap}];
     uint16_t        n_out;
     uint32_t        pkt_len;        // packet bytes from data+HEADROOM
-    uint32_t        payload_off;    // payload boundary, relative to data+HEADROOM%{out_port_field}
+    uint32_t        payload_off;    // payload boundary, relative to data+HEADROOM
+    uint64_t        arrival;        // arrival time (ns) for drivers with a virtual clock (pcap)%{out_port_field}
     uint8_t         data[HEADROOM + SLOT_USABLE];
 } qe_t;
 
@@ -327,7 +335,8 @@ static rx_batch port_rx(int fd, slab_t* s) {
 }
 
 // egress: write a deparsed frame [buf, buf+len) out of the descriptor fd.
-static void send_frame(int fd, uint8_t* buf, size_t len) {
+static void send_frame(int fd, uint8_t* buf, size_t len, uint64_t departure_ns) {
+    (void)departure_ns;                           // real time: the wire has no timestamp to write
     if (fd < 0) { debug_printf("send_frame: no egress descriptor (dropped)\n"); return; }
     if (write(fd, buf, len) < 0) debug_printf("write to fd %d failed: %s\n", fd, strerror(errno));
 }
@@ -381,36 +390,43 @@ static void do_dispatch(void) {
 |}]
 
 (* ===== TX: clone packets and route recircs back to dispatch input queue  ===== *)
-(* A program that delays holds a delayed clone in the calendar until the sender's
-   stamp plus the delay; do_timers then emits it as the transmit stage would. *)
-let tx has_delays =
-  let timers = if has_delays then {|
+(* With a calendar (a program that delays, or the pcap driver, whose latency is an
+   option), a clone whose delay -- the larger of its own and g_latency_ns -- is not
+   0 waits there until the sender's stamp plus that delay; do_timers then emits it
+   as the transmit stage would. A clone leaves at a departure time: a
+   recirculation arrives then, an output is written with it (where a driver can). *)
+let tx ~calendar ~has_delays =
+  let own_delay = if has_delays then "oe->delay" else "0" in
+  let timers = if calendar then {|
 // release the delayed out-events whose departure time has come, earliest first
 static void do_timers(uint64_t now) {
     uint64_t at;
     while (cal_peek(&g_calendar, &at) == 0 && at <= now) {
         uint16_t cidx = cal_pop(&g_calendar);
-        emit_clone(cidx, slot(&g_slab, cidx)->out_port);
+        emit_clone(cidx, slot(&g_slab, cidx)->out_port, at);
     }
 }|} else "" in
-  let hold = if has_delays then {|
-            if (oe->delay > 0) {                         // hold it until the sender's stamp + delay
+  let hold = if calendar then [%string {|
+            uint64_t delay = %{own_delay};
+            if (delay < g_latency_ns) delay = g_latency_ns;
+            if (delay > 0) {                             // hold it until the sender's stamp + delay
                 c->out_port = oe->port;
-                if (cal_push(&g_calendar, (uint64_t)in->ev.meta.timestamp + (uint64_t)oe->delay, cidx) != 0) {
+                if (cal_push(&g_calendar, departure + delay, cidx) != 0) {
                     fprintf(stderr, "calendar full: a delayed event was dropped\n");
                     slot_free(&g_slab, cidx);
                 }
                 continue;
-            }|} else "" in
+            }|}] else "" in
   dforiegn [%string {|
 #define PORT_RECIRC %{port_recirc}u // out_event.port sentinel: recirculate, don't egress
 
-// the clone in slot cidx leaves: recirculated (re-enqueued for dispatch), or
-// deparsed in front of its payload and sent out of `port`
-static void emit_clone(uint16_t cidx, uint32_t port) {
+// the clone in slot cidx leaves at `departure`: recirculated (re-enqueued for
+// dispatch), or deparsed in front of its payload and sent out of `port`
+static void emit_clone(uint16_t cidx, uint32_t port, uint64_t departure) {
     qe_t* c = slot(&g_slab, cidx);
     if (port == PORT_RECIRC) {                       // recirculation (generate_self)
         c->ev.meta.in_port = %{recirc_port_var}; // it arrives on the recirculation port
+        c->arrival = departure;
         if (ring_push(&dispatch_in, cidx) != 0) slot_free(&g_slab, cidx);
     } else {                                         // output to a port: deparse + send
         %{packet_t_ty} view;
@@ -421,7 +437,7 @@ static void emit_clone(uint16_t cidx, uint32_t port) {
         size_t out_len = (size_t)(dump_end - view.cursor);
         // resolve egress port -> descriptor (mirrors do_rx's ingress lookup) and send;
         // send_frame drops if the port is unknown.
-        send_frame(get_out_descriptor(&g_port_map, (int)port), view.cursor, out_len);
+        send_frame(get_out_descriptor(&g_port_map, (int)port), view.cursor, out_len, departure);
         slot_free(&g_slab, cidx);                    // egress done
     }
 }
@@ -444,8 +460,9 @@ static void do_tx(void) {
             uint32_t plen = oe->ev.meta.has_payload ? (in->pkt_len - in->payload_off) : 0;
             if (plen) memcpy(c->data + HEADROOM, in->data + HEADROOM + in->payload_off, plen);
             c->pkt_len = plen;
-            c->payload_off = 0;                          // the payload now sits at the front of c%{hold}
-            emit_clone(cidx, oe->port);
+            c->payload_off = 0;                          // the payload now sits at the front of c
+            uint64_t departure = (uint64_t)in->ev.meta.timestamp; // the sender's stamp%{hold}
+            emit_clone(cidx, oe->port, departure);
         }
         slot_free(&g_slab, idx);                         // input consumed (cloned per output)
     }
@@ -519,7 +536,7 @@ let package_prog decls =
        socket_lib). *)
     let driver_libs = [section_marker "driver libraries"; helpers_lib; ring_lib; slab_lib d]
       @ (if d then [calendar_lib] else []) @ [socket_lib; port_map_lib;] in
-    let pipe = [section_marker "driver pipeline"; pipe_state; rx; dispatch; tx d;] in
+    let pipe = [section_marker "driver pipeline"; pipe_state; rx; dispatch; tx ~calendar:d ~has_delays:d;] in
     let main = [section_marker "driver main"; main d] in
   [
     "lucidprog.c", `Decls (imports @ decls @ driver_config @ driver_libs @ pipe @ main);

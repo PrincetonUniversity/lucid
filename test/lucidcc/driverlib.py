@@ -129,24 +129,41 @@ def reflector_check(send_pcap, recv_pcap):
     print("[+] PASS: counts match and MACs are swapped"); return True
 
 
-def write_pcap(path, frames):
-    """Ethernet pcap with zero timestamps (what the pcap driver writes)."""
+NS_MAGIC = 0xa1b23c4d   # a nanosecond pcap (the pcap driver writes its outputs at its inputs' precision)
+
+
+def write_pcap(path, frames, times=None):
+    """Ethernet pcap: zero timestamps, or with `times` (nanoseconds, one per frame) a
+    nanosecond pcap, so that a test can check the pcap driver's departure times."""
+    magic = 0xa1b2c3d4 if times is None else NS_MAGIC
+    times = times if times is not None else [0] * len(frames)
     with open(path, "wb") as f:
-        f.write(struct.pack("<IHHiIII", 0xa1b2c3d4, 2, 4, 0, 0, 65535, 1))
-        for p in frames:
-            f.write(struct.pack("<IIII", 0, 0, len(p), len(p)))
+        f.write(struct.pack("<IHHiIII", magic, 2, 4, 0, 0, 65535, 1))
+        for t, p in zip(times, frames):
+            f.write(struct.pack("<IIII", t // 1000000000, t % 1000000000, len(p), len(p)))
             f.write(p)
 
 
-def read_pcap(path):
-    """Frames of a little-endian, microsecond pcap (the format write_pcap and the drivers use)."""
+def read_pcap_records(path):
+    """(time in ns, frame) of every record of a little-endian pcap, microsecond or nanosecond."""
     data = open(path, "rb").read()
-    frames, off = [], 24
+    scale = 1 if struct.unpack("<I", data[:4])[0] == NS_MAGIC else 1000
+    records, off = [], 24
     while off + 16 <= len(data):
-        incl = struct.unpack("<I", data[off + 8:off + 12])[0]
-        frames.append(data[off + 16:off + 16 + incl])
+        sec, frac, incl = struct.unpack("<III", data[off:off + 12])
+        records.append((sec * 1000000000 + frac * scale, data[off + 16:off + 16 + incl]))
         off += 16 + incl
-    return frames
+    return records
+
+
+def pcap_has_times(path):
+    """Whether a pcap is nanosecond (one that write_pcap wrote with times)."""
+    return struct.unpack("<I", open(path, "rb").read(4))[0] == NS_MAGIC
+
+
+def read_pcap(path):
+    """Frames of a little-endian pcap (the format write_pcap and the drivers use)."""
+    return [frame for _, frame in read_pcap_records(path)]
 
 
 def write_frames(path, frames):

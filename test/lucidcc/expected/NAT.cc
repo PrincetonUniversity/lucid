@@ -453,6 +453,9 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
 #define BURST 64                   // max frames/elements handled per rx/dispatch/tx call
 #define SLOT_NONE 0xFFFF           // slot_alloc's "pool exhausted" sentinel
 #define MAX_PORTS 64               // max interfaces (Lucid ports) bound at once
+// a platform latency, max'ed with each output's delay: the pcap driver's --latency-ns,
+// which models one; 0 on a real platform
+static uint64_t g_latency_ns = 0;
 
 
 /********************************************************************************/
@@ -486,6 +489,10 @@ static int ring_pop(idx_ring* r, uint16_t* out) {
     if (r->tail == r->head) return -1;            // empty
     *out = r->buf[r->tail]; r->tail = (r->tail + 1) % RING_CAP; return 0;
 }
+static int ring_peek(idx_ring* r, uint16_t* out) {
+    if (r->tail == r->head) return -1;            // empty
+    *out = r->buf[r->tail]; return 0;
+}
 
 
 /********* the queue element (a slab slot) ***********/
@@ -498,6 +505,8 @@ typedef struct {
     uint16_t        n_out;
     uint32_t        pkt_len;        // packet bytes from data+HEADROOM
     uint32_t        payload_off;    // payload boundary, relative to data+HEADROOM
+    uint64_t        arrival;        // arrival time (ns) for drivers with a virtual clock (pcap)
+    uint32_t        out_port;       // a delayed out-event's egress, while it waits in the calendar
     uint8_t         data[HEADROOM + SLOT_USABLE];
 } qe_t;
 
@@ -521,23 +530,54 @@ static void slab_init(slab_t* s) {
 }
 
 
+/********* the calendar: delayed out-events waiting for their departure time ***********/
+typedef struct { uint64_t at; uint64_t seq; uint16_t idx; } cal_ent;
+typedef struct { cal_ent heap[POOL_SIZE]; uint32_t n; uint64_t seq; } calendar_t;
+static calendar_t g_calendar;
+static int cal_before(cal_ent* a, cal_ent* b) { return a->at < b->at || (a->at == b->at && a->seq < b->seq); }
+static int cal_push(calendar_t* c, uint64_t at, uint16_t idx) {
+    if (c->n >= POOL_SIZE) return -1;
+    uint32_t i = c->n++;
+    c->heap[i].at = at; c->heap[i].seq = c->seq++; c->heap[i].idx = idx;
+    while (i > 0) {
+        uint32_t p = (i - 1) / 2;
+        if (!cal_before(&c->heap[i], &c->heap[p])) break;
+        cal_ent t = c->heap[p]; c->heap[p] = c->heap[i]; c->heap[i] = t; i = p;
+    }
+    return 0;
+}
+static int cal_peek(calendar_t* c, uint64_t* at) { if (c->n == 0) return -1; *at = c->heap[0].at; return 0; }
+static uint16_t cal_pop(calendar_t* c) {
+    uint16_t idx = c->heap[0].idx;
+    c->n--;
+    c->heap[0] = c->heap[c->n];
+    uint32_t i = 0;
+    for (;;) {
+        uint32_t l = 2 * i + 1, r = l + 1, m = i;
+        if (l < c->n && cal_before(&c->heap[l], &c->heap[m])) m = l;
+        if (r < c->n && cal_before(&c->heap[r], &c->heap[m])) m = r;
+        if (m == i) break;
+        cal_ent t = c->heap[m]; c->heap[m] = c->heap[i]; c->heap[i] = t; i = m;
+    }
+    return idx;
+}
+
+
 /********* ports (Lucid port number <-> pcap input/output) ***********/
-typedef struct { int port_id; pcap_t* in; pcap_dumper_t* out; int in_eof; } port_t;
+typedef struct { int port_id; pcap_t* in; pcap_dumper_t* out; int in_eof; int has_pending; uint16_t pending; } port_t;
 typedef struct { port_t ports[MAX_PORTS]; int nports; } port_map_t;
 
-// get_in_descriptor returns the whole port (so port_rx can set in_eof); get_out_descriptor
-// looks a port up by id and returns its dumper (NULL = no such port). Consumed only by
-// port_rx / send_frame; opaque to the pipeline.
-static port_t* get_in_descriptor(port_map_t* pm, int port_idx) { return &pm->ports[port_idx]; }
 static pcap_dumper_t* get_out_descriptor(port_map_t* pm, int port_id) {
     for (int i = 0; i < pm->nports; i++) if (pm->ports[i].port_id == port_id) return pm->ports[i].out;
     return NULL;
 }
 
-// parse `--interface PORT:INFILE:OUTFILE` args and open the pcaps.
+// parse `--interface PORT:INFILE:OUTFILE` args (and `--latency-ns N`) and open the
+// pcaps at nanosecond precision: a record's timestamp is the packet's arrival time.
 static int init_port_map(port_map_t* pm, int argc, char** argv) {
     char errbuf[PCAP_ERRBUF_SIZE];
     for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--latency-ns") == 0 && i + 1 < argc) { g_latency_ns = strtoull(argv[++i], NULL, 10); continue; }
         if (strcmp(argv[i], "--interface") == 0 && i + 1 < argc) {
             char* spec = argv[++i];
             char* c1 = strchr(spec, ':');
@@ -548,7 +588,7 @@ static int init_port_map(port_map_t* pm, int argc, char** argv) {
             const char* infile = c1 + 1;
             const char* outfile = c2 + 1;
             if (pm->nports >= MAX_PORTS) { fprintf(stderr, "too many interfaces (max %d)\n", MAX_PORTS); return 1; }
-            pcap_t* in = pcap_open_offline(infile, errbuf);
+            pcap_t* in = pcap_open_offline_with_tstamp_precision(infile, PCAP_TSTAMP_PRECISION_NANO, errbuf);
             if (!in) { fprintf(stderr, "open input '%s': %s\n", infile, errbuf); return 1; }
             pcap_dumper_t* out = pcap_dump_open(in, outfile);
             if (!out) { fprintf(stderr, "open output '%s': %s\n", outfile, pcap_geterr(in)); return 1; }
@@ -556,45 +596,13 @@ static int init_port_map(port_map_t* pm, int argc, char** argv) {
             pm->ports[pm->nports].in = in;
             pm->ports[pm->nports].out = out;
             pm->ports[pm->nports].in_eof = 0;
+            pm->ports[pm->nports].has_pending = 0;
             pm->nports++;
-            printf("bound port %d: %s -> %s\n", port_id, infile, outfile);
+            fprintf(stderr, "bound port %d: %s -> %s\n", port_id, infile, outfile);
         }
         // ignore unknown args (e.g. the .dpt path, for argv-compatibility with lucidSwitch)
     }
     return 0;
-}
-
-
-// a burst of freshly-read slab slots (pkt_len set, not yet parsed).
-typedef struct { uint16_t n; uint16_t idx[BURST]; } rx_batch;
-
-// read up to BURST frames from a port's input pcap into slots allocated from `s`. 
-// Sets in_eof when capture is done.
-static rx_batch port_rx(port_t* p, slab_t* s) {
-    rx_batch batch; batch.n = 0;
-    while (batch.n < BURST) {
-        uint16_t idx = slot_alloc(s);
-        if (idx == SLOT_NONE) break;                       // pool exhausted -> drop-at-birth
-        struct pcap_pkthdr* h; const u_char* data;
-        int r = pcap_next_ex(p->in, &h, &data);
-        if (r != 1) { slot_free(s, idx); p->in_eof = 1; break; } // EOF/error -> done with this port
-        qe_t* q = slot(s, idx);
-        uint32_t len = h->caplen; if (len > SLOT_USABLE) len = SLOT_USABLE;
-        memcpy(q->data + HEADROOM, data, len);
-        q->pkt_len = len;
-        batch.idx[batch.n++] = idx;
-    }
-    return batch;
-}
-
-// egress: dump the deparsed frame [buf, buf+len) to the port's output pcap. 
-// output timestamp is always 0 for deterministic output comparison.
-static void send_frame(pcap_dumper_t* out, uint8_t* buf, size_t len) {
-    if (out == NULL) { debug_printf("send_frame: no egress dumper (dropped)\n"); return; }
-    struct pcap_pkthdr h = {0};   // ts = 0 (see above)
-    h.caplen = (bpf_u_int32)len;
-    h.len    = (bpf_u_int32)len;
-    pcap_dump((u_char*)out, &h, buf);
 }
 
 
@@ -610,49 +618,83 @@ static idx_ring     tx_in;         // handled elements awaiting fan-out + depars
 static uint64_t     pkt_ct = 0;    // rx packet counter
 
 
-// parse the frame sitting in slot `idx` (pkt_len bytes at data+HEADROOM) into its event
-// and enqueue it for dispatch; drop (free the slot) on parse failure.
-static void ingest_slot(uint16_t idx, int in_port) {
+// the node's clock: the stamp of the last event dequeued (the arrival rule advances it)
+static uint64_t g_clock = 0;
+
+// hold the port's next record in a slot (arrival = the record's timestamp); 1 if it has one
+static int port_fetch(port_t* p, slab_t* s) {
+    if (p->has_pending) return 1;
+    if (p->in_eof) return 0;
+    struct pcap_pkthdr* h; const u_char* data;
+    int r = pcap_next_ex(p->in, &h, &data);
+    if (r != 1) { p->in_eof = 1; return 0; }
+    uint16_t idx = slot_alloc(s);
+    if (idx == SLOT_NONE) { fprintf(stderr, "packet pool exhausted\n"); p->in_eof = 1; return 0; }
+    qe_t* q = slot(s, idx);
+    uint32_t len = h->caplen; if (len > SLOT_USABLE) len = SLOT_USABLE;
+    memcpy(q->data + HEADROOM, data, len);
+    q->pkt_len = len;
+    q->arrival = (uint64_t)h->ts.tv_sec * 1000000000ull + (uint64_t)h->ts.tv_usec; // nanoseconds at this precision
+    p->pending = idx; p->has_pending = 1;
+    return 1;
+}
+
+// the port whose next record arrives first (its time in *t), or -1 when every input is done
+static int next_input_port(port_map_t* pm, slab_t* s, uint64_t* t) {
+    int best = -1; uint64_t bt = UINT64_MAX;
+    for (int i = 0; i < pm->nports; i++) {
+        port_t* p = &pm->ports[i];
+        if (!port_fetch(p, s)) continue;
+        uint64_t at = slot(s, p->pending)->arrival;
+        if (at < bt) { bt = at; best = i; }
+    }
+    *t = bt;
+    return best;
+}
+
+// egress: dump the deparsed frame [buf, buf+len) to the port's output pcap, stamped
+// with its departure time
+static void send_frame(pcap_dumper_t* out, uint8_t* buf, size_t len, uint64_t departure_ns) {
+    if (out == NULL) { debug_printf("send_frame: no egress dumper (dropped)\n"); return; }
+    struct pcap_pkthdr h = {0};
+    h.ts.tv_sec = (time_t)(departure_ns / 1000000000ull);
+    h.ts.tv_usec = (suseconds_t)(departure_ns % 1000000000ull);   // nanoseconds: the dumper has the input's precision
+    h.caplen = (bpf_u_int32)len;
+    h.len    = (bpf_u_int32)len;
+    pcap_dump((u_char*)out, &h, buf);
+}
+
+
+// parse the frame in slot `idx` into its event; 1 if it parsed (the slot is freed otherwise)
+static int ingest_slot(uint16_t idx, int in_port) {
     qe_t* q = slot(&g_slab, idx);
     packet_t view;
     init_cursor(q->data + HEADROOM, q->pkt_len, &view);
-    if (parse_event(&view, &q->ev, (uint32_t)in_port) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return; }
-    q->payload_off = (uint32_t)(view.cursor - (q->data + HEADROOM)); // where the payload begins
-    q->ev.meta.in_port = in_port;                                    // ingress (read by the handler)
-    if (ring_push(&dispatch_in, idx) != 0) slot_free(&g_slab, idx);  // ring full (shouldn't happen)
-    else pkt_ct++;
+    if (parse_event(&view, &q->ev, (uint32_t)in_port) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return 0; }
+    q->payload_off = (uint32_t)(view.cursor - (q->data + HEADROOM));
+    q->ev.meta.in_port = in_port;
+    pkt_ct++;
+    return 1;
 }
-
-/******** RX: read a bounded burst from every port, parse + enqueue each on dispatch_in ********/
-static void do_rx(void) {
-    for (int p = 0; p < g_port_map.nports; p++) {
-        rx_batch batch = port_rx(get_in_descriptor(&g_port_map, p), &g_slab);
-        for (uint16_t i = 0; i < batch.n; i++) ingest_slot(batch.idx[i], g_port_map.ports[p].port_id);
-    }
-}
-
-
-/******** DISPATCH: handle a bounded burst of elements; hand each to tx_in (no copy) ********/
-static void do_dispatch(void) {
-    for (int b = 0; b < BURST; b++) {
-        uint16_t idx;
-        if (ring_pop(&dispatch_in, &idx) != 0) break;
-        qe_t* q = slot(&g_slab, idx);
-        q->ev.meta.timestamp = now_ns();                    // stamp at dequeue (arriving + recirculated)
-        q->n_out = handle_event(&q->ev, q->out_events); // ingress read from q->ev.meta.in_port
-        if (ring_push(&tx_in, idx) != 0) slot_free(&g_slab, idx); // ring full (shouldn't happen) -> drop
-    }
+// handle one element: the arrival rule stamps it, the handler runs, its outputs go to tx
+static void dispatch_one(uint16_t idx) {
+    qe_t* q = slot(&g_slab, idx);
+    if (q->arrival > g_clock) g_clock = q->arrival;
+    q->ev.meta.timestamp = g_clock & 0xFFFFFFFFFFFFull;
+    q->n_out = handle_event(&q->ev, q->out_events);
+    if (ring_push(&tx_in, idx) != 0) slot_free(&g_slab, idx);
 }
 
 
 #define PORT_RECIRC 4294967295u // out_event.port sentinel: recirculate, don't egress
 
-// the clone in slot cidx leaves: recirculated (re-enqueued for dispatch), or
-// deparsed in front of its payload and sent out of `port`
-static void emit_clone(uint16_t cidx, uint32_t port) {
+// the clone in slot cidx leaves at `departure`: recirculated (re-enqueued for
+// dispatch), or deparsed in front of its payload and sent out of `port`
+static void emit_clone(uint16_t cidx, uint32_t port, uint64_t departure) {
     qe_t* c = slot(&g_slab, cidx);
     if (port == PORT_RECIRC) {                       // recirculation (generate_self)
         c->ev.meta.in_port = recirculation_port; // it arrives on the recirculation port
+        c->arrival = departure;
         if (ring_push(&dispatch_in, cidx) != 0) slot_free(&g_slab, cidx);
     } else {                                         // output to a port: deparse + send
         packet_t view;
@@ -663,11 +705,19 @@ static void emit_clone(uint16_t cidx, uint32_t port) {
         size_t out_len = (size_t)(dump_end - view.cursor);
         // resolve egress port -> descriptor (mirrors do_rx's ingress lookup) and send;
         // send_frame drops if the port is unknown.
-        send_frame(get_out_descriptor(&g_port_map, (int)port), view.cursor, out_len);
+        send_frame(get_out_descriptor(&g_port_map, (int)port), view.cursor, out_len, departure);
         slot_free(&g_slab, cidx);                    // egress done
     }
 }
 
+// release the delayed out-events whose departure time has come, earliest first
+static void do_timers(uint64_t now) {
+    uint64_t at;
+    while (cal_peek(&g_calendar, &at) == 0 && at <= now) {
+        uint16_t cidx = cal_pop(&g_calendar);
+        emit_clone(cidx, slot(&g_slab, cidx)->out_port, at);
+    }
+}
 
 /******** TX: fan out each element into one copy per output, then route/deparse/send ********/
 static void do_tx(void) {
@@ -687,7 +737,18 @@ static void do_tx(void) {
             if (plen) memcpy(c->data + HEADROOM, in->data + HEADROOM + in->payload_off, plen);
             c->pkt_len = plen;
             c->payload_off = 0;                          // the payload now sits at the front of c
-            emit_clone(cidx, oe->port);
+            uint64_t departure = (uint64_t)in->ev.meta.timestamp; // the sender's stamp
+            uint64_t delay = 0;
+            if (delay < g_latency_ns) delay = g_latency_ns;
+            if (delay > 0) {                             // hold it until the sender's stamp + delay
+                c->out_port = oe->port;
+                if (cal_push(&g_calendar, departure + delay, cidx) != 0) {
+                    fprintf(stderr, "calendar full: a delayed event was dropped\n");
+                    slot_free(&g_slab, cidx);
+                }
+                continue;
+            }
+            emit_clone(cidx, oe->port, departure);
         }
         slot_free(&g_slab, idx);                         // input consumed (cloned per output)
     }
@@ -699,35 +760,40 @@ static void do_tx(void) {
 /********************************************************************************/
 
 int main(int argc, char** argv) {
-    if (init_port_map(&g_port_map, argc, argv) != 0) { fprintf(stderr, "failed to init port map\n"); return 1; }
-    if (g_port_map.nports == 0) {
-        fprintf(stderr, "usage: %s --interface PORT:IN:OUT [--interface PORT:IN:OUT ...]\n", argv[0]);
-        return 1;
-    }
     slab_init(&g_slab);
     ring_init(&dispatch_in);
     ring_init(&tx_in);
-    printf("Init complete.\n");
-    fflush(stdout);
-
-    // replay loop: after each rx burst, fully drain the pipeline (including
-    // recirculation chains, which advance one dispatch->tx step at a time)
-    // before reading more input. Offline replay must be lossless: unpaced reads
-    // against a bounded slot pool would otherwise hit do_tx's pool-exhausted
-    // drop under recirculation load. (The real-time drivers keep bounded
-    // bursts -- backpressure is correct when the wire sets the pace.)
-    for (;;) {
-        do_rx();
-        while (!ring_empty(&dispatch_in) || !ring_empty(&tx_in)) {
-            do_dispatch();
-            do_tx();
-        }
-        int all_eof = 1;
-        for (int i = 0; i < g_port_map.nports; i++) if (!g_port_map.ports[i].in_eof) all_eof = 0;
-        if (all_eof && ring_empty(&dispatch_in) && ring_empty(&tx_in)) break;
+    if (init_port_map(&g_port_map, argc, argv) != 0) { fprintf(stderr, "failed to init port map\n"); return 1; }
+    if (g_port_map.nports == 0) {
+        fprintf(stderr, "usage: %s --interface PORT:IN:OUT [--interface PORT:IN:OUT ...] [--latency-ns N]\n", argv[0]);
+        return 1;
     }
-
-    printf("Processed %llu packets\n", (unsigned long long)pkt_ct);
+    // the replay loop, in time order: the next thing to handle is whichever comes first,
+    // a delayed output that is due, the earliest unread input record, or the head of the
+    // recirculation queue (whose arrivals are non-decreasing, since parents are handled
+    // in time order); outputs are drained after each, so the replay is lossless
+    for (;;) {
+        uint64_t t_in; int p = next_input_port(&g_port_map, &g_slab, &t_in);
+        uint16_t qidx; int have_q = ring_peek(&dispatch_in, &qidx) == 0;
+        uint64_t t_q = have_q ? slot(&g_slab, qidx)->arrival : UINT64_MAX;
+        uint64_t t_cal; int have_cal = cal_peek(&g_calendar, &t_cal) == 0;
+        if (p < 0 && !have_q && !have_cal) break;
+        if (have_cal && t_cal <= t_in && t_cal <= t_q) { // a due departure first: it only writes or re-enqueues
+            do_timers(t_cal);
+            continue;
+        }
+        if (p >= 0 && t_in < t_q) {                    // a tie goes to the queue: it was scheduled first
+            port_t* pt = &g_port_map.ports[p];
+            uint16_t idx = pt->pending; pt->has_pending = 0;
+            if (ingest_slot(idx, pt->port_id)) dispatch_one(idx);
+        } else {
+            ring_pop(&dispatch_in, &qidx);
+            dispatch_one(qidx);
+        }
+        while (!ring_empty(&tx_in)) do_tx();
+    }
+    fflush(stdout);
+    fprintf(stderr, "Processed %llu packets\n", (unsigned long long)pkt_ct);
     for (int i = 0; i < g_port_map.nports; i++) {
         pcap_dump_close(g_port_map.ports[i].out);
         pcap_close(g_port_map.ports[i].in);
