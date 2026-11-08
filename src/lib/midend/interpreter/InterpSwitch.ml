@@ -58,7 +58,8 @@ type ingress_destination =
    handler vs. an egress handler. *)
 type send_intent =
   | FromIngress of ingress_destination * event_val
-  | FromEgress  of int (* out_port *) * event_val
+  | FromEgress  of int (* out_port *) * event_val * event_val
+    (* second evant val is before egress serialization, for exit logging *) 
 
 
 type state =

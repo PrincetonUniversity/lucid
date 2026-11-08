@@ -533,6 +533,22 @@ let event_exit_to_json swid port_opt event time =
 ;;
 
 
+(* exit record for --json output: the event as it was generated (name and
+   args; or for a packt event, type "packet" and its bytes), output port, 
+   and "wire_bytes", which is the serialized *)
+let event_exit_record_json swid port event wire_bytes time =
+  let open Yojson.Basic in
+  let wire_hex = BitString.of_byte_string wire_bytes |> BitString.bits_to_hexstr in
+  `Assoc
+    [ ( "event_exit"
+      , `Assoc
+          (event_to_json event
+           @ [ "locations", `List [`String (Printf.sprintf "%i:%i" swid port)]
+             ; "timestamp", `Int time
+             ; "wire_bytes", `String wire_hex ]) ) ]
+  |> pretty_to_string
+;;
+
 let interp_report_json msgty msg swid_opt =
 `Assoc ([msgty, `String msg]
   @ match swid_opt with

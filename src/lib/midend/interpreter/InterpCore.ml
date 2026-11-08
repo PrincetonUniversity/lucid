@@ -517,7 +517,7 @@ let rec interp_statement st hdl_sort locals s =
           {event with eserialized = false} (* background events stay as events *)
         | EPacket -> InterpDeparsing.serialize_packet_event event
       in
-      InterpSwitch.emit st (FromEgress (port, event_val));
+      InterpSwitch.emit st (FromEgress (port, event_val, event));
       locals
     )
     | HControl -> (error "control events are not implemented")

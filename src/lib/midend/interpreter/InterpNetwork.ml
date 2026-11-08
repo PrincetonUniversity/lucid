@@ -23,8 +23,19 @@ open InterpSwitch
 type network_state = state array
 
 
-(* generate an event to stdio or the exit log *)
-let log_exit port (ievent:ievent) current_time st =
+(* the bytes that an exiting event puts on the wire (what a socket would send) *)
+let exit_wire_bytes st (ev : event_val) =
+  let ev =
+    match ev.eserialized, Env.find_opt ev.eid st.event_sorts with
+    | false, Some EPacket -> InterpDeparsing.serialize_packet_event ev
+    | _ -> ev
+  in
+  InterpSocket.event_to_packetbuf ev |> Cstruct.to_string
+;;
+
+(* generate an event to stdio or the exit log. [orig] is the event as it was
+   generated, before any egress serialization (default: the exiting event). *)
+let log_exit ?orig port (ievent:ievent) current_time st =
   if InterpConfig.cfg.interactive
     then (
       InterpJson.event_exit_to_json
@@ -33,15 +44,24 @@ let log_exit port (ievent:ievent) current_time st =
         ievent.sevent
         current_time
       |> print_endline)
-    else Queue.push (ievent, Some(port), current_time) st.exits
+    else (
+      if InterpConfig.cfg.json then
+        InterpJson.event_exit_record_json
+          st.swid
+          port
+          (Option.default ievent.sevent orig)
+          (exit_wire_bytes st ievent.sevent)
+          current_time
+        |> print_endline;
+      Queue.push (ievent, Some(port), current_time) st.exits)
 ;;
 
 (* send an event out a port: to a bound socket if there is one, otherwise
    log/print it as an exit from the simulated network. This is the only place
    the interpreter performs external I/O. *)
-let emit_or_log_exit port (ievent:ievent) current_time st =
+let emit_or_log_exit ?orig port (ievent:ievent) current_time st =
   match IntMap.find_opt port st.sockets with
-    | None -> log_exit port ievent current_time st
+    | None -> log_exit ?orig port ievent current_time st
     | Some(socket) -> InterpSocket.send_event socket ievent.sevent
 ;;
 
@@ -100,14 +120,14 @@ let deliver_ingress (net : network_state) src ingress_destination event_val : un
 ;;
 
 (* deliver an event generated in an egress handler at switch [src]. *)
-let deliver_egress (net : network_state) src out_port event_val : unit =
+let deliver_egress (net : network_state) src out_port event_val orig : unit =
   let src_sw = net.(src) in
   let dst_opt = InterpSim.lookup_dst src_sw.config.links (src_sw.swid, out_port) in
   let time = gtime src_sw in
   match dst_opt with
   | None ->
     let ievent = to_internal_event event_val {switch = Some src_sw.swid; port = out_port} time in
-    emit_or_log_exit out_port ievent time src_sw
+    emit_or_log_exit ~orig out_port ievent time src_sw
   | Some (dst_id, dst_port) ->
     let ievent = to_internal_event event_val {switch = Some dst_id; port = dst_port} time in
     (* send and arrival times are the same -- 0-latency egress, for now *)
@@ -118,7 +138,7 @@ let deliver_egress (net : network_state) src out_port event_val : unit =
 let deliver (net : network_state) ~(src : int) (intent : send_intent) : unit =
   match intent with
   | FromIngress (dest, event_val) -> deliver_ingress net src dest event_val
-  | FromEgress (out_port, event_val) -> deliver_egress net src out_port event_val
+  | FromEgress (out_port, event_val, orig) -> deliver_egress net src out_port event_val orig
 ;;
 
 (* deliver everything switch [swid] has queued in its mailbox, then clear it.
