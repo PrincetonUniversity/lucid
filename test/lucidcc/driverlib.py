@@ -129,7 +129,7 @@ def reflector_check(send_pcap, recv_pcap):
     print("[+] PASS: counts match and MACs are swapped"); return True
 
 
-NS_MAGIC = 0xa1b23c4d   # a nanosecond pcap (the pcap driver writes its outputs at its inputs' precision)
+NS_MAGIC = 0xa1b23c4d   # a nanosecond pcap (the pcap driver always writes its outputs at nanosecond precision)
 
 
 def write_pcap(path, frames, times=None):

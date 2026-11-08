@@ -81,9 +81,7 @@ tests to check the generated C.
      packet cloning and recirculation. All drivers have the same general 
      shape: parsing -> handling -> replication -> deparsing.
 - There are 3 drivers: pcap, raw_socket, and dpdk.
-  - **pcap.** The pcap driver is intended for deterministic offline testing. 
-    It processes all packets in the recirculation queue before pulling the next input 
-    packet. 
+  - **pcap.** The pcap driver is intended for deterministic offline testing. It handles input and events (possibly recirculated) in timestamp order. `--latency-ns` sets how much recirculation latency to add.
   - **dpdk.** The DPDK implementation uses rte_rings, embeds event structures into 
     mbufs, and deparses packets in place. This is the primary C driver, it implements 
     the full asynchronous event generation and early drop semantics. 
@@ -125,17 +123,11 @@ tests to check the generated C.
 
 ## Also on this branch (not C backend)
 
-- Frontend fixes: module interfaces check global type declarations against their full
-  definitions; record elimination also removes global user type declarations.
+- Frontend fixes: module interfaces check global type declarations against their full definitions; record elimination also removes global user type declarations.
 
 
 ## Known limits / next
 
-- Not yet supported: multicast (`generate_ports`), saturating arithmetic, bit
-  concatenation, timers (`Event.delay`), and integers wider
-  than 64 bits.
-- `Sys.time()` reads the wall clock, so offline pcap runs that use it aren't
-  reproducible.
+- Not yet supported: multicast (`generate_ports`), saturating arithmetic, bit concatenation, and integers wider than 64 bits.
 - `hash` (other than `checksum`) is target-specific by design.
-- Next: merge the C compiler improvements from the experimental fork.
 
