@@ -54,6 +54,20 @@ def gcc_errors(out, n=3):
     return "\n".join([l for l in out.splitlines() if "error:" in l][:n])
 
 
+# Identify sections of lucidcc generated code based on inlined comment block
+SECTION_RE = re.compile(r"/\*\s+SECTION: (.*?)\s+\*/$")
+
+def program_section(c_text):
+    """get the generated "program code" section (should be the same for any driver)"""
+    lines = c_text.splitlines(keepends=True)
+    starts = [i for i, l in enumerate(lines) if SECTION_RE.match(l.rstrip("\n"))]
+    for n, i in enumerate(starts):
+        if SECTION_RE.match(lines[i].rstrip("\n")).group(1) == "program code":
+            end = starts[n + 1] - 1 if n + 1 < len(starts) else len(lines)
+            return lines[i + 2:end]
+    raise ValueError("generated C has no 'program code' section")
+
+
 def report(results):
     """results: iterable of (name, ok, detail); returns an exit code"""
     passed = failed = 0

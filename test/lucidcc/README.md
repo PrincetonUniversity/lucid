@@ -4,9 +4,11 @@ This directory contains 4 harnesses for regression testing the
 `lucidcc` C backend over programs in `./programs`.
 
 - **Compiler tests** `test_compiler.py`: generate C from Lucid, compile it, 
-  and compare against expected output. This catches code that doesn't compile, 
-  and also any changes to lucidcc that affect the c code 
-  (which is sometimes intended).
+  and compare the program part of the C against expected output. This 
+  catches code that doesn't compile, and also any changes to lucidcc that 
+  affect the c code (which is sometimes intended). A program marked 
+  `// LUCIDCC_REJECT: <substr>` must instead be rejected with an error 
+  mentioning `<substr>`.
 
 - **PCAP tests** `test_pcap.py`: compile and test programs with the PCAP driver; 
   compare output packets against `_pcaps/<name>.expected.pcap`. The expected 
@@ -30,7 +32,8 @@ This directory contains 4 harnesses for regression testing the
 ## Layout
 
 - `programs/` — the `.dpt` sources under test.
-- `expected/` — checked-in expected C, one `<name>.cc` per program (for `test_compiler.py`).
+- `expected/` — checked-in expected C, one `<name>.cc` per program (for `test_compiler.py`): 
+  just the generated file's `program code` section, which is the same for every driver.
 - `gen_pcaps.py` — generates the pcap test cases (`<name>.in.pcap` + `<name>.expected.pcap`).
 - `_rawsock_build/`, `_dpdk_build/`, and `_pcaps` — untracked staging dirs.
 

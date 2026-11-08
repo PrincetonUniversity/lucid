@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Compiler tests: generate C for each programs/*.dpt (pcap driver), check that it compiles
-with gcc, and diff it against expected/<name>.cc. A program marked
-`// LUCIDCC_REJECT: <substr>` must instead be rejected with an error containing <substr>."""
+with gcc, and diff its "program code" section (the part every driver
+shares) against expected/<name>.cc. A program marked `// LUCIDCC_REJECT: <substr>` must
+instead be rejected with an error containing <substr>."""
 import difflib
 import glob
 import os
 import re
-import shutil
 import sys
 import tempfile
 
@@ -40,16 +40,17 @@ def check(dpt, work, update):
         return False, "gcc failed\n" + dl.gcc_errors(cc.stdout)
 
     exp = os.path.join(EXPECTED, name + ".cc")
+    actual = dl.program_section(open(cfile).read())
     if update:
-        shutil.copy(cfile, exp)
+        open(exp, "w").writelines(actual)
         return True, "updated"
     if not os.path.exists(exp):
         return False, "no expected file (run with --update)"
-    expected, actual = open(exp).readlines(), open(cfile).readlines()
-    if expected == actual:
-        return True, ""
-    diff = difflib.unified_diff(expected, actual, "expected", "actual", n=1)
-    return False, "output differs from expected\n" + "".join(list(diff)[:30])
+    expected = open(exp).readlines()
+    if expected != actual:
+        diff = difflib.unified_diff(expected, actual, "expected", "actual", n=1)
+        return False, "output differs from expected\n" + "".join(list(diff)[:30])
+    return True, ""
 
 
 def main():
