@@ -36,6 +36,8 @@ default:
 	cp -f _build/default/src/bin/lucidcc.exe lucidcc
 	dune build src/bin/lucidSwitch.exe
 	cp -f _build/default/src/bin/lucidSwitch.exe lucidSwitch
+	dune build src/bin/lucidEncode.exe
+	cp -f _build/default/src/bin/lucidEncode.exe lucidEncode
 
 mac-release:
 	./scripts/builds/build_macos_release.sh
@@ -127,3 +129,4 @@ clean:
 	rm -f dptc
 	rm -f test/testing.exe
 	rm -f lucidcc
+	rm -f lucidEncode

@@ -58,3 +58,15 @@ let serialize_event_eth event_val =
   (* not serialized means its a background event *)
   else ( serialize_background_event lucid_eth_fields event_val )
 ;;
+
+(* serialized event as sent by a socket (InterpSocket) *)
+let event_wire_bytes (event_sorts : event_sort Collections.CidMap.t) event_val =
+  let event_val =
+    match event_val.eserialized, Collections.CidMap.find_opt event_val.eid event_sorts with
+    | false, Some EPacket -> serialize_packet_event event_val
+    | _ -> serialize_event_eth event_val
+  in
+  match event_val.data with
+  | [{v = VBits bits}] -> BitString.to_byte_string bits
+  | _ -> error "[event_wire_bytes] event serialized wrong"
+;;

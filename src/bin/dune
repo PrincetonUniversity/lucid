@@ -1,5 +1,5 @@
 (executables
- (names interpMain lucidp4t dockerUtils lucidcc dfgCompiler eventParsers lucidSwitch)
+ (names interpMain lucidp4t dockerUtils lucidcc dfgCompiler eventParsers lucidSwitch lucidEncode)
 ;  (names main compiler dockerUtils lucidcc dfgCompiler eventParsers)
  (libraries dpt)
  (link_flags -cc g++)
@@ -11,6 +11,7 @@
  (files 
     (interp.exe as dpt) 
     (lucidSwitch.exe as lucidSwitch)
+    (lucidEncode.exe as lucidEncode)
     (lucidp4t.exe as compiler) 
     (dockerUtils.exe as dockerUtils)
     (lucidcc.exe as lucidcc)

@@ -23,16 +23,6 @@ open InterpSwitch
 type network_state = state array
 
 
-(* the bytes that an exiting event puts on the wire (what a socket would send) *)
-let exit_wire_bytes st (ev : event_val) =
-  let ev =
-    match ev.eserialized, Env.find_opt ev.eid st.event_sorts with
-    | false, Some EPacket -> InterpDeparsing.serialize_packet_event ev
-    | _ -> ev
-  in
-  InterpSocket.event_to_packetbuf ev |> Cstruct.to_string
-;;
-
 (* generate an event to stdio or the exit log. [orig] is the event as it was
    generated, before any egress serialization (default: the exiting event). *)
 let log_exit ?orig port (ievent:ievent) current_time st =
@@ -50,7 +40,7 @@ let log_exit ?orig port (ievent:ievent) current_time st =
           st.swid
           port
           (Option.default ievent.sevent orig)
-          (exit_wire_bytes st ievent.sevent)
+          (InterpDeparsing.event_wire_bytes st.event_sorts ievent.sevent)
           current_time
         |> print_endline;
       Queue.push (ievent, Some(port), current_time) st.exits)
