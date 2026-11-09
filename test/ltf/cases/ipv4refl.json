@@ -1,0 +1,14 @@
+{
+  "comment": "Reflect IPv4 (ethertype 0x0800, compared in network byte order); drop everything else.",
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"name": "ethpkt", "args": ["0xaabbccddeeff", "0x112233445566", "0x0800", "5041594c4f41442d44415441"], "locations": ["0:1"], "timestamp": 0},
+    {"type": "packet", "bytes": "00112233445566554433221108065041594c4f41442d44415441", "locations": ["0:2"], "timestamp": 1000000}
+  ],
+  "expected": {
+    "1": [
+      {"name": "ethpkt", "args": ["0x112233445566", "0xaabbccddeeff", "0x0800", "5041594c4f41442d44415441"]}
+    ],
+    "2": []
+  }
+}

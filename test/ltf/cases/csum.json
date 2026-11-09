@@ -1,0 +1,14 @@
+{
+  "comment": "Recompute the IPv4 header checksum (hash<16>(checksum, ...)). The input's checksum is wrong (0xdead); the expected one is computed here in python (RFC 1071). Non-IP frames are reflected as they are.",
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"type": "packet", "bytes": "aabbccddeeff1122334455660800450000201c4640004011dead0a3501010a3501055041594c4f41442d44415441", "locations": ["0:1"], "timestamp": 0},
+    {"type": "packet", "bytes": "aabbccddeeff11223344556608066172702d7061796c6f61642e", "locations": ["0:1"], "timestamp": 1000000}
+  ],
+  "expected": {
+    "1": [
+      {"bytes": "aabbccddeeff1122334455660800450000201c464000401108180a3501010a3501055041594c4f41442d44415441"},
+      {"bytes": "aabbccddeeff11223344556608066172702d7061796c6f61642e"}
+    ]
+  }
+}

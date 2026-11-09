@@ -1,0 +1,12 @@
+{
+  "comment": "A 4-bit ver and a 12-bit len packed into the first 2 bytes (len straddles the byte boundary). ver=0x5, len=0x123: byte0 = 0x51, byte1 = 0x23. The handler does len+1, so byte1 becomes 0x24. Raw bytes on both sides, to check the wire format independently.",
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"type": "packet", "bytes": "5123aabbccddeeff11223344556608005041594c4f41442d44415441", "locations": ["0:1"], "timestamp": 0}
+  ],
+  "expected": {
+    "1": [
+      {"bytes": "5124aabbccddeeff11223344556608005041594c4f41442d44415441"}
+    ]
+  }
+}

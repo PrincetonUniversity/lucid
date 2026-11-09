@@ -1,0 +1,8 @@
+{
+  "comment": "64-bit constants past OCaml's native int: a + 0xFFFFFFFFFFFFFFFF, b + 2^62.",
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"type": "packet", "bytes": "000000000000000100000000000000055041594c4f41442d44415441", "locations": ["0:1"], "timestamp": 0},
+    {"type": "packet", "bytes": "800000000000000040000000000000005041594c4f41442d44415441", "locations": ["0:1"], "timestamp": 1000000}
+  ]
+}

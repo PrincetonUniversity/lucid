@@ -6,9 +6,8 @@ open CoreSyntax
 let pwrite (p:BitString.bits) (v:value) : BitString.bits = 
   match v.v with
   | VInt(z) -> 
-    let vval = Z.to_int z.value in
     let size = Z.to_int z.size in
-    let pbits = BitString.int_to_bits size vval in
+    let pbits = BitString.z_to_bits size z.value in
     BitString.concat p pbits
   | VBool(b) -> 
     let i = match b with | true -> 1 | false -> 0 in

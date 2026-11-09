@@ -1,0 +1,11 @@
+{
+  "comment": "A 4-hash bloom filter: add 5 and 9, then query 5, 7 and 9. The 5-byte event is padded to a 14-byte frame.",
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"type": "packet", "bytes": "8000000005000000000000000000", "locations": ["0:1"], "timestamp": 0},
+    {"type": "packet", "bytes": "8000000009000000000000000000", "locations": ["0:1"], "timestamp": 1000000},
+    {"type": "packet", "bytes": "0000000005000000000000000000", "locations": ["0:1"], "timestamp": 2000000},
+    {"type": "packet", "bytes": "0000000007000000000000000000", "locations": ["0:1"], "timestamp": 3000000},
+    {"type": "packet", "bytes": "0000000009000000000000000000", "locations": ["0:1"], "timestamp": 4000000}
+  ]
+}

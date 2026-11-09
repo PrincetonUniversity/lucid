@@ -1,0 +1,8 @@
+{
+  "comment": "A packet event with a record argument, through a table lookup (a miss: the default add_pair(0) keeps a and zeroes b). Raw bytes: the 8-byte record, then a payload.",
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"type": "packet", "bytes": "00000001000000025041594c4f41442d44415441", "locations": ["0:1"], "timestamp": 0},
+    {"type": "packet", "bytes": "deadbeef000000075041594c4f41442d44415441", "locations": ["0:1"], "timestamp": 1000000}
+  ]
+}

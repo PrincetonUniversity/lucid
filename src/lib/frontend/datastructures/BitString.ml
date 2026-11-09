@@ -93,6 +93,21 @@ let int_to_bits width n : bits =
   { bstr = Bytes.unsafe_to_string b; blen = width }
 ;;
 
+(* the low [width] bits of an arbitrary-precision int, MSB first. Unlike
+   int_to_bits, this handles values that don't fit an OCaml int (e.g., 64-bit
+   values at or above 2^62). *)
+let z_to_bits width (n : Z.t) : bits =
+  let b = Bytes.make ((width + 7) / 8) '\000' in
+  for j = 0 to width - 1 do
+    if Z.testbit n j
+    then begin
+      let i = width - 1 - j in
+      Bytes.set b (i lsr 3) (Char.chr (Char.code (Bytes.get b (i lsr 3)) lor (0x80 lsr (i land 7))))
+    end
+  done;
+  { bstr = Bytes.unsafe_to_string b; blen = width }
+;;
+
 let bits_to_int (bits : bits) : int =
   let r = ref 0 in
   for i = 0 to bits.blen - 1 do
@@ -132,6 +147,25 @@ let peek_msb n bits : int option =
 (* read n bits to unsigned int and advance. *)
 let pop_msb n bits : (int * bits) option =
   match advance n bits, peek_msb n bits with
+  | Some bits', Some v -> Some (v, bits')
+  | _ -> None
+;;
+
+(* peek_msb and pop_msb as arbitrary-precision ints, for fields too wide for an
+   OCaml int (63 bits or more) *)
+let peek_msb_z n bits : Z.t option =
+  if n > bits.blen
+  then None
+  else (
+    let r = ref Z.zero in
+    for i = 0 to n - 1 do
+      r := Z.logor (Z.shift_left !r 1) (Z.of_int (get_bit bits i))
+    done;
+    Some !r)
+;;
+
+let pop_msb_z n bits : (Z.t * bits) option =
+  match advance n bits, peek_msb_z n bits with
   | Some bits', Some v -> Some (v, bits')
   | _ -> None
 ;;

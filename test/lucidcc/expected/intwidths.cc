@@ -82,26 +82,26 @@ typedef struct {
   uint16_t tag;
   union {
     struct {
-      uint8_t src_ip_693;
-      uint8_t src_port_694;
-    } pkt_in_695;
+      uint8_t src_ip_737;
+      uint8_t src_port_738;
+    } pkt_in_739;
     struct {
-      uint8_t res_696;
-      uint8_t flag_697;
-    } bg_cmd_698;
+      uint8_t res_740;
+      uint8_t flag_741;
+    } bg_cmd_742;
   } args;
 } event_variant_t;
-event_variant_t pkt_in_695(uint8_t src_ip_693 , uint8_t src_port_694 ){
+event_variant_t pkt_in_739(uint8_t src_ip_737 , uint8_t src_port_738 ){
   event_variant_t ev  = {0};
-  ev.args.pkt_in_695.src_ip_693 = src_ip_693;
-  ev.args.pkt_in_695.src_port_694 = src_port_694;
+  ev.args.pkt_in_739.src_ip_737 = src_ip_737;
+  ev.args.pkt_in_739.src_port_738 = src_port_738;
   ev.tag = pkt_in_tag;
   return ev;
 }
-event_variant_t bg_cmd_698(uint8_t res_696 , uint8_t flag_697 ){
+event_variant_t bg_cmd_742(uint8_t res_740 , uint8_t flag_741 ){
   event_variant_t ev  = {0};
-  ev.args.bg_cmd_698.res_696 = res_696;
-  ev.args.bg_cmd_698.flag_697 = flag_697;
+  ev.args.bg_cmd_742.res_740 = res_740;
+  ev.args.bg_cmd_742.flag_741 = flag_741;
   ev.tag = bg_cmd_tag;
   return ev;
 }
@@ -109,13 +109,13 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-event_t mk_pkt_in(uint8_t src_ip_693 , uint8_t src_port_694 ){
-  event_t tmp_741  = {.meta = {.len = 1, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_in_695(src_ip_693, src_port_694)};
-  return tmp_741;
+event_t mk_pkt_in(uint8_t src_ip_737 , uint8_t src_port_738 ){
+  event_t tmp_787  = {.meta = {.len = 1, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_in_739(src_ip_737, src_port_738)};
+  return tmp_787;
 }
-event_t mk_bg_cmd(uint8_t res_696 , uint8_t flag_697 ){
-  event_t tmp_742  = {.meta = {.len = 1, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = bg_cmd_698(res_696, flag_697)};
-  return tmp_742;
+event_t mk_bg_cmd(uint8_t res_740 , uint8_t flag_741 ){
+  event_t tmp_788  = {.meta = {.len = 1, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = bg_cmd_742(res_740, flag_741)};
+  return tmp_788;
 }
 uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
@@ -130,16 +130,16 @@ uint8_t parse_event(packet_t*  packet , event_t*  next_event , uint32_t ingress_
       uint16_t tag  = ((uint16_t)(read_bits(packet, 16)));
       switch (tag) {
         case 1: {
-          uint8_t src_ip_693  = ((uint8_t)(read_bits(packet, 7))) & 127;
-          uint8_t src_port_694  = ((uint8_t)(read_bits(packet, 1))) & 1;
-          (*(next_event)) = mk_pkt_in(src_ip_693, src_port_694);
+          uint8_t src_ip_737  = ((uint8_t)(read_bits(packet, 7))) & 127;
+          uint8_t src_port_738  = ((uint8_t)(read_bits(packet, 1))) & 1;
+          (*(next_event)) = mk_pkt_in(src_ip_737, src_port_738);
           return packet->cursor <= packet->end;
           break;
         }
         case 2: {
-          uint8_t res_696  = ((uint8_t)(read_bits(packet, 7))) & 127;
-          uint8_t flag_697  = ((uint8_t)(read_bits(packet, 1))) & 1;
-          (*(next_event)) = mk_bg_cmd(res_696, flag_697);
+          uint8_t res_740  = ((uint8_t)(read_bits(packet, 7))) & 127;
+          uint8_t flag_741  = ((uint8_t)(read_bits(packet, 1))) & 1;
+          (*(next_event)) = mk_bg_cmd(res_740, flag_741);
           return packet->cursor <= packet->end;
           break;
         }
@@ -160,10 +160,10 @@ uint8_t parse_event(packet_t*  packet , event_t*  next_event , uint32_t ingress_
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint8_t src_ip_693  = ev_out->data.args.pkt_in_695.src_ip_693;
-      uint8_t src_port_694  = ev_out->data.args.pkt_in_695.src_port_694;
-      write_bits(buf_out, ((uint64_t)(src_port_694)), 1);
-      write_bits(buf_out, ((uint64_t)(src_ip_693)), 7);
+      uint8_t src_ip_737  = ev_out->data.args.pkt_in_739.src_ip_737;
+      uint8_t src_port_738  = ev_out->data.args.pkt_in_739.src_port_738;
+      write_bits(buf_out, ((uint64_t)(src_port_738)), 1);
+      write_bits(buf_out, ((uint64_t)(src_ip_737)), 7);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -174,10 +174,10 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 2: {
-      uint8_t res_696  = ev_out->data.args.bg_cmd_698.res_696;
-      uint8_t flag_697  = ev_out->data.args.bg_cmd_698.flag_697;
-      write_bits(buf_out, ((uint64_t)(flag_697)), 1);
-      write_bits(buf_out, ((uint64_t)(res_696)), 7);
+      uint8_t res_740  = ev_out->data.args.bg_cmd_742.res_740;
+      uint8_t flag_741  = ev_out->data.args.bg_cmd_742.flag_741;
+      write_bits(buf_out, ((uint64_t)(flag_741)), 1);
+      write_bits(buf_out, ((uint64_t)(res_740)), 7);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(2)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -197,17 +197,18 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 2: {
-      uint8_t res_699  = ev_in->data.args.bg_cmd_698.res_696;
-      uint8_t flag_700  = ev_in->data.args.bg_cmd_698.flag_697;
-      event_t this  = mk_bg_cmd(res_699, flag_700);
+      uint8_t res_743  = ev_in->data.args.bg_cmd_742.res_740;
+      uint8_t flag_744  = ev_in->data.args.bg_cmd_742.flag_741;
+      event_t this  = mk_bg_cmd(res_743, flag_744);
+      printf("bg_cmd res=%u flag=%u\n", res_743, flag_744);
       break;
     }
     case 1: {
-      uint8_t src_ip_701  = ev_in->data.args.pkt_in_695.src_ip_693;
-      uint8_t src_port_702  = ev_in->data.args.pkt_in_695.src_port_694;
-      event_t this  = mk_pkt_in(src_ip_701, src_port_702);
-      out_event_t tmp_743  = {.ev = mk_bg_cmd((src_ip_701 + 1) & 127, src_port_702), .port = 4294967295};
-      out_events[n] = tmp_743;
+      uint8_t src_ip_745  = ev_in->data.args.pkt_in_739.src_ip_737;
+      uint8_t src_port_746  = ev_in->data.args.pkt_in_739.src_port_738;
+      event_t this  = mk_pkt_in(src_ip_745, src_port_746);
+      out_event_t tmp_789  = {.ev = mk_bg_cmd((src_ip_745 + 1) & 127, src_port_746), .port = 4294967295};
+      out_events[n] = tmp_789;
       n = n + 1;
       break;
     }

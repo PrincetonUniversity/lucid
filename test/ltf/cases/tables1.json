@@ -1,0 +1,12 @@
+{
+  "comment": "Table lookups and installs from handlers: a miss installs hit_acn(3) for its key; do_install adds an exact entry (hit_acn(2)) and a ternary one (hit_acn(3)).",
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"name": "do_match", "args": [5], "locations": ["0:1"], "timestamp": 0},
+    {"name": "do_match", "args": [5], "locations": ["0:1"], "timestamp": 1000000},
+    {"name": "do_install", "args": [256, "0xff00"], "locations": ["0:1"], "timestamp": 2000000},
+    {"name": "do_match", "args": [256], "locations": ["0:1"], "timestamp": 3000000},
+    {"name": "do_match", "args": [300], "locations": ["0:1"], "timestamp": 4000000},
+    {"name": "do_match", "args": [7], "locations": ["0:1"], "timestamp": 5000000}
+  ]
+}

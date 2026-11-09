@@ -12,7 +12,9 @@ global Table.t<<int, int, pair_t, pair_t>> my_table = Table.create(32, [add_pair
 
 
 
-packet event foo(pair_t p) { 
+// The payload keeps the frame at least an ethernet header long, so that it can
+// cross a veth (test/ltf's dpdk target).
+packet event foo(pair_t p, Payload.t pl) { 
     
     auto new_pair = Table.lookup(my_table, 1, p);
-    generate_port(1, foo(new_pair)); }
+    generate_port(1, foo(new_pair, pl)); }

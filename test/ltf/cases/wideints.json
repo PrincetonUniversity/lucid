@@ -1,0 +1,14 @@
+{
+  "comment": "A 62-bit counter + 2-bit flag, then a 63-bit counter + 1-bit flag. The handler increments each counter and sets its flag when the result is 0, so an increment from the largest value must wrap. Raw bytes: 63-bit values don't fit a spec int.",
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"type": "packet", "bytes": "fffffffffffffffcfffffffffffffffe5041594c4f41442d44415441", "locations": ["0:1"], "timestamp": 0},
+    {"type": "packet", "bytes": "0000000000000014000000000000000e5041594c4f41442d44415441", "locations": ["0:1"], "timestamp": 1000000}
+  ],
+  "expected": {
+    "1": [
+      {"bytes": "000000000000000100000000000000015041594c4f41442d44415441"},
+      {"bytes": "000000000000001800000000000000105041594c4f41442d44415441"}
+    ]
+  }
+}

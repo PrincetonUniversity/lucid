@@ -1,0 +1,12 @@
+{
+  "comment": "No Payload.t: the output is only the 14-byte ethernet header; the input's tail is dropped.",
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"type": "packet", "bytes": "aabbccddeeff11223344556608005041594c4f41442d44415441", "locations": ["0:1"], "timestamp": 0}
+  ],
+  "expected": {
+    "1": [
+      {"bytes": "aabbccddeeff1122334455660800"}
+    ]
+  }
+}

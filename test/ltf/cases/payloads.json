@@ -1,0 +1,9 @@
+{
+  "comment": "A main parser that branches on the ethertype: IP frames are parsed further, ethertype 0 is dropped, anything else is rewritten to 0x9999. Each handler prints the ethertype.",
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"type": "packet", "bytes": "aabbccddeeff11223344556608000a0000010a000002000004d2000000505041594c4f41442d44415441", "locations": ["0:1"], "timestamp": 0},
+    {"type": "packet", "bytes": "aabbccddeeff11223344556608065041594c4f41442d44415441", "locations": ["0:1"], "timestamp": 1000000},
+    {"type": "packet", "bytes": "aabbccddeeff11223344556600005041594c4f41442d44415441", "locations": ["0:1"], "timestamp": 2000000}
+  ]
+}

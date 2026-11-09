@@ -1,0 +1,11 @@
+{
+  "comment": "A NAT: the first inside packet from an address adds a mapping (hash<4> of ip and port), the second finds it; outside packets look the mapping up.",
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"name": "inside_packet", "args": ["0x0a000001", 1000], "locations": ["0:1"], "timestamp": 0},
+    {"name": "inside_packet", "args": ["0x0a000001", 1000], "locations": ["0:1"], "timestamp": 1000000},
+    {"name": "inside_packet", "args": ["0x0a000002", 2000], "locations": ["0:1"], "timestamp": 2000000},
+    {"name": "outside_packet", "args": [3], "locations": ["0:2"], "timestamp": 3000000},
+    {"name": "outside_packet", "args": [12], "locations": ["0:2"], "timestamp": 4000000}
+  ]
+}

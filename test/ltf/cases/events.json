@@ -1,0 +1,8 @@
+{
+  "comment": "A handler that recirculates one event and sends another out port 0, via an event variable and a match on it.",
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"name": "pkt_in", "args": ["0x0a000001", 5000], "locations": ["0:1"], "timestamp": 0},
+    {"name": "pkt_in", "args": ["0x0a000002", 5001], "locations": ["0:2"], "timestamp": 1000000}
+  ]
+}

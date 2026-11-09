@@ -501,7 +501,9 @@ let control_event_to_string control_e =
 let event_to_json {eid; data; eserialized} =   
   let raw_json_val (v : value) =
     match v.v with
-    | VInt i -> `Int (Integer.to_int i)
+    | VInt i when Z.fits_int i.value -> `Int (Integer.to_int i)
+    (* a value too big for an OCaml (and so a JSON) int: a hex string, as in specs *)
+    | VInt i -> `String ("0x" ^ Z.format "%x" i.value)
     | VBool b -> `Bool b
     | VBits bs -> `String (BitString.bits_to_hexstr bs)
     | _ -> error "[json event arg printing] not an int, bool, or bitstring / payload"

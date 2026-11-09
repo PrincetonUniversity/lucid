@@ -57,8 +57,8 @@ module BloomFilter : {
 
 global BloomFilter.t<32, 8, 4> bf1 = BloomFilter.create(256, [0; 1; 2; 3]);
 
-event allowed(int x) { skip; }
-event denied(int x) { skip; }
+event allowed(int x) { printf("allowed %d", x); }
+event denied(int x) { printf("denied %d", x); }
 
 // `pad` byte-aligns `x`: with bool serialized as 1 bit (matching the interpreter), the
 // header `bool add` + `int<7> pad` fills byte 0 so `int x` lands byte-aligned (R1').

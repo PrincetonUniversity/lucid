@@ -1,0 +1,8 @@
+{
+  "comment": "int<7> and int<1> fields: the parser, a masked + (127 + 1 wraps to 0), and the recirculated event's fields.",
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"name": "pkt_in", "args": [5, 1], "locations": ["0:1"], "timestamp": 0},
+    {"name": "pkt_in", "args": [127, 0], "locations": ["0:1"], "timestamp": 1000000}
+  ]
+}

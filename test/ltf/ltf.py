@@ -239,7 +239,10 @@ class Dpdk:
         result = json.load(open(result_f))
         if "error" in result:
             return TestError(result["error"])
-        problems = [f"dpdk dropped {n} ({cause})" for cause, n in result["drops"].items() if n]
+        # a parse drop can be the program's own (a parser's `drop`), so it isn't a
+        # failure by itself: a wrong one shows up as missing outputs or prints
+        problems = [f"dpdk dropped {n} ({cause})" for cause, n in result["drops"].items()
+                    if n and cause != "parse"]
         outputs = {}
         for port in json.load(open(os.path.join(work, "ports.json")))["ports"]:
             path = os.path.join(work, f"out_{port}.pcap")

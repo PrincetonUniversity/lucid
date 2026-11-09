@@ -1,0 +1,16 @@
+{
+  "comment": "pkt(x) reports the port it arrived on, then recirculates bg(x), which reports the recirculation port, 196. All reports go out port 1.",
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"name": "pkt", "args": [7], "locations": ["0:1"], "timestamp": 0},
+    {"name": "pkt", "args": [8], "locations": ["0:2"], "timestamp": 1000000}
+  ],
+  "expected": {
+    "1": [
+      {"name": "report", "args": [1, 7]},
+      {"name": "report", "args": [196, 7]},
+      {"name": "report", "args": [2, 8]},
+      {"name": "report", "args": [196, 8]}
+    ]
+  }
+}

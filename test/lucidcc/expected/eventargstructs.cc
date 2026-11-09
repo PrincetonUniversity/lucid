@@ -73,7 +73,7 @@ uint32_t hash_32(uint32_t seed , uint8_t*  str , uint32_t len_bits ){
   }
   return hashValue;
 }
-enum {tag_add_pair_1178 = 0};
+enum {tag_add_pair_1247 = 0};
 typedef struct {
   uint16_t len;
   uint8_t is_packet;
@@ -86,15 +86,15 @@ typedef struct {
   uint16_t tag;
   union {
     struct {
-      uint32_t p_0_1180;
-      uint32_t p_1_1181;
-    } foo_1182;
+      uint32_t p_0_1249;
+      uint32_t p_1_1250;
+    } foo_1252;
   } args;
 } event_variant_t;
-event_variant_t foo_1182(uint32_t p_0_1180 , uint32_t p_1_1181 ){
+event_variant_t foo_1252(uint32_t p_0_1249 , uint32_t p_1_1250 ){
   event_variant_t ev  = {0};
-  ev.args.foo_1182.p_0_1180 = p_0_1180;
-  ev.args.foo_1182.p_1_1181 = p_1_1181;
+  ev.args.foo_1252.p_0_1249 = p_0_1249;
+  ev.args.foo_1252.p_1_1250 = p_1_1250;
   ev.tag = foo_tag;
   return ev;
 }
@@ -102,16 +102,16 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-event_t mk_foo(uint32_t p_0_1180 , uint32_t p_1_1181 ){
-  event_t tmp_1266  = {.meta = {.len = 8, .is_packet = 1, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = foo_1182(p_0_1180, p_1_1181)};
-  return tmp_1266;
+event_t mk_foo(uint32_t p_0_1249 , uint32_t p_1_1250 ){
+  event_t tmp_1341  = {.meta = {.len = 8, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = foo_1252(p_0_1249, p_1_1250)};
+  return tmp_1341;
 }
 uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
-typedef tuple_1 pair_t_1174;
-pair_t_1174 add_pair_1178(uint32_t c_1175 , pair_t_1174 p ){
-  pair_t_1174 tmp_1267  = {._0 = p._0, ._1 = c_1175,};
-  return tmp_1267;
+typedef tuple_1 pair_t_1243;
+pair_t_1243 add_pair_1247(uint32_t c_1244 , pair_t_1243 p ){
+  pair_t_1243 tmp_1342  = {._0 = p._0, ._1 = c_1244,};
+  return tmp_1342;
 }
 typedef struct {
   uint8_t valid;
@@ -119,66 +119,66 @@ typedef struct {
   uint32_t mask;
   uint32_t action_tag;
   uint32_t action_arg;
-} cellty_my_table_1179;
+} cellty_my_table_1248;
 typedef struct {
   struct {
     uint32_t action_tag;
     uint32_t action_arg;
   } _default;
-  cellty_my_table_1179 entries [32];
-} ty_my_table_1179;
-ty_my_table_1179 my_table_1179  = {._default = {.action_tag = tag_add_pair_1178, .action_arg = 0}, .entries = {0}};
-void install_my_table_1179(uint32_t key , uint32_t action , uint32_t const_arg ){
+  cellty_my_table_1248 entries [32];
+} ty_my_table_1248;
+ty_my_table_1248 my_table_1248  = {._default = {.action_tag = tag_add_pair_1247, .action_arg = 0}, .entries = {0}};
+void install_my_table_1248(uint32_t key , uint32_t action , uint32_t const_arg ){
   for (int _idx = 0; _idx < 32; _idx++) {
-    if (my_table_1179.entries[_idx].valid == false) {
-      cellty_my_table_1179 tmp_1268  = {.valid = true, .key = key, .mask = 4294967295, .action_tag = action, .action_arg = const_arg};
-      my_table_1179.entries[_idx] = tmp_1268;
+    if (my_table_1248.entries[_idx].valid == false) {
+      cellty_my_table_1248 tmp_1343  = {.valid = true, .key = key, .mask = 4294967295, .action_tag = action, .action_arg = const_arg};
+      my_table_1248.entries[_idx] = tmp_1343;
       return ;
     }
   }
   return ;
 }
-void install_ternary_my_table_1179(uint32_t key , uint32_t mask , uint32_t action , uint32_t const_arg ){
+void install_ternary_my_table_1248(uint32_t key , uint32_t mask , uint32_t action , uint32_t const_arg ){
   for (int _idx = 0; _idx < 32; _idx++) {
-    if (my_table_1179.entries[_idx].valid == false) {
-      cellty_my_table_1179 tmp_1269  = {.valid = true, .key = key, .mask = mask, .action_tag = action, .action_arg = const_arg};
-      my_table_1179.entries[_idx] = tmp_1269;
+    if (my_table_1248.entries[_idx].valid == false) {
+      cellty_my_table_1248 tmp_1344  = {.valid = true, .key = key, .mask = mask, .action_tag = action, .action_arg = const_arg};
+      my_table_1248.entries[_idx] = tmp_1344;
       return ;
     }
   }
   return ;
 }
-pair_t_1174 lookup_my_table_1179(uint32_t key , pair_t_1174 arg ){
+pair_t_1243 lookup_my_table_1248(uint32_t key , pair_t_1243 arg ){
   for (int _idx = 0; _idx < 32; _idx++) {
-    if (my_table_1179.entries[_idx].valid && ((key & my_table_1179.entries[_idx].mask) == (my_table_1179.entries[_idx].key & my_table_1179.entries[_idx].mask))) {
-      switch (my_table_1179.entries[_idx].action_tag) {
-        case tag_add_pair_1178: {
-          return add_pair_1178(my_table_1179.entries[_idx].action_arg, arg);
+    if (my_table_1248.entries[_idx].valid && ((key & my_table_1248.entries[_idx].mask) == (my_table_1248.entries[_idx].key & my_table_1248.entries[_idx].mask))) {
+      switch (my_table_1248.entries[_idx].action_tag) {
+        case tag_add_pair_1247: {
+          return add_pair_1247(my_table_1248.entries[_idx].action_arg, arg);
           break;
         }
       }
     }
   }
-  switch (my_table_1179._default.action_tag) {
+  switch (my_table_1248._default.action_tag) {
     default: {
-      return add_pair_1178(my_table_1179._default.action_arg, arg);
+      return add_pair_1247(my_table_1248._default.action_arg, arg);
       break;
     }
   }
 }
 uint8_t parse_event(packet_t*  pkt , event_t*  next_event , uint32_t ingress_port ){
-  uint32_t p_0_1180  = ((uint32_t)(read_bits(pkt, 32)));
-  uint32_t p_1_1181  = ((uint32_t)(read_bits(pkt, 32)));
-  (*(next_event)) = mk_foo(p_0_1180, p_1_1181);
+  uint32_t p_0_1249  = ((uint32_t)(read_bits(pkt, 32)));
+  uint32_t p_1_1250  = ((uint32_t)(read_bits(pkt, 32)));
+  (*(next_event)) = mk_foo(p_0_1249, p_1_1250);
   return pkt->cursor <= pkt->end;
 }
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint32_t p_0_1180  = ev_out->data.args.foo_1182.p_0_1180;
-      uint32_t p_1_1181  = ev_out->data.args.foo_1182.p_1_1181;
-      write_bits(buf_out, ((uint64_t)(p_1_1181)), 32);
-      write_bits(buf_out, ((uint64_t)(p_0_1180)), 32);
+      uint32_t p_0_1249  = ev_out->data.args.foo_1252.p_0_1249;
+      uint32_t p_1_1250  = ev_out->data.args.foo_1252.p_1_1250;
+      write_bits(buf_out, ((uint64_t)(p_1_1250)), 32);
+      write_bits(buf_out, ((uint64_t)(p_0_1249)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -198,15 +198,15 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
-      uint32_t p_0_1183  = ev_in->data.args.foo_1182.p_0_1180;
-      uint32_t p_1_1184  = ev_in->data.args.foo_1182.p_1_1181;
-      event_t this  = mk_foo(p_0_1183, p_1_1184);
-      pair_t_1174 tmp_1270  = {._0 = p_0_1183, ._1 = p_1_1184,};
-      pair_t_1174 tup_1265  = lookup_my_table_1179(1, tmp_1270);
-      uint32_t new_pair_0_1185  = tup_1265._0;
-      uint32_t new_pair_1_1186  = tup_1265._1;
-      out_event_t tmp_1271  = {.ev = mk_foo(new_pair_0_1185, new_pair_1_1186), .port = 1};
-      out_events[n] = tmp_1271;
+      uint32_t p_0_1253  = ev_in->data.args.foo_1252.p_0_1249;
+      uint32_t p_1_1254  = ev_in->data.args.foo_1252.p_1_1250;
+      event_t this  = mk_foo(p_0_1253, p_1_1254);
+      pair_t_1243 tmp_1345  = {._0 = p_0_1253, ._1 = p_1_1254,};
+      pair_t_1243 tup_1340  = lookup_my_table_1248(1, tmp_1345);
+      uint32_t new_pair_0_1256  = tup_1340._0;
+      uint32_t new_pair_1_1257  = tup_1340._1;
+      out_event_t tmp_1346  = {.ev = mk_foo(new_pair_0_1256, new_pair_1_1257), .port = 1};
+      out_events[n] = tmp_1346;
       n = n + 1;
       break;
     }

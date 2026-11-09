@@ -17,9 +17,18 @@ let pread (p: value) ty : (value * value) =
     | TInt(Sz size) -> size | TBool -> 1
     | _ -> error ("[pread] unsupported type ("^(CorePrinting.ty_to_string ty)^")")
   in
-  match (BitString.pop_msb size (extract_bits p)) with
-  | Some(i, bits) -> (vint i size, (vbits bits))
-  | None -> error "[pread] attempted to read past end of packet"
+  if ty.raw_ty = TBool then
+    match (BitString.pop_msb 1 (extract_bits p)) with
+    | Some(i, bits) -> (vbool (i = 1), (vbits bits))
+    | None -> error "[pread] attempted to read past end of packet"
+  else if size < Sys.int_size then
+    match (BitString.pop_msb size (extract_bits p)) with
+    | Some(i, bits) -> (vint i size, (vbits bits))
+    | None -> error "[pread] attempted to read past end of packet"
+  else (* too wide for an OCaml int *)
+    match (BitString.pop_msb_z size (extract_bits p)) with
+    | Some(z, bits) -> (vinteger (Integer.create_z ~value:z ~size), (vbits bits))
+    | None -> error "[pread] attempted to read past end of packet"
 ;;
 
 let ppeek p ty = 
@@ -27,9 +36,18 @@ let ppeek p ty =
     | TInt(Sz size) -> size | TBool -> 1
     | _ -> error "[ppeek] unsupported type"
   in
-  match (BitString.peek_msb size (extract_bits p)) with
-  | Some(i) -> vint i size
-  | None -> error "[ppeek] attempted to read past end of packet"
+  if ty.raw_ty = TBool then
+    match (BitString.peek_msb 1 (extract_bits p)) with
+    | Some(i) -> vbool (i = 1)
+    | None -> error "[ppeek] attempted to read past end of packet"
+  else if size < Sys.int_size then
+    match (BitString.peek_msb size (extract_bits p)) with
+    | Some(i) -> vint i size
+    | None -> error "[ppeek] attempted to read past end of packet"
+  else (* too wide for an OCaml int *)
+    match (BitString.peek_msb_z size (extract_bits p)) with
+    | Some(z) -> vinteger (Integer.create_z ~value:z ~size)
+    | None -> error "[ppeek] attempted to read past end of packet"
 ;;
 
 let padvance p ty =

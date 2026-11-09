@@ -1,0 +1,13 @@
+{
+  "comment": "A write-through cache in front of a table (a module with hash-indexed arrays).",
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"name": "do_set", "args": [1, 10], "locations": ["0:1"], "timestamp": 0},
+    {"name": "do_get", "args": [1], "locations": ["0:1"], "timestamp": 1000000},
+    {"name": "do_get", "args": [2], "locations": ["0:1"], "timestamp": 2000000},
+    {"name": "do_set", "args": [300, 30], "locations": ["0:1"], "timestamp": 3000000},
+    {"name": "do_get", "args": [300], "locations": ["0:1"], "timestamp": 4000000},
+    {"name": "do_set", "args": [1, 11], "locations": ["0:1"], "timestamp": 5000000},
+    {"name": "do_get", "args": [1], "locations": ["0:1"], "timestamp": 6000000}
+  ]
+}

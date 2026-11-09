@@ -58,4 +58,4 @@ Use `--dpt` and `--lucidencode` to point it elsewhere.
 
 Targets:
 - `interp`: the interpreter's simulator.
-- `dpdk`: compiled with `lucidcc --dpdk`, then run in the `docker/dpdk` image with `net_af_packet` + veths for every port. Inputs are replayed at timestamps, the switch stops 1s after last input. Drops fail the test.
+- `dpdk`: compiled with `lucidcc --dpdk`, then run in the `docker/dpdk` image with `net_af_packet` + veths for every port. Inputs are replayed at timestamps, the switch stops 1s after last input. Driver drops fail the test (parse drops don't: a parser's `drop` is the program's). Every input and output frame must be at least 14 bytes (an ethernet header) to cross a veth.
