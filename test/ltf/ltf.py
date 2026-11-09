@@ -7,15 +7,18 @@ output port to its ordered outputs, given as events ({"name", "args"}) or hex by
 compares the wire bytes leaving each port, in order. Extra outputs fail the test.
 Order across ports and timing are not compared.
 
-  ltf.py run PROGRAM SPEC [--target T] [--work DIR]
-  ltf.py suite DIR [--target T] [-k NAME]   # DIR/cases/<prog>[.<variant>].json
-                                            # against DIR/programs/<prog>.dpt
+  ltf.py run PROGRAM SPEC [--target T[,T...]] [--work DIR]
+  ltf.py suite DIR [--target T[,T...]] [-k NAME]   # DIR/cases/<prog>[.<variant>].json
+                                                   # against DIR/programs/<prog>.dpt
+
+When there are multiple targets, the case's expected block is checked on each one. 
+If there's no expected block, the output of the first target is used as the 
+expected outputs for the rest.
+
 Targets:
   interp  the interpreter's simulator, driven directly by the spec
-  dpdk    the lucidcc --dpdk driver on net_af_packet veths, run by ltf_dpdk.py in the
-          docker/dpdk image (--dpdk-run native: run it here, on Linux as root). The
-          inputs are replayed at their timestamps, every port in the case is bound,
-          and any driver drop fails the test.
+  dpdk    programs compiled with lucidcc --dpdk driver, run in the docker/dpdk
+          image on net_af_packet veths. Uses ltf_dpdk.py.
 """
 import argparse
 import difflib
@@ -139,8 +142,10 @@ def json_records(text):
 class Case:
     def __init__(self, name, program, spec, work):
         self.name, self.program, self.spec, self.work = name, program, spec, work
-        self.expected = None   # {port: [output]}, from lucidEncode
+        self.expected = None   # {port: [output]}, from lucidEncode; None: an agreement test
+        self.out_ports = set() # the ports outputs are expected on (expected, or the reference's)
         self.error = None      # a TestError, once the case can't go on
+        self.results = {}      # target name -> a target's result, or a TestError
 
 
 class Interp:
@@ -202,7 +207,7 @@ class Dpdk:
         recirc = {int(p) for p, d in declared.items() if d.get("type") == "recirc"}
         inputs = {int(os.path.basename(f)[3:-5])
                   for f in glob.glob(os.path.join(case.work, "encoded", "in_*.pcap"))}
-        ports = sorted(({int(p) for p in declared} | inputs | set(case.expected)) - recirc)
+        ports = sorted(({int(p) for p in declared} | inputs | case.out_ports) - recirc)
         with open(os.path.join(work, "ports.json"), "w") as f:
             json.dump({"ports": ports}, f)
 
@@ -232,7 +237,7 @@ class Dpdk:
             return TestError("the dpdk executor left no result.json")
         result = json.load(open(result_f))
         if "error" in result:
-            return TestError("dpdk: " + result["error"])
+            return TestError(result["error"])
         problems = [f"dpdk dropped {n} ({cause})" for cause, n in result["drops"].items() if n]
         outputs = {}
         for port in json.load(open(os.path.join(work, "ports.json")))["ports"]:
@@ -249,7 +254,7 @@ TARGETS = {"interp": Interp, "dpdk": Dpdk}
 
 # ---- comparison ------------------------------------------------------------------
 
-def compare(expected, actual):
+def compare(expected, actual, labels=("expected", "actual")):
     """expected, actual: {port: [output]}; returns a list of failure lines. Outputs
     without a name (a target that only sees bytes) are described by the expected
     output with the same bytes, if there is one."""
@@ -260,36 +265,63 @@ def compare(expected, actual):
         exp, act = expected.get(port, []), actual.get(port, [])
         if [o["wire_bytes"] for o in exp] == [o["wire_bytes"] for o in act]:
             continue
-        lines.append(f"port {port}: expected {len(exp)} output(s), got {len(act)}")
+        lines.append(f"port {port}: {labels[0]} {len(exp)} output(s), {labels[1]} {len(act)}")
         exp_d = [f"{describe(o)}  {o['wire_bytes']}" for o in exp]
         act_d = [f"{describe(known.get(o['wire_bytes'], o), named)}  {o['wire_bytes']}" for o in act]
-        for d in list(difflib.unified_diff(exp_d, act_d, "expected", "actual", n=2, lineterm=""))[2:]:
+        for d in list(difflib.unified_diff(exp_d, act_d, *labels, n=2, lineterm=""))[2:]:
             lines.append("  " + d)
     return lines
 
 
-def prepare(tools, target, case):
-    """encode the case, then the target's own preparation"""
+def encode(tools, case):
+    """encode the case's inputs (and its expected outputs, if any)"""
     s = json.load(open(case.spec))
-    if "expected" not in s:
-        raise TestError("spec has no \"expected\" block (an agreement test needs a second target)")
     enc = os.path.join(case.work, "encoded")
     run_tool([tools["lucidEncode"], case.program, "--spec", case.spec, "-o", enc], "lucidEncode")
-    case.expected = {int(p): outs for p, outs in
-                     json.load(open(os.path.join(enc, "expected.json"))).items()}
-    os.makedirs(os.path.join(case.work, target.name), exist_ok=True)
-    target.prepare(case)
+    if "expected" in s:
+        case.expected = {int(p): outs for p, outs in
+                         json.load(open(os.path.join(enc, "expected.json"))).items()}
+        case.out_ports = set(case.expected)
 
 
-def check(target, case, result):
-    """(ok, detail lines)"""
+def outcome(target, case):
+    """a target's result for a case: (outputs, problems), or a TestError; writes its prints"""
+    result = case.results[target.name]
     if isinstance(result, TestError):
-        return False, str(result).splitlines()
-    actual, prints, problems = result
+        return result
+    outputs, prints, problems = result
     with open(os.path.join(case.work, target.name, "prints.txt"), "w") as f:
         f.writelines(p + "\n" for p in prints)
-    lines = problems + compare(case.expected, actual)
-    return not lines, lines
+    return outputs, problems
+
+
+def checks(targets, case):
+    """[(label, ok, detail lines)] for a case: one per target if it has expected
+    outputs, else one per non-reference target"""
+    if case.error:
+        return [(case.name, False, str(case.error).splitlines())]
+    if case.expected is not None:
+        out = []
+        for t in targets:
+            r = outcome(t, case)
+            lines = str(r).splitlines() if isinstance(r, TestError) else r[1] + compare(case.expected, r[0])
+            out.append((f"{case.name} [{t.name}]", not lines, lines))
+        return out
+    if len(targets) < 2:
+        return [(case.name, None, ["agreement test (no \"expected\"): needs two targets"])]
+    ref = targets[0]
+    ref_r = outcome(ref, case)
+    out = []
+    for t in targets[1:]:
+        label = f"{case.name} [{t.name} = {ref.name}]"
+        r = outcome(t, case)
+        if isinstance(ref_r, TestError) or isinstance(r, TestError):
+            errs = [f"{x.name}: {e}" for x, e in ((ref, ref_r), (t, r)) if isinstance(e, TestError)]
+            out.append((label, False, "\n".join(errs).splitlines()))
+        else:
+            lines = ref_r[1] + r[1] + compare(ref_r[0], r[0], (ref.name, t.name))
+            out.append((label, not lines, lines))
+    return out
 
 
 # ---- commands --------------------------------------------------------------------
@@ -304,10 +336,21 @@ def cases_in(suite_dir):
     return out
 
 
-def report(name, ok, detail, work):
-    print(f"{'PASS' if ok else 'FAIL'}  {name}" + ("" if ok else f"  (work dir: {work})"))
+def report(label, ok, detail, work):
+    status = {True: "PASS", False: "FAIL", None: "SKIP"}[ok]
+    print(f"{status}  {label}" + (f"  (work dir: {work})" if ok is False else ""))
     for line in detail:
         print("      | " + line)
+
+
+def target_list(spec):
+    names = spec.split(",")
+    for n in names:
+        if n not in TARGETS:
+            sys.exit(f"ltf: unknown target {n} (targets: {', '.join(TARGETS)})")
+    if len(set(names)) != len(names):
+        sys.exit("ltf: a target is listed twice")
+    return names
 
 
 def main():
@@ -322,18 +365,18 @@ def main():
     r = sub.add_parser("run", help="run one test case")
     r.add_argument("program")
     r.add_argument("spec")
-    r.add_argument("--target", choices=TARGETS, default="interp")
+    r.add_argument("--target", default="interp", help="target(s), comma-separated")
     r.add_argument("--work", help="work dir (default: a temporary dir, kept on failure)")
     s = sub.add_parser("suite", help="run every case in a directory")
     s.add_argument("dir")
-    s.add_argument("--target", choices=TARGETS, default="interp")
+    s.add_argument("--target", default="interp", help="target(s), comma-separated")
     s.add_argument("-k", dest="only", help="only cases whose name contains this")
     s.add_argument("--work", help="work dir root (default: DIR/_work)")
     args = ap.parse_args()
 
     tools = {"dpt": find_tool("dpt", args.dpt),
              "lucidEncode": find_tool("lucidEncode", args.lucidencode)}
-    target = TARGETS[args.target](tools, args)
+    targets = [TARGETS[n](tools, args) for n in target_list(args.target)]
 
     if args.cmd == "run":
         root = os.path.abspath(args.work or tempfile.mkdtemp(prefix="ltf-"))
@@ -351,20 +394,36 @@ def main():
             shutil.rmtree(case.work)
         os.makedirs(case.work, exist_ok=True)
         try:
-            prepare(tools, target, case)
+            encode(tools, case)
         except TestError as e:
             case.error = e
-    ready = [c for c in cases if c.error is None]
-    results = target.run(ready) if ready else {}
-    passed = failed = 0
+    # agreement tests run on every target only when there's more than one
+    runnable = [c for c in cases if c.error is None and (c.expected is not None or len(targets) > 1)]
+    for i, t in enumerate(targets):
+        ready = []
+        for c in runnable:
+            if c.expected is None and i > 0:
+                # bind the ports the reference sent to (it has no "expected" to say)
+                ref = c.results.get(targets[0].name)
+                c.out_ports = set(ref[0]) if isinstance(ref, tuple) else set()
+            os.makedirs(os.path.join(c.work, t.name), exist_ok=True)
+            try:
+                t.prepare(c)
+                ready.append(c)
+            except TestError as e:
+                c.results[t.name] = e
+        for name, result in (t.run(ready) if ready else {}).items():
+            next(c for c in ready if c.name == name).results[t.name] = result
+    passed = failed = skipped = 0
     for case in cases:
-        ok, detail = check(target, case, case.error or results[case.name])
-        report(case.name, ok, detail, case.work)
-        passed, failed = passed + ok, failed + (not ok)
-        if ok and not keep_passing:
+        results = checks(targets, case)
+        for label, ok, detail in results:
+            report(label, ok, detail, case.work)
+            passed, failed, skipped = passed + (ok is True), failed + (ok is False), skipped + (ok is None)
+        if all(ok is not False for _, ok, _ in results) and not keep_passing:
             shutil.rmtree(case.work, ignore_errors=True)
     print("-----")
-    print(f"{passed} passed, {failed} failed")
+    print(f"{passed} passed, {failed} failed" + (f", {skipped} skipped" if skipped else ""))
     sys.exit(1 if failed else 0)
 
 

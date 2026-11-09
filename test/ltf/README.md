@@ -26,6 +26,8 @@ The interpreter ignores the `expected` block.
   Int args can be hex strings (`"0x0800"`).
 - **`expected`** has an output event list for each port. Outputs are in the same format as inputs, without location and timestamp metadata.
 - **Control commands** (`Table.install`, ...) aren't supported. Use ordinary events instead as in `programs/tables_install.dpt`.
+- **Compiler validation tests** to compare compiler output against the interpreter, use 
+  the `--target interp,dpdk` on a case with no `expected`.
 
 ## Comparison
 
@@ -44,8 +46,8 @@ Comparison checks wire bytes per port, ordered. Timestamps are not considered.
 ```sh
 ./test/ltf/ltf.py run PROGRAM.dpt CASE.json [--work DIR]         # one case
 make test-ltf                                                    # every case, on the interpreter
-make test-ltf-dpdk                                               # every case, on dpdk
-./test/ltf/ltf.py suite test/ltf [-k NAME] [--target dpdk]       # the same, or a subset
+make test-ltf-dpdk                                               # every case, on the interpreter and dpdk
+./test/ltf/ltf.py suite test/ltf [-k NAME] [--target T[,T...]]   # the same, or a subset
 ```
 
 The runner finds `dpt` and `lucidEncode` on `PATH`, or at the repo root. 

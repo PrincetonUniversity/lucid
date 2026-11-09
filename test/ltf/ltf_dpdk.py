@@ -129,7 +129,11 @@ def replay(pairs, ports, case_dir):
         s = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
         s.bind((b, 0))
         socks[port] = s
-        timeline += [(t, port, frame) for t, frame in read_pcap(path)]
+        for t, frame in read_pcap(path):
+            if len(frame) < 14:
+                raise RuntimeError(f"an input on port {port} is {len(frame)} bytes: a frame on a "
+                                   "veth needs at least 14 (an ethernet header)")
+            timeline.append((t, port, frame))
     timeline.sort(key=lambda x: x[0])   # stable: same-time inputs keep file order
     t0 = time.monotonic()
     late = 0.0
