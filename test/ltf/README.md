@@ -26,8 +26,9 @@ The interpreter ignores the `expected` block.
   Int args can be hex strings (`"0x0800"`).
 - **`expected`** has an output event list for each port. Outputs are in the same format as inputs, without location and timestamp metadata.
 - **Control commands** (`Table.install`, ...) aren't supported. Use ordinary events instead as in `programs/tables_install.dpt`.
-- **Compiler validation tests** to compare compiler output against the interpreter, use 
-  the `--target interp,dpdk` on a case with no `expected`.
+- **Compiler validation tests** are cases with no `expected`: with `--target interp,dpdk`,
+  the interpreter's outputs are the expected outputs for dpdk. With one target, they're
+  skipped.
 
 ## Comparison
 

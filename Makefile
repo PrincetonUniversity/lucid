@@ -97,7 +97,7 @@ test-ltf: default
 	python3 ./test/ltf/ltf.py suite test/ltf --target interp
 
 # the same cases on the interpreter and the c compiler's dpdk driver (in the
-# docker/dpdk image), plus the agreement tests between the two
+# docker/dpdk image), plus the compiler validation tests (dpdk against the interpreter)
 test-ltf-dpdk: default
 	python3 ./test/ltf/ltf.py suite test/ltf --target interp,dpdk
 

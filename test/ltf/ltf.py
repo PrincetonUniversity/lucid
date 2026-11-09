@@ -11,9 +11,10 @@ Order across ports and timing are not compared.
   ltf.py suite DIR [--target T[,T...]] [-k NAME]   # DIR/cases/<prog>[.<variant>].json
                                                    # against DIR/programs/<prog>.dpt
 
-When there are multiple targets, the case's expected block is checked on each one. 
-If there's no expected block, the output of the first target is used as the 
-expected outputs for the rest.
+When there are multiple targets, the case's expected block is checked on each one.
+A case with no expected block is a compiler validation test: the output of the first
+target (the reference, normally interp) is used as the expected outputs for the rest.
+With one target, compiler validation tests are skipped.
 
 Targets:
   interp  the interpreter's simulator, driven directly by the spec
@@ -142,7 +143,7 @@ def json_records(text):
 class Case:
     def __init__(self, name, program, spec, work):
         self.name, self.program, self.spec, self.work = name, program, spec, work
-        self.expected = None   # {port: [output]}, from lucidEncode; None: an agreement test
+        self.expected = None   # {port: [output]}, from lucidEncode; None: a compiler validation test
         self.out_ports = set() # the ports outputs are expected on (expected, or the reference's)
         self.error = None      # a TestError, once the case can't go on
         self.results = {}      # target name -> a target's result, or a TestError
@@ -308,7 +309,7 @@ def checks(targets, case):
             out.append((f"{case.name} [{t.name}]", not lines, lines))
         return out
     if len(targets) < 2:
-        return [(case.name, None, ["agreement test (no \"expected\"): needs two targets"])]
+        return [(case.name, None, ["compiler validation test (no \"expected\"): needs two targets"])]
     ref = targets[0]
     ref_r = outcome(ref, case)
     out = []
@@ -397,7 +398,7 @@ def main():
             encode(tools, case)
         except TestError as e:
             case.error = e
-    # agreement tests run on every target only when there's more than one
+    # compiler validation tests run only when there's more than one target
     runnable = [c for c in cases if c.error is None and (c.expected is not None or len(targets) > 1)]
     for i, t in enumerate(targets):
         ready = []
