@@ -33,7 +33,7 @@ tests to check the generated C.
   int types wider than 64 bits) now cause compiler errors instead of incorrect C code. 
 - (**bug fix**) **Smaller issues.** Fixed C operator precedence and `mod` name 
   collision; bit-aligned hash calc semantics; fixed numerous printf and formatter 
-  bugs; set correct port on event recirculate.
+  bugs; set correct port on event recirculate; fixed bugs in hash implementation.
 - (**bug fix**) **Support large internal values** Fixed a bug causing compiler    
   crash for values larger than 63 bits.
 

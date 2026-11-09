@@ -1,8 +1,4 @@
 typedef struct {
-  uint32_t _0;
-  uint32_t _1;
-} tuple_1;
-typedef struct {
   uint8_t*  start;
   uint8_t*  cursor;
   uint8_t*  end;
@@ -57,21 +53,36 @@ void write_bits(packet_t* bs, uint64_t v, int n) {
     }
 }
 uint32_t flood(uint32_t port ){ return port + 10000;/* TODO!*/ }
-uint32_t hash_32(uint32_t seed , uint8_t*  str , uint32_t len_bits ){
-  // len_bits is the value's bit width. Sum the whole bytes, then add the last
-  // partial byte masked to its valid low bits (the value is stored little-endian,
-  // so the leftover bits live in the low end of the final byte). Placeholder hash
-  // (a byte sum) -- collisions are not a concern yet.
-  int hashValue = seed;
-  uint32_t full_bytes = len_bits / 8;
-  for (uint32_t i = 0; i < full_bytes; i++) {
-      hashValue += str[i];
+
+/* write the low n bits of v into buf at bit offset `off`, MSB-first.
+   buf must be pre-zeroed (bits are only OR'd in). Packs hash and checksum args. */
+static void put_bits(uint8_t* buf, uint32_t off, uint64_t v, int n) {
+    for (int i = 0; i < n; i++) {
+        if ((v >> (n - 1 - i)) & 1) {
+            uint32_t b = off + i;
+            buf[b >> 3] |= (uint8_t)(1u << (7 - (b & 7)));
+        }
+    }
+}
+uint64_t hash_64(uint32_t seed , uint8_t*  buf , uint32_t len_bits ){
+  if (seed == 1) {
+    // the identity hash: the low 64 bits of the bit string (the caller keeps
+    // the low <size> bits)
+    uint64_t v = 0;
+    for (uint32_t i = len_bits > 64 ? len_bits - 64 : 0; i < len_bits; i++)
+      v = (v << 1) | ((buf[i >> 3] >> (7 - (i & 7))) & 1);
+    return v;
   }
-  uint32_t rem = len_bits % 8;
-  if (rem != 0) {
-      hashValue += str[full_bytes] & ((1 << rem) - 1);
-  }
-  return hashValue;
+  // placeholder hash (a byte sum of the zero-padded bit string)
+  uint64_t h = seed;
+  for (uint32_t i = 0; i < (len_bits + 7) / 8; i++) h += buf[i];
+  return h;
+}
+uint8_t hash_args_0(uint32_t seed , uint32_t f0 , uint32_t f1 ){
+  uint8_t buf[8] = {0};
+  put_bits(buf, 0, (uint64_t)f0, 32);
+  put_bits(buf, 32, (uint64_t)f1, 32);
+  return hash_64((uint32_t)seed, buf, 64) & 0xfULL;
 }
 typedef struct {
   uint16_t len;
@@ -358,13 +369,12 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       uint32_t src_ip_4053  = ev_in->data.args.add_to_nat_4049.src_ip_4047;
       uint32_t src_port_4054  = ev_in->data.args.add_to_nat_4049.src_port_4048;
       event_t this  = mk_add_to_nat(src_ip_4053, src_port_4054);
-      tuple_1 tmp_4336  = {._0 = src_ip_4053, ._1 = src_port_4054,};
-      uint32_t NAT_port_4055  = ((uint32_t)(hash_32((uint32_t)1234, (uint8_t* )&tmp_4336, 64) & 15));
+      uint32_t NAT_port_4055  = ((uint32_t)(hash_args_0(1, src_ip_4053, src_port_4054)));
       printf("Mapped (ip: %u, port: %u) to port %u\n", src_ip_4053, src_port_4054, NAT_port_4055);
       Array_update_complex_nat_to_ip_4035_set_set_memop_32_bit(NAT_port_4055, src_ip_4053, 0);
       Array_update_complex_nat_to_port_4036_set_set_memop_32_bit(NAT_port_4055, src_port_4054, 0);
-      out_event_t tmp_4337  = {.ev = mk_inside_continue(NAT_port_4055), .port = 4294967295};
-      out_events[n] = tmp_4337;
+      out_event_t tmp_4336  = {.ev = mk_inside_continue(NAT_port_4055), .port = 4294967295};
+      out_events[n] = tmp_4336;
       n = n + 1;
       break;
     }
@@ -373,8 +383,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       uint32_t src_port_4057  = ev_in->data.args.inside_packet_4039.src_port_4038;
       event_t this  = mk_inside_packet(src_ip_4056, src_port_4057);
       uint8_t ret_4059  = false;
-      tuple_1 tmp_4338  = {._0 = src_ip_4056, ._1 = src_port_4057,};
-      uint32_t idx_4060  = ((uint32_t)(hash_32((uint32_t)1234, (uint8_t* )&tmp_4338, 64) & 15));
+      uint32_t idx_4060  = ((uint32_t)(hash_args_0(1, src_ip_4056, src_port_4057)));
       uint32_t ip_4061  = Array_update_complex_nat_to_ip_4035_get_get_memop_32_bit(idx_4060, 0, 0);
       uint32_t port_4062  = Array_update_complex_nat_to_port_4036_get_get_memop_32_bit(idx_4060, 0, 0);
       if (ip_4061 == src_ip_4056) {
@@ -383,16 +392,15 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
         }
       }
       if (ret_4059 == true) {
-        tuple_1 tmp_4339  = {._0 = src_ip_4056, ._1 = src_port_4057,};
-        uint32_t NAT_port_4064  = ((uint32_t)(hash_32((uint32_t)1234, (uint8_t* )&tmp_4339, 64) & 15));
+        uint32_t NAT_port_4064  = ((uint32_t)(hash_args_0(1, src_ip_4056, src_port_4057)));
         printf("IP already in NAT, maps to port %u\n", NAT_port_4064);
-        out_event_t tmp_4340  = {.ev = mk_inside_continue(NAT_port_4064), .port = 4294967295};
-        out_events[n] = tmp_4340;
+        out_event_t tmp_4337  = {.ev = mk_inside_continue(NAT_port_4064), .port = 4294967295};
+        out_events[n] = tmp_4337;
         n = n + 1;
       }else {
         printf("Adding to NAT\n");
-        out_event_t tmp_4341  = {.ev = mk_add_to_nat(src_ip_4056, src_port_4057), .port = 4294967295};
-        out_events[n] = tmp_4341;
+        out_event_t tmp_4338  = {.ev = mk_add_to_nat(src_ip_4056, src_port_4057), .port = 4294967295};
+        out_events[n] = tmp_4338;
         n = n + 1;
       }
       break;
@@ -406,8 +414,8 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       if (ip_4066 == 0) {
         printf("dropped\n");
       }else {
-        out_event_t tmp_4342  = {.ev = mk_outside_continue(ip_4066, port_4067), .port = 4294967295};
-        out_events[n] = tmp_4342;
+        out_event_t tmp_4339  = {.ev = mk_outside_continue(ip_4066, port_4067), .port = 4294967295};
+        out_events[n] = tmp_4339;
         n = n + 1;
       }
       break;

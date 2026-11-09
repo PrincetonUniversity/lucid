@@ -48,7 +48,6 @@ lucidCompilerOut/
 lucid_tofino_build/
 test/lucidcc/_pcaps/
 test/lucidcc/_rawsock_build/
-test/lucidcc/_dpdk_build/
 test/ltf/_work/
 __pycache__/
 

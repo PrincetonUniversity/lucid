@@ -73,26 +73,10 @@ void write_bits(packet_t* bs, uint64_t v, int n) {
     }
 }
 uint32_t flood(uint32_t port ){ return port + 10000;/* TODO!*/ }
-uint32_t hash_32(uint32_t seed , uint8_t*  str , uint32_t len_bits ){
-  // len_bits is the value's bit width. Sum the whole bytes, then add the last
-  // partial byte masked to its valid low bits (the value is stored little-endian,
-  // so the leftover bits live in the low end of the final byte). Placeholder hash
-  // (a byte sum) -- collisions are not a concern yet.
-  int hashValue = seed;
-  uint32_t full_bytes = len_bits / 8;
-  for (uint32_t i = 0; i < full_bytes; i++) {
-      hashValue += str[i];
-  }
-  uint32_t rem = len_bits % 8;
-  if (rem != 0) {
-      hashValue += str[full_bytes] & ((1 << rem) - 1);
-  }
-  return hashValue;
-}
 
 /* write the low n bits of v into buf at bit offset `off`, MSB-first.
-   buf must be pre-zeroed (bits are only OR'd in). */
-static void csum_put_bits(uint8_t* buf, uint32_t off, uint64_t v, int n) {
+   buf must be pre-zeroed (bits are only OR'd in). Packs hash and checksum args. */
+static void put_bits(uint8_t* buf, uint32_t off, uint64_t v, int n) {
     for (int i = 0; i < n; i++) {
         if ((v >> (n - 1 - i)) & 1) {
             uint32_t b = off + i;
@@ -100,6 +84,7 @@ static void csum_put_bits(uint8_t* buf, uint32_t off, uint64_t v, int n) {
         }
     }
 }
+
 /* RFC 1071 ones-complement sum of buf[0..nbytes), 16-bit big-endian words;
    an odd final byte is the high byte of its word (right zero-padding). */
 static uint16_t csum16_fold(const uint8_t* buf, uint32_t nbytes) {
@@ -111,19 +96,19 @@ static uint16_t csum16_fold(const uint8_t* buf, uint32_t nbytes) {
 }
 uint16_t checksum16_0(uint8_t f0 , uint8_t f1 , uint8_t f2 , uint8_t f3 , uint16_t f4 , uint16_t f5 , uint8_t f6 , uint16_t f7 , uint8_t f8 , uint8_t f9 , uint16_t f10 , uint32_t f11 , uint32_t f12 ){
   uint8_t buf[20] = {0};
-  csum_put_bits(buf, 0, (uint64_t)f0, 4);
-  csum_put_bits(buf, 4, (uint64_t)f1, 4);
-  csum_put_bits(buf, 8, (uint64_t)f2, 6);
-  csum_put_bits(buf, 14, (uint64_t)f3, 2);
-  csum_put_bits(buf, 16, (uint64_t)f4, 16);
-  csum_put_bits(buf, 32, (uint64_t)f5, 16);
-  csum_put_bits(buf, 48, (uint64_t)f6, 3);
-  csum_put_bits(buf, 51, (uint64_t)f7, 13);
-  csum_put_bits(buf, 64, (uint64_t)f8, 8);
-  csum_put_bits(buf, 72, (uint64_t)f9, 8);
-  csum_put_bits(buf, 80, (uint64_t)f10, 16);
-  csum_put_bits(buf, 96, (uint64_t)f11, 32);
-  csum_put_bits(buf, 128, (uint64_t)f12, 32);
+  put_bits(buf, 0, (uint64_t)f0, 4);
+  put_bits(buf, 4, (uint64_t)f1, 4);
+  put_bits(buf, 8, (uint64_t)f2, 6);
+  put_bits(buf, 14, (uint64_t)f3, 2);
+  put_bits(buf, 16, (uint64_t)f4, 16);
+  put_bits(buf, 32, (uint64_t)f5, 16);
+  put_bits(buf, 48, (uint64_t)f6, 3);
+  put_bits(buf, 51, (uint64_t)f7, 13);
+  put_bits(buf, 64, (uint64_t)f8, 8);
+  put_bits(buf, 72, (uint64_t)f9, 8);
+  put_bits(buf, 80, (uint64_t)f10, 16);
+  put_bits(buf, 96, (uint64_t)f11, 32);
+  put_bits(buf, 128, (uint64_t)f12, 32);
   return csum16_fold(buf, 20);
 }
 typedef struct {

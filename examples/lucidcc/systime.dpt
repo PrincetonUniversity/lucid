@@ -1,8 +1,0 @@
-// Sys.time() is 32 bits: the low 32 bits of the 48-bit nanosecond stamp the
-// driver writes on each event at dequeue.
-packet event pkt(int<32> t, Payload.t pl);
-
-handle pkt(int<32> t, Payload.t pl) {
-    int<32> now = Sys.time();
-    generate_port(ingress_port, pkt(now, pl));
-}

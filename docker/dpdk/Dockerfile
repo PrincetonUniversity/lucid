@@ -20,7 +20,8 @@ RUN cd dpdk-$VER && meson setup build \
     && ninja -C build && ninja -C build install && ldconfig \
     && rm -rf /src
 RUN pkg-config --modversion libdpdk
-# test harness (test/lucidcc/test_dpdk.py) and the af_packet test's veth + capture tools
+# veth + capture tools for test/ltf's dpdk target (python3-scapy and tcpreplay are no
+# longer used by it)
 RUN apt-get update && apt-get install -y --no-install-recommends \
       python3-scapy iproute2 tcpdump tcpreplay procps \
     && rm -rf /var/lib/apt/lists/*

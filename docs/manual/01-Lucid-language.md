@@ -472,6 +472,8 @@ For example, `printf("Is %d > 10? Answer: %b", 3, 3 > 10)` will print the string
 ### Hash
 The `hash` expression has the form `hash<<size>>(seed, arg1, arg2, ...)`. The `seed` argument should be an integer; there may be any number of other arguments, which may be of any type. The expression performs a seeded hash of its inputs, and returns a `size`-bit integer.
 
+**Seed 1 is the identity hash.** If the seed is 1 and every argument is an integer, `hash` concatenates the arguments' bits, with the first argument most significant, and keeps the low `size` bits. For example, `hash<8>(1, x)` is the low 8 bits of `x`, and `hash<4>(1, a, b)` is the low 4 bits of `b` when `b` is at least 4 bits wide. Every backend computes the identity hash the same way. Other seeds currently give a backend-specific hash, so a program whose output depends on their values may behave differently across backends.
+
 ### Checksum
 
 A 16-bit hash expression that uses the builtin seed `checksum` , e.g., `hash<16>(checksum, arg1, arg2, ...)`, computes the standard ipv4 ones-compliment checksum.

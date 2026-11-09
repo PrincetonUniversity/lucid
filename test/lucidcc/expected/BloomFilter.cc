@@ -53,21 +53,35 @@ void write_bits(packet_t* bs, uint64_t v, int n) {
     }
 }
 uint32_t flood(uint32_t port ){ return port + 10000;/* TODO!*/ }
-uint32_t hash_32(uint32_t seed , uint8_t*  str , uint32_t len_bits ){
-  // len_bits is the value's bit width. Sum the whole bytes, then add the last
-  // partial byte masked to its valid low bits (the value is stored little-endian,
-  // so the leftover bits live in the low end of the final byte). Placeholder hash
-  // (a byte sum) -- collisions are not a concern yet.
-  int hashValue = seed;
-  uint32_t full_bytes = len_bits / 8;
-  for (uint32_t i = 0; i < full_bytes; i++) {
-      hashValue += str[i];
+
+/* write the low n bits of v into buf at bit offset `off`, MSB-first.
+   buf must be pre-zeroed (bits are only OR'd in). Packs hash and checksum args. */
+static void put_bits(uint8_t* buf, uint32_t off, uint64_t v, int n) {
+    for (int i = 0; i < n; i++) {
+        if ((v >> (n - 1 - i)) & 1) {
+            uint32_t b = off + i;
+            buf[b >> 3] |= (uint8_t)(1u << (7 - (b & 7)));
+        }
+    }
+}
+uint64_t hash_64(uint32_t seed , uint8_t*  buf , uint32_t len_bits ){
+  if (seed == 1) {
+    // the identity hash: the low 64 bits of the bit string (the caller keeps
+    // the low <size> bits)
+    uint64_t v = 0;
+    for (uint32_t i = len_bits > 64 ? len_bits - 64 : 0; i < len_bits; i++)
+      v = (v << 1) | ((buf[i >> 3] >> (7 - (i & 7))) & 1);
+    return v;
   }
-  uint32_t rem = len_bits % 8;
-  if (rem != 0) {
-      hashValue += str[full_bytes] & ((1 << rem) - 1);
-  }
-  return hashValue;
+  // placeholder hash (a byte sum of the zero-padded bit string)
+  uint64_t h = seed;
+  for (uint32_t i = 0; i < (len_bits + 7) / 8; i++) h += buf[i];
+  return h;
+}
+uint8_t hash_args_0(uint32_t seed , uint32_t f0 ){
+  uint8_t buf[4] = {0};
+  put_bits(buf, 0, (uint64_t)f0, 32);
+  return hash_64((uint32_t)seed, buf, 32) & 0xffULL;
 }
 typedef struct {
   uint16_t len;
@@ -367,16 +381,16 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       uint32_t x_5930  = ev_in->data.args.in_5924.x_5923;
       event_t this  = mk_in(add_5928, pad_5929, x_5930);
       if (add_5928) {
-        Array_update_complex_bf1_0_0_5913_set_set_memop_8_bit(hash_32((uint32_t)0, (uint8_t* )&x_5930, 32), 1, 0);
-        Array_update_complex_bf1_0_1_5914_set_set_memop_8_bit(hash_32((uint32_t)1, (uint8_t* )&x_5930, 32), 1, 0);
-        Array_update_complex_bf1_0_2_5915_set_set_memop_8_bit(hash_32((uint32_t)2, (uint8_t* )&x_5930, 32), 1, 0);
-        Array_update_complex_bf1_0_3_5916_set_set_memop_8_bit(hash_32((uint32_t)3, (uint8_t* )&x_5930, 32), 1, 0);
+        Array_update_complex_bf1_0_0_5913_set_set_memop_8_bit(hash_args_0(0, x_5930), 1, 0);
+        Array_update_complex_bf1_0_1_5914_set_set_memop_8_bit(hash_args_0(1, x_5930), 1, 0);
+        Array_update_complex_bf1_0_2_5915_set_set_memop_8_bit(hash_args_0(2, x_5930), 1, 0);
+        Array_update_complex_bf1_0_3_5916_set_set_memop_8_bit(hash_args_0(3, x_5930), 1, 0);
         false;
       }else {
-        uint8_t x_5933  = Array_update_complex_bf1_0_0_5913_get_get_memop_8_bit(hash_32((uint32_t)0, (uint8_t* )&x_5930, 32), 0, 0);
-        uint8_t x_5934  = Array_update_complex_bf1_0_1_5914_get_get_memop_8_bit(hash_32((uint32_t)1, (uint8_t* )&x_5930, 32), 0, 0);
-        uint8_t x_5935  = Array_update_complex_bf1_0_2_5915_get_get_memop_8_bit(hash_32((uint32_t)2, (uint8_t* )&x_5930, 32), 0, 0);
-        uint8_t x_5936  = Array_update_complex_bf1_0_3_5916_get_get_memop_8_bit(hash_32((uint32_t)3, (uint8_t* )&x_5930, 32), 0, 0);
+        uint8_t x_5933  = Array_update_complex_bf1_0_0_5913_get_get_memop_8_bit(hash_args_0(0, x_5930), 0, 0);
+        uint8_t x_5934  = Array_update_complex_bf1_0_1_5914_get_get_memop_8_bit(hash_args_0(1, x_5930), 0, 0);
+        uint8_t x_5935  = Array_update_complex_bf1_0_2_5915_get_get_memop_8_bit(hash_args_0(2, x_5930), 0, 0);
+        uint8_t x_5936  = Array_update_complex_bf1_0_3_5916_get_get_memop_8_bit(hash_args_0(3, x_5930), 0, 0);
         if ((((x_5933 == 1) && (x_5934 == 1)) && (x_5935 == 1)) && (x_5936 == 1)) {
           out_event_t tmp_6384  = {.ev = mk_allowed(x_5930), .port = 4294967295};
           out_events[n] = tmp_6384;

@@ -10,5 +10,5 @@ Example usage:
 ```
 docker build --platform linux/amd64 -t lucid-dpdk docker/dpdk   # once, a few minutes (525 MB)
 docker/dpdk/run.sh BUILD_DIR make                               # build a program's C in the image
-make test-cc-dpdk                                               # the lucidcc dpdk tests (test/lucidcc)
+make test-ltf-dpdk                                              # the ltf tests on dpdk (test/ltf)
 ```

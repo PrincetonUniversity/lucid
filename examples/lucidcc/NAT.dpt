@@ -1,7 +1,9 @@
 // Simple NAT implementation
 // Started at 2:57
 
-const int HASH_SEED = 1234;
+// seed 1: the identity hash, so a NAT port is the low 4 bits of (src_ip, src_port),
+// the same on every backend
+const int HASH_SEED = 1;
 const int NUM_PORTS = 16;
 
 // Maps NAT ports to src IP

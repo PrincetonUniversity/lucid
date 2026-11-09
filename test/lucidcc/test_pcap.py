@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""pcap driver tests: generate the test cases (gen_pcaps.py), then for each program with a
-test case, compile it with the pcap driver, run it on _pcaps/<name>.in.pcap, and compare its
-output packets with _pcaps/<name>.expected.pcap (and their times, when gen_pcaps.py wrote
-the expected file with times). Mismatched outputs are stored as _pcaps/<name>.actual.pcap.
+"""pcap driver tests: the driver's virtual clock (exact departure times, --latency-ns).
+Generate the test cases (gen_pcaps.py), then for each program with a test case, compile
+it with the pcap driver, run it on _pcaps/<name>.in.pcap, and compare its output packets
+with _pcaps/<name>.expected.pcap (and their times, when gen_pcaps.py wrote the expected
+file with times). Programs' behavior is tested by test/ltf. Mismatched outputs are stored as _pcaps/<name>.actual.pcap.
 A VARIANTS entry runs a program on a test case of another name, with extra driver arguments."""
 import os
 import shutil

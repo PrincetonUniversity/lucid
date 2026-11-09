@@ -57,22 +57,6 @@ void write_bits(packet_t* bs, uint64_t v, int n) {
     }
 }
 uint32_t flood(uint32_t port ){ return port + 10000;/* TODO!*/ }
-uint32_t hash_32(uint32_t seed , uint8_t*  str , uint32_t len_bits ){
-  // len_bits is the value's bit width. Sum the whole bytes, then add the last
-  // partial byte masked to its valid low bits (the value is stored little-endian,
-  // so the leftover bits live in the low end of the final byte). Placeholder hash
-  // (a byte sum) -- collisions are not a concern yet.
-  int hashValue = seed;
-  uint32_t full_bytes = len_bits / 8;
-  for (uint32_t i = 0; i < full_bytes; i++) {
-      hashValue += str[i];
-  }
-  uint32_t rem = len_bits % 8;
-  if (rem != 0) {
-      hashValue += str[full_bytes] & ((1 << rem) - 1);
-  }
-  return hashValue;
-}
 enum {tag_hit_acn_2744 = 0, tag_miss_acn_2747 = 1};
 typedef struct {
   uint16_t len;

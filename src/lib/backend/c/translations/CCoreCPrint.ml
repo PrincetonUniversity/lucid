@@ -196,12 +196,7 @@ and op_to_string (op: op) (args: exp list) : string =
   | LShift, [a; b] -> operand a ^ " << " ^ operand b
   | RShift, [a; b] -> operand a ^ " >> " ^ operand b
   | Slice (i, j), [a] -> exp_to_string a ^ "[" ^ string_of_int i ^ ":" ^ string_of_int j ^ "]"
-  (* TODO: understand what this is doing with respect to hash width *)
-  | Hash _, [seed; a] ->
-    let ref_arg = sprintf "(%s)&%s" (plain_ty_to_string (tref (tint 8))) (exp_to_string a) in
-    let seed_arg = sprintf "(%s)%s" (plain_ty_to_string (tint 32)) (exp_to_string seed) in
-    (* TODO: polymorphic hashes *)
-    sprintf "hash_32(%s, %s, %i)" seed_arg ref_arg (bitsizeof_ty_exn a.ety)
+  | Hash _, _ -> err "hash ops are lowered to function calls by CCoreSystem.process_hashes"
   | Cast new_ty, [a] ->
     (* casting is only between plain types (not bit-ints). This is safe because bitints 
        must be stored in structs, where the mod is done automatically. *)
