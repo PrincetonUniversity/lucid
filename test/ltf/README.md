@@ -1,8 +1,6 @@
 # Lucid test framework (ltf)
 
-Execution tests. These run a Lucid program on a target with a timed input trace, and
-compare what leaves each port with the expected output. The design is in
-`docs/design_notes/03.lucid-test-framework.md`.
+Execution tests. These run a Lucid program on a target with a timed input trace, and compare what leaves each port with the expected output. The design is in `docs/design_notes/03.lucid-test-framework.md`.
 
 ## Test cases
 
@@ -35,7 +33,9 @@ Comparison checks wire bytes per port, ordered. Timestamps are not considered.
 
 ## Directories + usage
 
-- `ltf.py` test runner, uses lucidEncode and dpt
+- `ltf.py` test runner, uses lucidEncode and dpt (and lucidcc, for dpdk)
+- `ltf_dpdk.py` internal to `ltf.py`: the dpdk target's executor, which `ltf.py` runs in the
+  `docker/dpdk` image on the work dirs it prepares (not meant to be run directly)
 - `cases/<prog>[.<variant>].json` runs against `programs/<prog>.dpt`.
 - `_work/<case>/` untracked staging dir:
   - `encoded/`: test cases run through `lucidEncode`;
@@ -44,10 +44,13 @@ Comparison checks wire bytes per port, ordered. Timestamps are not considered.
 ```sh
 ./test/ltf/ltf.py run PROGRAM.dpt CASE.json [--work DIR]         # one case
 make test-ltf                                                    # every case, on the interpreter
-./test/ltf/ltf.py suite test/ltf [-k NAME]                       # the same, or a subset
+make test-ltf-dpdk                                               # every case, on dpdk
+./test/ltf/ltf.py suite test/ltf [-k NAME] [--target dpdk]       # the same, or a subset
 ```
 
 The runner finds `dpt` and `lucidEncode` on `PATH`, or at the repo root. 
 Use `--dpt` and `--lucidencode` to point it elsewhere.
 
-Targets: `interp` (the interpreter's simulator). `dpdk` is coming next.
+Targets:
+- `interp`: the interpreter's simulator.
+- `dpdk`: compiled with `lucidcc --dpdk`, then run in the `docker/dpdk` image with `net_af_packet` + veths for every port. Inputs are replayed at timestamps, the switch stops 1s after last input. Drops fail the test.

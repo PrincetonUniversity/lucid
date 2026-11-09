@@ -7,10 +7,15 @@ output port to its ordered outputs, given as events ({"name", "args"}) or hex by
 compares the wire bytes leaving each port, in order. Extra outputs fail the test.
 Order across ports and timing are not compared.
 
-  ltf.py run PROGRAM SPEC [--target interp] [--work DIR]
-  ltf.py suite DIR [--target interp] [-k NAME]   # DIR/cases/<prog>[.<variant>].json
-                                                 # against DIR/programs/<prog>.dpt
-Targets: interp (the interpreter's simulator, driven directly by the spec).
+  ltf.py run PROGRAM SPEC [--target T] [--work DIR]
+  ltf.py suite DIR [--target T] [-k NAME]   # DIR/cases/<prog>[.<variant>].json
+                                            # against DIR/programs/<prog>.dpt
+Targets:
+  interp  the interpreter's simulator, driven directly by the spec
+  dpdk    the lucidcc --dpdk driver on net_af_packet veths, run by ltf_dpdk.py in the
+          docker/dpdk image (--dpdk-run native: run it here, on Linux as root). The
+          inputs are replayed at their timestamps, every port in the case is bound,
+          and any driver drop fails the test.
 """
 import argparse
 import difflib
@@ -28,21 +33,26 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ---- tools ---------------------------------------------------------------------
 
-def find_tool(name, override):
-    """a tool binary: the --flag path, else on PATH, else at the root of the git
-    repo this script is in"""
+def repo_root():
+    r = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=SCRIPT_DIR,
+                       capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def find_tool(name, override, in_repo=None):
+    """a tool: the --flag path, else on PATH, else at in_repo (default: name) in the
+    git repo this script is in"""
     if override:
         return os.path.abspath(override)
     on_path = shutil.which(name)
     if on_path:
         return on_path
-    r = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=SCRIPT_DIR,
-                       capture_output=True, text=True)
-    if r.returncode == 0:
-        candidate = os.path.join(r.stdout.strip(), name)
+    root = repo_root()
+    if root:
+        candidate = os.path.join(root, in_repo or name)
         if os.path.exists(candidate):
             return candidate
-    sys.exit(f"ltf: can't find {name} (not on PATH or at the repo root; pass --{name.lower()})")
+    sys.exit(f"ltf: can't find {name} (not on PATH or in the repo; pass --{name.lower()})")
 
 
 class TestError(Exception):
@@ -89,10 +99,19 @@ def read_pcap(path):
 # ---- outputs ---------------------------------------------------------------------
 # An output is a dict with "wire_bytes" (hex), and "name"/"args" when known.
 
-def describe(out):
+LUCID_HDR_HEX = 32   # a background event's frame: dst, src, ethertype 0x029a, then a 16-bit tag
+
+def describe(out, known=()):
+    """an output's name and args. For an output that only has bytes: the name of a
+    known (expected) background event with the same header and tag, if any."""
     if "name" in out:
         return f"{out['name']}({', '.join(json.dumps(a) for a in out.get('args', []))})"
-    return out["wire_bytes"]
+    hdr = out["wire_bytes"][:LUCID_HDR_HEX]
+    if hdr[24:28] == "029a":
+        for o in known:
+            if "name" in o and o["wire_bytes"][:LUCID_HDR_HEX] == hdr:
+                return f"{o['name']}(?)"
+    return "(bytes)"
 
 
 def json_records(text):
@@ -112,72 +131,165 @@ def json_records(text):
 
 
 # ---- targets ---------------------------------------------------------------------
-# A target runs the case and returns ({port: [output]}, [printf line]), writing
-# out_<port>.pcap per output port into its work dir.
+# A target runs prepared cases. prepare(case) is per case (case: a Case); run(cases)
+# runs them all and returns, per case, ({port: [output]}, [printf line], [failure
+# line]) or raises TestError. Each target writes out_<port>.pcap per output port, and
+# its tool output, into the case's <work>/<target> dir.
 
-def target_interp(tools, program, spec, work):
-    r = run_tool([tools["dpt"], "--json", program, "--spec", spec], "dpt")
-    with open(os.path.join(work, "dpt.out"), "w") as f:
-        f.write(r.stdout)
-    outputs, timed, prints = {}, {}, []
-    for rec in json_records(r.stdout):
-        if "event_exit" in rec:
-            ex = rec["event_exit"]
-            sw, port = ex["locations"][0].split(":")
-            port = int(port)
-            out = {k: ex[k] for k in ("name", "args") if k in ex}
-            out["wire_bytes"] = ex["wire_bytes"]
-            outputs.setdefault(port, []).append(out)
-            timed.setdefault(port, []).append((ex["timestamp"], bytes.fromhex(ex["wire_bytes"])))
-        elif "printf" in rec:
-            prints.append(rec["printf"])
-    for port, records in timed.items():
-        write_pcap(os.path.join(work, f"out_{port}.pcap"), records)
-    return outputs, prints
+class Case:
+    def __init__(self, name, program, spec, work):
+        self.name, self.program, self.spec, self.work = name, program, spec, work
+        self.expected = None   # {port: [output]}, from lucidEncode
+        self.error = None      # a TestError, once the case can't go on
 
 
-TARGETS = {"interp": target_interp}
+class Interp:
+    name = "interp"
+
+    def __init__(self, tools, args):
+        self.dpt = tools["dpt"]
+
+    def prepare(self, case):
+        pass
+
+    def run(self, cases):
+        return {c.name: self.run_one(c) for c in cases}
+
+    def run_one(self, case):
+        work = os.path.join(case.work, self.name)
+        try:
+            r = run_tool([self.dpt, "--json", case.program, "--spec", case.spec], "dpt")
+        except TestError as e:
+            return e
+        with open(os.path.join(work, "dpt.out"), "w") as f:
+            f.write(r.stdout)
+        outputs, timed, prints = {}, {}, []
+        for rec in json_records(r.stdout):
+            if "event_exit" in rec:
+                ex = rec["event_exit"]
+                sw, port = ex["locations"][0].split(":")
+                port = int(port)
+                out = {k: ex[k] for k in ("name", "args") if k in ex}
+                out["wire_bytes"] = ex["wire_bytes"]
+                outputs.setdefault(port, []).append(out)
+                timed.setdefault(port, []).append((ex["timestamp"], bytes.fromhex(ex["wire_bytes"])))
+            elif "printf" in rec:
+                prints.append(rec["printf"])
+        for port, records in timed.items():
+            write_pcap(os.path.join(work, f"out_{port}.pcap"), records)
+        return outputs, prints, []
 
 
-# ---- one test --------------------------------------------------------------------
+class Dpdk:
+    name = "dpdk"
+    EXECUTOR = os.path.join(SCRIPT_DIR, "ltf_dpdk.py")
 
-def check_spec(spec):
-    return json.load(open(spec))
+    def __init__(self, tools, args):
+        self.lucidcc = find_tool("lucidcc", args.lucidcc)
+        if args.dpdk_run == "native":
+            self.runner = None
+        else:
+            self.runner = find_tool("run.sh", args.dpdk_run, in_repo="docker/dpdk/run.sh")
 
+    def prepare(self, case):
+        """generate the C build dir, and the port map: every port the case uses
+        (declared, input or expected) except recirculation ports"""
+        work = os.path.join(case.work, self.name)
+        run_tool([self.lucidcc, case.program, "--dpdk", "--build", os.path.join(work, "build")],
+                 "lucidcc --dpdk")
+        spec = json.load(open(case.spec))
+        declared = spec.get("topology", {}).get("nodes", {}).get("0", {}).get("ports", {})
+        recirc = {int(p) for p, d in declared.items() if d.get("type") == "recirc"}
+        inputs = {int(os.path.basename(f)[3:-5])
+                  for f in glob.glob(os.path.join(case.work, "encoded", "in_*.pcap"))}
+        ports = sorted(({int(p) for p in declared} | inputs | set(case.expected)) - recirc)
+        with open(os.path.join(work, "ports.json"), "w") as f:
+            json.dump({"ports": ports}, f)
+
+    def run(self, cases):
+        """one executor run for every case: in a container, the program builds are slow"""
+        root = os.path.commonpath([os.path.abspath(c.work) for c in cases])
+        shutil.copy(self.EXECUTOR, os.path.join(root, "ltf_dpdk.py"))
+        rel = [os.path.relpath(os.path.abspath(c.work), root) for c in cases]
+        if self.runner:
+            cmd = [self.runner, root, "python3", "ltf_dpdk.py", *rel]
+        else:
+            cmd = (["sudo"] if os.geteuid() != 0 else []) + ["python3", "ltf_dpdk.py", *rel]
+        print(f"ltf: running {len(cases)} case(s) on dpdk ...", flush=True)
+        r = subprocess.run(cmd, cwd=root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        with open(os.path.join(root, "ltf_dpdk.log"), "w") as f:
+            f.write(r.stdout)
+        if r.returncode != 0:
+            tail = "\n".join(r.stdout.strip().splitlines()[-8:])
+            err = TestError(f"the dpdk executor failed (exit {r.returncode}):\n{tail}")
+            return {c.name: err for c in cases}
+        return {c.name: self.collect(c) for c in cases}
+
+    def collect(self, case):
+        work = os.path.join(case.work, self.name)
+        result_f = os.path.join(work, "result.json")
+        if not os.path.exists(result_f):
+            return TestError("the dpdk executor left no result.json")
+        result = json.load(open(result_f))
+        if "error" in result:
+            return TestError("dpdk: " + result["error"])
+        problems = [f"dpdk dropped {n} ({cause})" for cause, n in result["drops"].items() if n]
+        outputs = {}
+        for port in json.load(open(os.path.join(work, "ports.json")))["ports"]:
+            path = os.path.join(work, f"out_{port}.pcap")
+            frames = [f for _, f in read_pcap(path)] if os.path.exists(path) else []
+            if frames:
+                outputs[port] = [{"wire_bytes": f.hex()} for f in frames]
+        prints = open(os.path.join(work, "switch.stdout")).read().splitlines()
+        return outputs, prints, problems
+
+
+TARGETS = {"interp": Interp, "dpdk": Dpdk}
+
+
+# ---- comparison ------------------------------------------------------------------
 
 def compare(expected, actual):
-    """expected, actual: {port: [output]}; returns a list of failure lines"""
+    """expected, actual: {port: [output]}; returns a list of failure lines. Outputs
+    without a name (a target that only sees bytes) are described by the expected
+    output with the same bytes, if there is one."""
+    named = [o for outs in expected.values() for o in outs if "name" in o]
+    known = {o["wire_bytes"]: o for o in named}
     lines = []
     for port in sorted(set(expected) | set(actual)):
         exp, act = expected.get(port, []), actual.get(port, [])
         if [o["wire_bytes"] for o in exp] == [o["wire_bytes"] for o in act]:
             continue
         lines.append(f"port {port}: expected {len(exp)} output(s), got {len(act)}")
-        # diff the descriptions, falling back to bytes where they describe the same
         exp_d = [f"{describe(o)}  {o['wire_bytes']}" for o in exp]
-        act_d = [f"{describe(o)}  {o['wire_bytes']}" for o in act]
+        act_d = [f"{describe(known.get(o['wire_bytes'], o), named)}  {o['wire_bytes']}" for o in act]
         for d in list(difflib.unified_diff(exp_d, act_d, "expected", "actual", n=2, lineterm=""))[2:]:
             lines.append("  " + d)
     return lines
 
 
-def run_case(tools, program, spec, target, work):
-    """returns (ok, detail lines)"""
-    os.makedirs(work, exist_ok=True)
-    s = check_spec(spec)
+def prepare(tools, target, case):
+    """encode the case, then the target's own preparation"""
+    s = json.load(open(case.spec))
     if "expected" not in s:
         raise TestError("spec has no \"expected\" block (an agreement test needs a second target)")
-    enc = os.path.join(work, "encoded")
-    run_tool([tools["lucidEncode"], program, "--spec", spec, "-o", enc], "lucidEncode")
-    expected = {int(p): outs for p, outs in
-                json.load(open(os.path.join(enc, "expected.json"))).items()}
-    tdir = os.path.join(work, target)
-    os.makedirs(tdir, exist_ok=True)
-    actual, prints = TARGETS[target](tools, program, spec, tdir)
-    with open(os.path.join(tdir, "prints.txt"), "w") as f:
+    enc = os.path.join(case.work, "encoded")
+    run_tool([tools["lucidEncode"], case.program, "--spec", case.spec, "-o", enc], "lucidEncode")
+    case.expected = {int(p): outs for p, outs in
+                     json.load(open(os.path.join(enc, "expected.json"))).items()}
+    os.makedirs(os.path.join(case.work, target.name), exist_ok=True)
+    target.prepare(case)
+
+
+def check(target, case, result):
+    """(ok, detail lines)"""
+    if isinstance(result, TestError):
+        return False, str(result).splitlines()
+    actual, prints, problems = result
+    with open(os.path.join(case.work, target.name, "prints.txt"), "w") as f:
         f.writelines(p + "\n" for p in prints)
-    diffs = compare(expected, actual)
-    return not diffs, diffs
+    lines = problems + compare(case.expected, actual)
+    return not lines, lines
 
 
 # ---- commands --------------------------------------------------------------------
@@ -203,6 +315,9 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dpt", help="path to the interpreter (dpt)")
     ap.add_argument("--lucidencode", help="path to lucidEncode")
+    ap.add_argument("--lucidcc", help="path to lucidcc (dpdk target)")
+    ap.add_argument("--dpdk-run", help="dpdk target: the container runner (default: "
+                    "docker/dpdk/run.sh in this repo), or 'native' to run here")
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run", help="run one test case")
     r.add_argument("program")
@@ -218,30 +333,36 @@ def main():
 
     tools = {"dpt": find_tool("dpt", args.dpt),
              "lucidEncode": find_tool("lucidEncode", args.lucidencode)}
+    target = TARGETS[args.target](tools, args)
 
     if args.cmd == "run":
-        cases = [(os.path.basename(args.spec)[:-len(".json")], args.program, args.spec)]
-        root = args.work or tempfile.mkdtemp(prefix="ltf-")
+        root = os.path.abspath(args.work or tempfile.mkdtemp(prefix="ltf-"))
+        cases = [Case(os.path.basename(args.spec)[:-len(".json")], args.program, args.spec, root)]
         keep_passing = bool(args.work)
     else:
-        cases = [c for c in cases_in(args.dir) if not args.only or args.only in c[0]]
+        root = os.path.abspath(args.work or os.path.join(args.dir, "_work"))
+        cases = [Case(n, p, s, os.path.join(root, n))
+                 for n, p, s in cases_in(args.dir) if not args.only or args.only in n]
         if not cases:
             sys.exit(f"ltf: no cases in {os.path.join(args.dir, 'cases')}")
-        root = args.work or os.path.join(args.dir, "_work")
         keep_passing = True
-    passed = failed = 0
-    for name, program, spec in cases:
-        work = os.path.join(root, name) if args.cmd == "suite" else root
-        if args.cmd == "suite" and os.path.exists(work):
-            shutil.rmtree(work)
+    for case in cases:
+        if args.cmd == "suite" and os.path.exists(case.work):
+            shutil.rmtree(case.work)
+        os.makedirs(case.work, exist_ok=True)
         try:
-            ok, detail = run_case(tools, program, spec, args.target, work)
+            prepare(tools, target, case)
         except TestError as e:
-            ok, detail = False, str(e).splitlines()
-        report(name, ok, detail, work)
+            case.error = e
+    ready = [c for c in cases if c.error is None]
+    results = target.run(ready) if ready else {}
+    passed = failed = 0
+    for case in cases:
+        ok, detail = check(target, case, case.error or results[case.name])
+        report(case.name, ok, detail, case.work)
         passed, failed = passed + ok, failed + (not ok)
         if ok and not keep_passing:
-            shutil.rmtree(work, ignore_errors=True)
+            shutil.rmtree(case.work, ignore_errors=True)
     print("-----")
     print(f"{passed} passed, {failed} failed")
     sys.exit(1 if failed else 0)

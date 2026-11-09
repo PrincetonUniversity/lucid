@@ -25,7 +25,7 @@ DEV_DEPENDENCIES = \
 merlin \
 ocamlformat
 
-.PHONY: test promote test-promote test-cc test-cc-rawsock test-cc-dpdk test-ltf clean release-macos release-linux
+.PHONY: test promote test-promote test-cc test-cc-rawsock test-cc-dpdk test-ltf test-ltf-dpdk clean release-macos release-linux
 
 default:
 	dune build src/bin/interpMain.exe
@@ -95,6 +95,10 @@ test-cc-dpdk: default
 # lucid test framework: execution tests (test/ltf/cases) on the interpreter
 test-ltf: default
 	python3 ./test/ltf/ltf.py suite test/ltf --target interp
+
+# the same cases on the c compiler's dpdk driver, in the docker/dpdk image
+test-ltf-dpdk: default
+	python3 ./test/ltf/ltf.py suite test/ltf --target dpdk
 
 # tofino compiler tests
 # test compilation to P4 only

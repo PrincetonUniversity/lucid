@@ -1,5 +1,5 @@
 {
-  "comment": "ping(0) sends out(100), out(101), out(102) at once from pings 100 us apart, and out(0), out(1), out(2) 250 us after each ping.",
+  "comment": "ping(0) sends out(100), out(101), out(102) at once from pings 1 ms apart, and out(0), out(1), out(2) 2.5 ms after each ping.",
   "max time": 10000000,
   "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
   "events": [
