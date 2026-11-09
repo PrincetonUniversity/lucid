@@ -1,0 +1,32 @@
+{
+  "comment": "An endless recirculation (tick) must not starve arriving packets: every pkt_in(x) still gets its pkt_out(x) out port 0, in order. \"max time\" bounds the interpreter, whose simulation would otherwise never run out of tick events.",
+  "max time": 12000000,
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"name": "tick", "args": [], "locations": ["0:1"], "timestamp": 0},
+    {"name": "pkt_in", "args": [1], "locations": ["0:1"], "timestamp": 1000000},
+    {"name": "pkt_in", "args": [2], "locations": ["0:1"], "timestamp": 2000000},
+    {"name": "pkt_in", "args": [3], "locations": ["0:1"], "timestamp": 3000000},
+    {"name": "pkt_in", "args": [4], "locations": ["0:1"], "timestamp": 4000000},
+    {"name": "pkt_in", "args": [5], "locations": ["0:1"], "timestamp": 5000000},
+    {"name": "pkt_in", "args": [6], "locations": ["0:1"], "timestamp": 6000000},
+    {"name": "pkt_in", "args": [7], "locations": ["0:1"], "timestamp": 7000000},
+    {"name": "pkt_in", "args": [8], "locations": ["0:1"], "timestamp": 8000000},
+    {"name": "pkt_in", "args": [9], "locations": ["0:1"], "timestamp": 9000000},
+    {"name": "pkt_in", "args": [10], "locations": ["0:1"], "timestamp": 10000000}
+  ],
+  "expected": {
+    "0": [
+      {"name": "pkt_out", "args": [1]},
+      {"name": "pkt_out", "args": [2]},
+      {"name": "pkt_out", "args": [3]},
+      {"name": "pkt_out", "args": [4]},
+      {"name": "pkt_out", "args": [5]},
+      {"name": "pkt_out", "args": [6]},
+      {"name": "pkt_out", "args": [7]},
+      {"name": "pkt_out", "args": [8]},
+      {"name": "pkt_out", "args": [9]},
+      {"name": "pkt_out", "args": [10]}
+    ]
+  }
+}
