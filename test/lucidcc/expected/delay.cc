@@ -193,11 +193,11 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       out_event_t tmp_1470  = {.ev = mk_out(100 + x_1372), .port = 1, .delay = 0};
       out_events[n] = tmp_1470;
       n = n + 1;
-      out_event_t tmp_1471  = {.ev = mk_out(x_1372), .port = 1, .delay = 250000};
+      out_event_t tmp_1471  = {.ev = mk_out(x_1372), .port = 1, .delay = 2500000};
       out_events[n] = tmp_1471;
       n = n + 1;
       if (x_1372 < 2) {
-        out_event_t tmp_1472  = {.ev = mk_ping(x_1372 + 1), .port = 4294967295, .delay = 100000};
+        out_event_t tmp_1472  = {.ev = mk_ping(x_1372 + 1), .port = 4294967295, .delay = 1000000};
         out_events[n] = tmp_1472;
         n = n + 1;
       }

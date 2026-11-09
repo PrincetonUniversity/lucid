@@ -8,12 +8,12 @@ compares the wire bytes leaving each port, in order. Extra outputs fail the test
 Order across ports and timing are not compared.
 
   ltf.py run PROGRAM SPEC [--target T[,T...]] [--work DIR]
-  ltf.py suite DIR [--target T[,T...]] [-k NAME]   # DIR/cases/<prog>[.<variant>].json
-                                                   # against DIR/programs/<prog>.dpt
+  ltf.py suite DIR [--target T[,T...]] [-k NAME] [--programs PDIR]
+        # DIR/cases/<prog>[.<variant>].json against PDIR/<prog>.dpt (default PDIR: DIR/programs)
 
 When there are multiple targets, the case's expected block is checked on each one.
-A case with no expected block is a compiler validation test: the output of the first
-target (the reference, normally interp) is used as the expected outputs for the rest.
+A case with no expected block is a compiler validation test: the outputs and printf
+lines of the first target (the reference, normally interp) are what the rest must match.
 With one target, compiler validation tests are skipped.
 
 Targets:
@@ -286,14 +286,25 @@ def encode(tools, case):
 
 
 def outcome(target, case):
-    """a target's result for a case: (outputs, problems), or a TestError; writes its prints"""
+    """a target's result for a case: (outputs, prints, problems), or a TestError;
+    writes its prints"""
     result = case.results[target.name]
     if isinstance(result, TestError):
         return result
     outputs, prints, problems = result
     with open(os.path.join(case.work, target.name, "prints.txt"), "w") as f:
         f.writelines(p + "\n" for p in prints)
-    return outputs, problems
+    return result
+
+
+def compare_prints(ref_prints, prints, labels):
+    """the printf lines, in order; returns a list of failure lines"""
+    if ref_prints == prints:
+        return []
+    lines = [f"prints: {labels[0]} {len(ref_prints)} line(s), {labels[1]} {len(prints)}"]
+    for d in list(difflib.unified_diff(ref_prints, prints, *labels, n=2, lineterm=""))[2:]:
+        lines.append("  " + d)
+    return lines
 
 
 def checks(targets, case):
@@ -305,7 +316,7 @@ def checks(targets, case):
         out = []
         for t in targets:
             r = outcome(t, case)
-            lines = str(r).splitlines() if isinstance(r, TestError) else r[1] + compare(case.expected, r[0])
+            lines = str(r).splitlines() if isinstance(r, TestError) else r[2] + compare(case.expected, r[0])
             out.append((f"{case.name} [{t.name}]", not lines, lines))
         return out
     if len(targets) < 2:
@@ -320,19 +331,22 @@ def checks(targets, case):
             errs = [f"{x.name}: {e}" for x, e in ((ref, ref_r), (t, r)) if isinstance(e, TestError)]
             out.append((label, False, "\n".join(errs).splitlines()))
         else:
-            lines = ref_r[1] + r[1] + compare(ref_r[0], r[0], (ref.name, t.name))
+            labels = (ref.name, t.name)
+            lines = (ref_r[2] + r[2] + compare(ref_r[0], r[0], labels)
+                     + compare_prints(ref_r[1], r[1], labels))
             out.append((label, not lines, lines))
     return out
 
 
 # ---- commands --------------------------------------------------------------------
 
-def cases_in(suite_dir):
-    """[(name, program, spec)] for DIR/cases/<prog>[.<variant>].json"""
+def cases_in(suite_dir, programs_dir):
+    """[(name, program, spec)] for DIR/cases/<prog>[.<variant>].json, with
+    programs_dir/<prog>.dpt"""
     out = []
     for spec in sorted(glob.glob(os.path.join(suite_dir, "cases", "*.json"))):
         name = os.path.basename(spec)[:-len(".json")]
-        program = os.path.join(suite_dir, "programs", name.split(".")[0] + ".dpt")
+        program = os.path.join(programs_dir, name.split(".")[0] + ".dpt")
         out.append((name, program, spec))
     return out
 
@@ -373,6 +387,7 @@ def main():
     s.add_argument("--target", default="interp", help="target(s), comma-separated")
     s.add_argument("-k", dest="only", help="only cases whose name contains this")
     s.add_argument("--work", help="work dir root (default: DIR/_work)")
+    s.add_argument("--programs", help="the programs dir (default: DIR/programs)")
     args = ap.parse_args()
 
     tools = {"dpt": find_tool("dpt", args.dpt),
@@ -386,7 +401,8 @@ def main():
     else:
         root = os.path.abspath(args.work or os.path.join(args.dir, "_work"))
         cases = [Case(n, p, s, os.path.join(root, n))
-                 for n, p, s in cases_in(args.dir) if not args.only or args.only in n]
+                 for n, p, s in cases_in(args.dir, args.programs or os.path.join(args.dir, "programs"))
+                 if not args.only or args.only in n]
         if not cases:
             sys.exit(f"ltf: no cases in {os.path.join(args.dir, 'cases')}")
         keep_passing = True

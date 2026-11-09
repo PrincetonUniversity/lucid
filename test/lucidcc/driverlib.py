@@ -12,7 +12,7 @@ import time
 IS_LINUX = platform.system() == "Linux"
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROGRAMS = os.path.join(SCRIPT_DIR, "programs")
+PROGRAMS = os.path.join(SCRIPT_DIR, "..", "..", "examples", "lucidcc")
 PCAPS = os.path.join(SCRIPT_DIR, "_pcaps")
 
 

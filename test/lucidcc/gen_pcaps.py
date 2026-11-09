@@ -75,9 +75,9 @@ test_case("csum",
     [eth("aabbccddeeff", "112233445566", 0x0800, ipv4(csum=0xdead) + b"PAYLOAD-DATA"), arp],
     [eth("aabbccddeeff", "112233445566", 0x0800, ipv4(csum=csum_rfc1071(ipv4())) + b"PAYLOAD-DATA"), arp])
 
-# tables1_pcap: Table.install + Table.lookup end-to-end. Event tags are hardcoded from
-# tables1_pcap.dpt's declaration order: query_result=1, do_install=2, do_query=3.
-test_case("tables1_pcap",
+# tables_install: Table.install + Table.lookup end-to-end. Event tags are hardcoded from
+# tables_install.dpt's declaration order: query_result=1, do_install=2, do_query=3.
+test_case("tables_install",
     [lucid_frame(3, 42),            # do_query(42)
      lucid_frame(2, 42, 7),         # do_install(42, 7): hit_acn(7) for key 42, no output
      lucid_frame(3, 42),            # do_query(42)
@@ -109,18 +109,18 @@ test_case("recircport",
     [lucid_frame(3, 1, 7),
      lucid_frame(3, 196, 7)])
 
-# delay: ping(0) sends out(100), out(101), out(102) at once from pings 100 us
-# apart, and out(0), out(1), out(2) 250 us after each ping. Tags from
+# delay: ping(0) sends out(100), out(101), out(102) at once from pings 1 ms
+# apart, and out(0), out(1), out(2) 2.5 ms after each ping. Tags from
 # delay.dpt's declaration order: ping=1, out=2. The pcap driver's virtual clock
 # gives exact departure times: with no latency, an undelayed output leaves at its
 # event's stamp and a delayed one at the stamp plus its delay.
 delay_outs = [lucid_frame(2, x) for x in [100, 101, 102, 0, 1, 2]]
 test_case("delay", [lucid_frame(1, 0)], delay_outs,
-    [0, 100000, 200000, 250000, 350000, 450000])
+    [0, 1000000, 2000000, 2500000, 3500000, 4500000])
 # delay_latency600: the same run with --latency-ns 600 (test_pcap.py VARIANTS): every
 # output leaves at its stamp plus the larger of its delay and 600, so the undelayed
 # ones 600 ns later; the delays here are longer than 600, so nothing else moves.
 test_case("delay_latency600", [lucid_frame(1, 0)], delay_outs,
-    [600, 100600, 200600, 250000, 350000, 450000])
+    [600, 1000600, 2000600, 2500000, 3500000, 4500000])
 
 print("wrote pcap test cases to", PCAPS)

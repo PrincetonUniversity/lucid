@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compiler tests: generate C for each programs/*.dpt (pcap driver), check that it compiles
+"""Compiler tests: generate C for each examples/lucidcc/*.dpt (pcap driver), check that it compiles
 with gcc, and diff its "program code" section against expected/<name>.cc. 
 A program marked `// LUCIDCC_REJECT: <substr>` must be rejected with an error containing <substr>."""
 import difflib

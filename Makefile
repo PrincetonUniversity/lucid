@@ -92,14 +92,14 @@ test-cc-dpdk: default
 	python3 ./test/lucidcc/test_dpdk.py --gen
 	docker/dpdk/run.sh test/lucidcc python3 test_dpdk.py
 
-# lucid test framework: execution tests (test/ltf/cases) on the interpreter
+# lucid test framework: execution tests (test/ltf/cases, programs in examples/lucidcc) on the interpreter
 test-ltf: default
-	python3 ./test/ltf/ltf.py suite test/ltf --target interp
+	python3 ./test/ltf/ltf.py suite test/ltf --programs examples/lucidcc --target interp
 
 # the same cases on the interpreter and the c compiler's dpdk driver (in the
 # docker/dpdk image), plus the compiler validation tests (dpdk against the interpreter)
 test-ltf-dpdk: default
-	python3 ./test/ltf/ltf.py suite test/ltf --target interp,dpdk
+	python3 ./test/ltf/ltf.py suite test/ltf --programs examples/lucidcc --target interp,dpdk
 
 # tofino compiler tests
 # test compilation to P4 only

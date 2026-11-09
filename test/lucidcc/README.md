@@ -1,7 +1,7 @@
 # C backend tests
 
 This directory contains 4 harnesses for regression testing the 
-`lucidcc` C backend over programs in `./programs`.
+`lucidcc` C backend over programs in `examples/lucidcc`.
 
 - **Compiler tests** `test_compiler.py`: generate C from Lucid, compile it, 
   and compare the program part of the C against expected output. This 
@@ -31,7 +31,7 @@ This directory contains 4 harnesses for regression testing the
 
 ## Layout
 
-- `programs/` — the `.dpt` sources under test.
+- `examples/lucidcc/` (at the repo root) — the `.dpt` sources under test, shared with `test/ltf`.
 - `expected/` — checked-in expected C, one `<name>.cc` per program (for `test_compiler.py`): 
   just the generated file's `program code` section, which is the same for every driver.
 - `gen_pcaps.py` — generates the pcap test cases (`<name>.in.pcap` + `<name>.expected.pcap`).
