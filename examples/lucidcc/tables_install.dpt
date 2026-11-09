@@ -24,11 +24,12 @@ event query_result(int key, int val, int hit) { skip; }
 
 event do_install(int key, int val) {
   printf("installing entry: key=%d -> hit_acn(%d)", key, val);
-  Table.install<unordered>(ftbl, key, hit_acn, val);
+  // Table.install<unordered>(ftbl, key, hit_acn, val);
 }
 
 event do_query(int key) {
-  res_t r = Table.lookup(ftbl, key, 1000);
+  res_t r = {val = 0; is_hit = false};
+  // res_t r = Table.lookup(ftbl, key, 1000);
   int hit = 0;
   if (r#is_hit == true) {
     hit = 1;

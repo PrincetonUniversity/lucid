@@ -59,7 +59,7 @@ def prepare(args, tools, work):
         preload = {}
     for port, pcap in list(replay.items()) + list(preload.items()):
         n = len(ltf.read_pcap(os.path.join(work, pcap)))
-        if n > MAX_REPLAY_FRAMES:
+        if port in replay and pcap == replay[port] and n > MAX_REPLAY_FRAMES:
             raise ltf.TestError(f"port {port}'s workload has {n} frames; replay holds at most "
                                 f"{MAX_REPLAY_FRAMES} (they stay in mbufs)")
         if any(len(f) < 14 for _, f in ltf.read_pcap(os.path.join(work, pcap))):
