@@ -49,6 +49,7 @@ lucid_tofino_build/
 test/lucidcc/_pcaps/
 test/lucidcc/_rawsock_build/
 test/ltf/_work/
+test/bench_lucidcc/_work/
 __pycache__/
 
 # Compiled binaries

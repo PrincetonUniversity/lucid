@@ -21,7 +21,8 @@ open CCoreUtils
 	using DPDK rings carrying mbufs between the stages. 
 	Each mbuf carries an event, and program-generated output events, in its private area. 
       RX   : poll every port for at most what fits on rx_in, parse each frame
-             into the mbuf's event, push to rx_in.
+             into the mbuf's event, push to rx_in. The first port polled rotates
+             each round, so a saturated port can't starve the others.
       DISP : a burst from recirc_in and one from rx_in: execute event handlers,
              fill the mbuf's out_events list, send to tx_in.
       TX   : drain tx_in: clone / route each output event; a recirculation
@@ -353,8 +354,12 @@ let dpdk_do_rx = dforiegn [%string {|
 static uint64_t last_active;   // rdtsc of the last packet received, sent or recirculated
 static unsigned do_rx(void) {
 	unsigned total = 0;
-	uint16_t port;
-	RTE_ETH_FOREACH_DEV(port) {
+	// round-robin: each call starts at the next port, so every port gets the first
+	// claim on rx_in's room in turn, and a saturated port can't starve the others
+	static unsigned first = 0;
+	first = (first + 1) % n_dpdk_ports;
+	for (unsigned k = 0; k < n_dpdk_ports; k++) {
+		uint16_t port = dpdk_ports[(first + k) % n_dpdk_ports];
 		unsigned room = rte_ring_free_count(rx_in);   // pull only what fits: the rest waits in the NIC
 		if (room == 0) break;
 		struct rte_mbuf *bufs[BURST_SIZE];
