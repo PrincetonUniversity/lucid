@@ -323,9 +323,11 @@ let parse pp renaming filename =
         (* TODO: this isn't quite right. A max_time of 0 in interactive mode 
            prevents any recirculated events from running until the simulation starts. 
            That might be what we want, but it also might not be. Hmm... *)
+        (* in simulation mode, the default is no limit (-1): the simulation
+           runs until no switch has anything left to do *)
         if (InterpConfig.cfg.interactive)
           then 0
-          else 10000
+          else -1
       )
     in    
     (* parse the topology *)

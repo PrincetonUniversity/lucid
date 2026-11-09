@@ -388,7 +388,9 @@ let rec execute_sim_step idx nst =
         nst)
       else nst
     in
-    if !(nst.(idx).global_time) > nst.(idx).config.max_time
+    (* a max_time of -1 means no limit *)
+    let max_time = nst.(idx).config.max_time in
+    if max_time > -1 && !(nst.(idx).global_time) > max_time
       then nst
       else (
         (* run any control events *)

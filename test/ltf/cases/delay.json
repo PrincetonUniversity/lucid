@@ -1,0 +1,18 @@
+{
+  "comment": "ping(0) sends out(100), out(101), out(102) at once from pings 100 us apart, and out(0), out(1), out(2) 250 us after each ping.",
+  "max time": 10000000,
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"name": "ping", "args": [0], "locations": ["0:1"], "timestamp": 0}
+  ],
+  "expected": {
+    "1": [
+      {"name": "out", "args": [100]},
+      {"name": "out", "args": [101]},
+      {"name": "out", "args": [102]},
+      {"name": "out", "args": [0]},
+      {"name": "out", "args": [1]},
+      {"name": "out", "args": [2]}
+    ]
+  }
+}

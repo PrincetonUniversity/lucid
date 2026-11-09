@@ -1,0 +1,17 @@
+{
+  "comment": "Each packet is printed and reflected. The second input is raw bytes, so it goes through the program's parser.",
+  "max time": 10000000,
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"name": "pkt", "args": [4294967280, 5, 6, "aabbcc"], "locations": ["0:3"], "timestamp": 0},
+    {"type": "packet", "bytes": "000000070000000000080000000000000009ddeeff", "locations": ["0:4"], "timestamp": 1000000}
+  ],
+  "expected": {
+    "3": [
+      {"name": "pkt", "args": [4294967280, 5, 6, "aabbcc"]}
+    ],
+    "4": [
+      {"name": "pkt", "args": [7, 8, 9, "ddeeff"]}
+    ]
+  }
+}

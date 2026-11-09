@@ -1,0 +1,20 @@
+{
+  "comment": "Miss before the install, hit after it; other keys still miss. Every query result goes out port 1, whichever port the query came in on.",
+  "max time": 10000000,
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"name": "do_query", "args": [42], "locations": ["0:1"], "timestamp": 0},
+    {"name": "do_install", "args": [42, 7], "locations": ["0:1"], "timestamp": 1000000},
+    {"name": "do_query", "args": [42], "locations": ["0:1"], "timestamp": 2000000},
+    {"name": "do_query", "args": [43], "locations": ["0:2"], "timestamp": 3000000},
+    {"name": "do_query", "args": [1], "locations": ["0:1"], "timestamp": 4000000}
+  ],
+  "expected": {
+    "1": [
+      {"name": "query_result", "args": [42, 1000, 0]},
+      {"name": "query_result", "args": [42, 7, 1]},
+      {"name": "query_result", "args": [43, 1000, 0]},
+      {"name": "query_result", "args": [1, 1000, 0]}
+    ]
+  }
+}

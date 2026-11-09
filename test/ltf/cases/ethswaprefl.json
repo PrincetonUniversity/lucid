@@ -1,0 +1,19 @@
+{
+  "comment": "Ethernet reflector: swap the MACs and send each packet back out the port it came in on. The last input is raw bytes, so it goes through the program's parser.",
+  "max time": 10000000,
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"name": "ethpkt", "args": ["0xaabbccddeeff", "0x112233445566", "0x0800", "5041594c4f41442d44415441"], "locations": ["0:1"], "timestamp": 0},
+    {"name": "ethpkt", "args": ["0x001122334455", "0x665544332211", "0x86dd", "5041594c4f41442d44415441"], "locations": ["0:2"], "timestamp": 1000000},
+    {"type": "packet", "bytes": "aabbccddeeff11223344556608066172702d7061796c6f6164", "locations": ["0:1"], "timestamp": 2000000}
+  ],
+  "expected": {
+    "1": [
+      {"name": "ethpkt", "args": ["0x112233445566", "0xaabbccddeeff", "0x0800", "5041594c4f41442d44415441"]},
+      {"bytes": "112233445566aabbccddeeff08066172702d7061796c6f6164"}
+    ],
+    "2": [
+      {"name": "ethpkt", "args": ["0x665544332211", "0x001122334455", "0x86dd", "5041594c4f41442d44415441"]}
+    ]
+  }
+}
