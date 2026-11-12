@@ -109,7 +109,9 @@ let rec ones_exp ty : exp =
 ;;
 
 let table_instance_type tbl_id const_action_arg_ty tbl_cell_ty tbl_len =
-  (* a table is a struct variable with a default and a list of entries *)
+  (* a table is a struct variable with a default, a list of entries, and max_idx, 
+     the first unfilled index. Installs take the first free slot, hence the need 
+     for max_idx. *)
   (* tref@@ *) (* no longer a tref *)
   tabstract_cid
     (Cid.str_cons_plain "ty" tbl_id)
@@ -117,6 +119,7 @@ let table_instance_type tbl_id const_action_arg_ty tbl_cell_ty tbl_len =
       trecord
         [cid "_default", trecord [cid "action_tag", tenum_member; 
                                 cid "action_arg", const_action_arg_ty];
+        cid "max_idx", tint 32;
         cid "entries",tlist tbl_cell_ty tbl_len])
 ;;
 
@@ -131,6 +134,7 @@ let table_create (tbl_ty : ty) (def_enum_id : cid) (def_arg : exp) =
   ] in
   erecord [
     cid"_default", default;
+    cid"max_idx", eval (vint 0 32);
     cid"entries", eval (zero_list entries_ty)
   ]
 ;;
@@ -162,20 +166,6 @@ let table_lookup spec =
     action_tag
       (sret (action_evar /** [entry/.cid"action_arg"; arg_param]))
   in
-  let s_loop =
-    sfor (cid "_idx") spec.len
-      (
-        let entry = (tbl/.cid"entries")/@idx in
-        let hit = emacro_and_fold [
-          entry/.cid"valid";
-          compound_masked_eq key_param (entry/.cid"key") (entry/.cid"mask")]
-        in
-        sif hit
-          (smatch [(entry/.cid"action_tag")]
-            (List.map (apply_branch entry) action_tags))
-          snoop
-      )
-  in
   (* no entry matched: dispatch to the default action. the last action's arm
      is the switch's `default:` case, so every path through the function
      returns. *)
@@ -189,6 +179,22 @@ let table_lookup spec =
   let s_apply_default = smatch
     [(tbl/.cid"_default"/.cid"action_tag")]
     (List.mapi (fun i tag -> apply_default_branch (i = n_tags - 1) tag) action_tags)
+  in
+  let s_loop =
+    sfor (cid "_idx") spec.len
+      (
+        let entry = (tbl/.cid"entries")/@idx in
+        let hit = emacro_and_fold [
+          entry/.cid"valid";
+          compound_masked_eq key_param (entry/.cid"key") (entry/.cid"mask")]
+        in
+        stmts [
+          sif (eop Geq [idx; tbl/.cid"max_idx"]) s_apply_default snoop;
+          sif hit
+            (smatch [(entry/.cid"action_tag")]
+              (List.map (apply_branch entry) action_tags))
+            snoop]
+      )
   in
   let params = List.map extract_evar
     [key_param; arg_param]
@@ -225,6 +231,9 @@ let table_install spec =
       sif (eop Eq [entry/.cid"valid";eval@@vbool false])
         (stmts [
             (tbl/.cid"entries", idx_var)/<-new_slot;
+            sif (eop Geq [idx_var; tbl/.cid"max_idx"])
+              (sassign_exp (tbl/.cid"max_idx") (idx_var /+ eval (vint 1 32)))
+              snoop;
             sret_none;
           ])
         snoop
@@ -266,6 +275,9 @@ let table_ternary_install spec =
       sif (eop Eq [entry/.cid"valid";eval@@vbool false])
         (stmts [
             (tbl/.cid"entries", idx_var)/<-new_slot;
+            sif (eop Geq [idx_var; tbl/.cid"max_idx"])
+              (sassign_exp (tbl/.cid"max_idx") (idx_var /+ eval (vint 1 32)))
+              snoop;
             sret_none;
           ])
         snoop

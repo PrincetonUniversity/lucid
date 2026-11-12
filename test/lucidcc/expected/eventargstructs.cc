@@ -109,14 +109,18 @@ typedef struct {
     uint32_t action_tag;
     uint32_t action_arg;
   } _default;
+  uint32_t max_idx;
   cellty_my_table_1248 entries [32];
 } ty_my_table_1248;
-ty_my_table_1248 my_table_1248  = {._default = {.action_tag = tag_add_pair_1247, .action_arg = 0}, .entries = {0}};
+ty_my_table_1248 my_table_1248  = {._default = {.action_tag = tag_add_pair_1247, .action_arg = 0}, .max_idx = 0, .entries = {0}};
 void install_my_table_1248(uint32_t key , uint32_t action , uint32_t const_arg ){
   for (int _idx = 0; _idx < 32; _idx++) {
     if (my_table_1248.entries[_idx].valid == false) {
       cellty_my_table_1248 tmp_1343  = {.valid = true, .key = key, .mask = 4294967295, .action_tag = action, .action_arg = const_arg};
       my_table_1248.entries[_idx] = tmp_1343;
+      if (_idx >= my_table_1248.max_idx) {
+        my_table_1248.max_idx = _idx + 1;
+      }
       return ;
     }
   }
@@ -127,6 +131,9 @@ void install_ternary_my_table_1248(uint32_t key , uint32_t mask , uint32_t actio
     if (my_table_1248.entries[_idx].valid == false) {
       cellty_my_table_1248 tmp_1344  = {.valid = true, .key = key, .mask = mask, .action_tag = action, .action_arg = const_arg};
       my_table_1248.entries[_idx] = tmp_1344;
+      if (_idx >= my_table_1248.max_idx) {
+        my_table_1248.max_idx = _idx + 1;
+      }
       return ;
     }
   }
@@ -134,6 +141,14 @@ void install_ternary_my_table_1248(uint32_t key , uint32_t mask , uint32_t actio
 }
 pair_t_1243 lookup_my_table_1248(uint32_t key , pair_t_1243 arg ){
   for (int _idx = 0; _idx < 32; _idx++) {
+    if (_idx >= my_table_1248.max_idx) {
+      switch (my_table_1248._default.action_tag) {
+        default: {
+          return add_pair_1247(my_table_1248._default.action_arg, arg);
+          break;
+        }
+      }
+    }
     if (my_table_1248.entries[_idx].valid && ((key & my_table_1248.entries[_idx].mask) == (my_table_1248.entries[_idx].key & my_table_1248.entries[_idx].mask))) {
       switch (my_table_1248.entries[_idx].action_tag) {
         case tag_add_pair_1247: {

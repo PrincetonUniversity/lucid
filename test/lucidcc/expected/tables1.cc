@@ -127,14 +127,18 @@ typedef struct {
     uint32_t action_tag;
     uint32_t action_arg;
   } _default;
+  uint32_t max_idx;
   cellty_ftbl_2748 entries [1024];
 } ty_ftbl_2748;
-ty_ftbl_2748 ftbl_2748  = {._default = {.action_tag = tag_miss_acn_2747, .action_arg = 1}, .entries = {0}};
+ty_ftbl_2748 ftbl_2748  = {._default = {.action_tag = tag_miss_acn_2747, .action_arg = 1}, .max_idx = 0, .entries = {0}};
 void install_ftbl_2748(uint32_t key , uint32_t action , uint32_t const_arg ){
   for (int _idx = 0; _idx < 1024; _idx++) {
     if (ftbl_2748.entries[_idx].valid == false) {
       cellty_ftbl_2748 tmp_2958  = {.valid = true, .key = key, .mask = 4294967295, .action_tag = action, .action_arg = const_arg};
       ftbl_2748.entries[_idx] = tmp_2958;
+      if (_idx >= ftbl_2748.max_idx) {
+        ftbl_2748.max_idx = _idx + 1;
+      }
       return ;
     }
   }
@@ -145,6 +149,9 @@ void install_ternary_ftbl_2748(uint32_t key , uint32_t mask , uint32_t action , 
     if (ftbl_2748.entries[_idx].valid == false) {
       cellty_ftbl_2748 tmp_2959  = {.valid = true, .key = key, .mask = mask, .action_tag = action, .action_arg = const_arg};
       ftbl_2748.entries[_idx] = tmp_2959;
+      if (_idx >= ftbl_2748.max_idx) {
+        ftbl_2748.max_idx = _idx + 1;
+      }
       return ;
     }
   }
@@ -152,6 +159,18 @@ void install_ternary_ftbl_2748(uint32_t key , uint32_t mask , uint32_t action , 
 }
 res_t_2741 lookup_ftbl_2748(uint32_t key , uint32_t arg ){
   for (int _idx = 0; _idx < 1024; _idx++) {
+    if (_idx >= ftbl_2748.max_idx) {
+      switch (ftbl_2748._default.action_tag) {
+        case tag_hit_acn_2744: {
+          return hit_acn_2744(ftbl_2748._default.action_arg, arg);
+          break;
+        }
+        default: {
+          return miss_acn_2747(ftbl_2748._default.action_arg, arg);
+          break;
+        }
+      }
+    }
     if (ftbl_2748.entries[_idx].valid && ((key & ftbl_2748.entries[_idx].mask) == (ftbl_2748.entries[_idx].key & ftbl_2748.entries[_idx].mask))) {
       switch (ftbl_2748.entries[_idx].action_tag) {
         case tag_hit_acn_2744: {

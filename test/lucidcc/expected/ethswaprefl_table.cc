@@ -124,14 +124,18 @@ typedef struct {
     uint32_t action_tag;
     uint16_t action_arg;
   } _default;
+  uint32_t max_idx;
   cellty_ety_tbl_2310 entries [4096];
 } ty_ety_tbl_2310;
-ty_ety_tbl_2310 ety_tbl_2310  = {._default = {.action_tag = tag_keep_ety_2309, .action_arg = 0}, .entries = {0}};
+ty_ety_tbl_2310 ety_tbl_2310  = {._default = {.action_tag = tag_keep_ety_2309, .action_arg = 0}, .max_idx = 0, .entries = {0}};
 void install_ety_tbl_2310(uint32_t key , uint32_t action , uint16_t const_arg ){
   for (int _idx = 0; _idx < 4096; _idx++) {
     if (ety_tbl_2310.entries[_idx].valid == false) {
       cellty_ety_tbl_2310 tmp_2486  = {.valid = true, .key = key, .mask = 4294967295, .action_tag = action, .action_arg = const_arg};
       ety_tbl_2310.entries[_idx] = tmp_2486;
+      if (_idx >= ety_tbl_2310.max_idx) {
+        ety_tbl_2310.max_idx = _idx + 1;
+      }
       return ;
     }
   }
@@ -142,6 +146,9 @@ void install_ternary_ety_tbl_2310(uint32_t key , uint32_t mask , uint32_t action
     if (ety_tbl_2310.entries[_idx].valid == false) {
       cellty_ety_tbl_2310 tmp_2487  = {.valid = true, .key = key, .mask = mask, .action_tag = action, .action_arg = const_arg};
       ety_tbl_2310.entries[_idx] = tmp_2487;
+      if (_idx >= ety_tbl_2310.max_idx) {
+        ety_tbl_2310.max_idx = _idx + 1;
+      }
       return ;
     }
   }
@@ -149,6 +156,18 @@ void install_ternary_ety_tbl_2310(uint32_t key , uint32_t mask , uint32_t action
 }
 uint16_t lookup_ety_tbl_2310(uint32_t key , uint16_t arg ){
   for (int _idx = 0; _idx < 4096; _idx++) {
+    if (_idx >= ety_tbl_2310.max_idx) {
+      switch (ety_tbl_2310._default.action_tag) {
+        case tag_set_ety_2306: {
+          return set_ety_2306(ety_tbl_2310._default.action_arg, arg);
+          break;
+        }
+        default: {
+          return keep_ety_2309(ety_tbl_2310._default.action_arg, arg);
+          break;
+        }
+      }
+    }
     if (ety_tbl_2310.entries[_idx].valid && ((key & ety_tbl_2310.entries[_idx].mask) == (ety_tbl_2310.entries[_idx].key & ety_tbl_2310.entries[_idx].mask))) {
       switch (ety_tbl_2310.entries[_idx].action_tag) {
         case tag_set_ety_2306: {

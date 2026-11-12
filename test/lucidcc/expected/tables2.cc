@@ -218,14 +218,18 @@ typedef struct {
     uint32_t action_tag;
     uint32_t action_arg;
   } _default;
+  uint32_t max_idx;
   cellty_global_cached_table_2_4323 entries [1024];
 } ty_global_cached_table_2_4323;
-ty_global_cached_table_2_4323 global_cached_table_2_4323  = {._default = {.action_tag = tag_WriteCacheTable_miss_acn_4317, .action_arg = 0}, .entries = {0}};
+ty_global_cached_table_2_4323 global_cached_table_2_4323  = {._default = {.action_tag = tag_WriteCacheTable_miss_acn_4317, .action_arg = 0}, .max_idx = 0, .entries = {0}};
 void install_global_cached_table_2_4323(uint32_t key , uint32_t action , uint32_t const_arg ){
   for (int _idx = 0; _idx < 1024; _idx++) {
     if (global_cached_table_2_4323.entries[_idx].valid == false) {
       cellty_global_cached_table_2_4323 tmp_4600  = {.valid = true, .key = key, .mask = 4294967295, .action_tag = action, .action_arg = const_arg};
       global_cached_table_2_4323.entries[_idx] = tmp_4600;
+      if (_idx >= global_cached_table_2_4323.max_idx) {
+        global_cached_table_2_4323.max_idx = _idx + 1;
+      }
       return ;
     }
   }
@@ -236,6 +240,9 @@ void install_ternary_global_cached_table_2_4323(uint32_t key , uint32_t mask , u
     if (global_cached_table_2_4323.entries[_idx].valid == false) {
       cellty_global_cached_table_2_4323 tmp_4601  = {.valid = true, .key = key, .mask = mask, .action_tag = action, .action_arg = const_arg};
       global_cached_table_2_4323.entries[_idx] = tmp_4601;
+      if (_idx >= global_cached_table_2_4323.max_idx) {
+        global_cached_table_2_4323.max_idx = _idx + 1;
+      }
       return ;
     }
   }
@@ -243,6 +250,18 @@ void install_ternary_global_cached_table_2_4323(uint32_t key , uint32_t mask , u
 }
 res_t_4313 lookup_global_cached_table_2_4323(uint32_t key ){
   for (int _idx = 0; _idx < 1024; _idx++) {
+    if (_idx >= global_cached_table_2_4323.max_idx) {
+      switch (global_cached_table_2_4323._default.action_tag) {
+        case tag_WriteCacheTable_hit_acn_4315: {
+          return WriteCacheTable_hit_acn_4315(global_cached_table_2_4323._default.action_arg);
+          break;
+        }
+        default: {
+          return WriteCacheTable_miss_acn_4317(global_cached_table_2_4323._default.action_arg);
+          break;
+        }
+      }
+    }
     if (global_cached_table_2_4323.entries[_idx].valid && ((key & global_cached_table_2_4323.entries[_idx].mask) == (global_cached_table_2_4323.entries[_idx].key & global_cached_table_2_4323.entries[_idx].mask))) {
       switch (global_cached_table_2_4323.entries[_idx].action_tag) {
         case tag_WriteCacheTable_hit_acn_4315: {
