@@ -146,8 +146,8 @@ def main():
                     help="run the DPDK programs on this machine, not in a docker container")
     args = ap.parse_args()
 
-    tools = {"lucidcc": ltf.find_tool("lucidcc", args.lucidcc),
-             "lucidEncode": ltf.find_tool("lucidEncode", args.lucidencode)}
+    tools = {"lucidcc": args.lucidcc or ltf.find_file("lucidcc"),
+             "lucidEncode": args.lucidencode or ltf.find_file("lucidEncode")}
     name = f"{os.path.basename(args.program)[:-4]}-{os.path.splitext(os.path.basename(args.workload))[0]}"
     work_dir = os.path.abspath(args.work_dir or os.path.join(SCRIPT_DIR, "_work", name))
     if os.path.exists(work_dir):

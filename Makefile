@@ -89,12 +89,12 @@ test-cc-rawsock: default
 
 # lucid test framework: execution tests (test/ltf/cases, programs in examples/lucidcc) on the interpreter
 test-ltf: default
-	python3 ./test/ltf/ltf.py suite test/ltf --programs examples/lucidcc --target interp
+	python3 ./test/ltf/ltf.py suite examples/lucidcc test/ltf/cases --test interp
 
-# the same cases on the interpreter and the c compiler's dpdk driver (in the
-# docker/dpdk image), plus the compiler validation tests (dpdk against the interpreter)
+# the expected outputs on the interpreter and the c compiler's dpdk driver (in the
+# docker/dpdk image), plus compiler validation of every case (dpdk against the interpreter)
 test-ltf-dpdk: default
-	python3 ./test/ltf/ltf.py suite test/ltf --programs examples/lucidcc --target interp,dpdk
+	python3 ./test/ltf/ltf.py suite examples/lucidcc test/ltf/cases --test interp,dpdk --validate dpdk
 
 # tofino compiler tests
 # test compilation to P4 only

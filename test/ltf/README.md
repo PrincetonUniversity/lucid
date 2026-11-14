@@ -1,12 +1,13 @@
 # Lucid test framework (ltf)
 
-Execution tests. These run a Lucid program on a target with a timed input trace, and compare what leaves each port with the expected output. The design is in `docs/design_notes/03.lucid-test-framework.md`.
+`ltf.py` Tests a program compiled with `lucidcc` against an 
+expected output trace, or against the output of the interpreter.
 
 ## Test cases
 
-A test case is an interpreter spec with one node, plus an `expected` block.
-The interpreter ignores the `expected` block.
-
+A test case is an interpreter spec with a single-node topology, 
+an `events` block defining input events, and an `expected` block 
+defining expected outputs on each port. For example:
 ```json
 {
   "max time": 10000000,
@@ -21,39 +22,41 @@ The interpreter ignores the `expected` block.
 }
 ```
 
-- **Inputs** events in use the spec's usual forms: `name`/`args`, or `{"type": "packet", "bytes": hex}`.
-  Every input needs a single `0:<port>` location and a nanosecond timestamp. 
-  Int args can be hex strings (`"0x0800"`).
-- **`expected`** has an output event list for each port. Outputs are in the same format as inputs, without location and timestamp metadata.
 - **Control commands** (`Table.install`, ...) aren't supported. Use ordinary events instead as in `examples/lucidcc/tables_install.dpt`.
-- **Compiler validation tests** are cases with no `expected`: with `--target interp,dpdk`,
-  the interpreter's outputs and printf lines are what dpdk must match. With one target,
-  they're skipped.
+
+- **What's checked is chosen on the command line:**
+  - `--test T[,T...]` checks each case's `expected` block on the targets. Cases without
+    one aren't tested. This is the default, as `--test interp`.
+  - `--validate T[,T...]` is compiler validation: it compares the targets (not `interp`)
+    with the interpreter, on every case, ignoring `expected` blocks. The targets' outputs
+    and printf lines must match the interpreter's.
+  - Each case runs once per target, whichever checks use it. A case without `expected`
+    only gets checked by `--validate`.
 
 ## Comparison
 
 Comparison checks wire bytes per port, ordered. Timestamps are not considered.
-Compiler validation tests also compare printf lines, in order.
+Compiler validation (`--validate`) also compares printf lines, in order.
 
 ## Directories + usage
 
 - `ltf.py` test runner, uses lucidEncode and dpt (and lucidcc, for dpdk)
-- `ltf_dpdk.py` internal to `ltf.py`: the dpdk target's executor, which `ltf.py` runs in the
+- `run_dpdk_test.py` internal to `ltf.py`: the dpdk target's executor, which `ltf.py` runs in the
   `docker/dpdk` image on the work dirs it prepares (not meant to be run directly)
-- `cases/<prog>[.<variant>].json` runs against `<prog>.dpt` in the programs dir: `--programs`
-  (the `make` targets use `examples/lucidcc`, shared with `test/lucidcc`), or else `programs/`.
+- `cases/<prog>[.<variant>].json` runs against `<prog>.dpt` in the programs dir (the `make`
+  targets use `examples/lucidcc`, shared with `test/lucidcc`).
 - `_work/<case>/` untracked staging dir:
   - `encoded/`: test cases run through `lucidEncode`;
   - `<target>/`: `out_<port>.pcap`, `prints.txt`, and the raw tool output.
 
 ```sh
-./test/ltf/ltf.py run PROGRAM.dpt CASE.json [--work DIR]         # one case
-make test-ltf                                                    # every case, on the interpreter
-make test-ltf-dpdk                                               # every case, on the interpreter and dpdk
-./test/ltf/ltf.py suite test/ltf --programs examples/lucidcc [-k NAME] [--target T[,T...]]   # the same, or a subset
+./test/ltf/ltf.py run PROGRAM.dpt CASE.json [--test T,...] [--validate T,...] [--work DIR]   # one case
+make test-ltf                                                    # --test interp
+make test-ltf-dpdk                                               # --test interp,dpdk --validate dpdk
+./test/ltf/ltf.py suite examples/lucidcc test/ltf/cases [-k NAME] [--test T,...] [--validate T,...]   # a subset
 ```
 
-The runner finds `dpt` and `lucidEncode` on `PATH`, or at the repo root. 
+The runner finds `dpt` and `lucidEncode` at the repo root (where `make` puts them), or else on `PATH`. 
 Use `--dpt` and `--lucidencode` to point it elsewhere.
 
 Targets:
