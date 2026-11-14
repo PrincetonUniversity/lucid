@@ -306,41 +306,86 @@ let get_table_entries
   | OArray _ -> failwith "Pipeline Error: Expected a table obj, got array obj."
 ;;
 
-let install_table_entry ~(stage : int) ~(priority : int) 
-    ~(key : value list) ~(action : value list -> value list) 
-    ~(eaction_name : cid) ~(eaction_const_args : value list)
-    (t : t) = 
-  let obj = get_obj_unconstrained stage t in
-  let tbl = match obj with 
-    | OTable tbl -> tbl
-    | _ -> failwith "Pipeline Error: object is not a table"
-  in
-  if List.length tbl.tentries == tbl.tmaxlen
-    then failwith "Pipeline Error: tried to add an entry to a full table!";
+let get_table stage t =
+  match get_obj_unconstrained stage t with
+  | OTable tbl -> tbl
+  | _ -> failwith "Pipeline Error: object is not a table"
+;;
 
-  let new_entry = {eprio = priority; ematch = key; eaction = action; eaction_name; eaction_const_args} in
-  let entries = match tbl.tentries with 
-  | [] -> [new_entry]
-  | _ -> 
+(* entries are identified by their priority, key, and mask *)
+let is_entry ~(priority : int) ~(key : value list) (entry : tbl_entry) =
+  entry.eprio = priority
+  && List.for_all2
+    (fun (pat : value) (pat' : value) ->
+      match pat.v, pat'.v with
+      | VTuple([VInt(v); VInt(m)]), VTuple([VInt(v'); VInt(m')]) ->
+        Integer.equal m m' && Integer.equal (Integer.bitand v m) (Integer.bitand v' m')
+      | VTuple([VBool(v); VBool(m)]), VTuple([VBool(v'); VBool(m')]) ->
+        m = m' && (v && m) = (v' && m')
+      | _ -> false)
+    key
+    entry.ematch
+;;
+
+(* install an entry. Entries are ordered by priority (highest first),
+   then install order. Installing an entry that already exists does nothing.
+   Returns false if the table is full. *)
+let install_table_entry ~(stage : int) ~(priority : int)
+    ~(key : value list) ~(action : value list -> value list)
+    ~(eaction_name : cid) ~(eaction_const_args : value list)
+    (t : t) =
+  let tbl = get_table stage t in
+  if List.exists (is_entry ~priority ~key) tbl.tentries
+  then true
+  else if List.length tbl.tentries == tbl.tmaxlen
+  then false
+  else (
+    let new_entry = {eprio = priority; ematch = key; eaction = action; eaction_name; eaction_const_args} in
     let added, entries_rev =
-    List.fold_left
-      (fun (added, entries_rev) cur_entry ->
-        if added (* nothing else to do *)
-        then added, cur_entry :: entries_rev
-        else if (* reached an entry with higher prio, put new entry before it (after in reversed list) *)
-                cur_entry.eprio > new_entry.eprio
-        then true, cur_entry :: new_entry :: entries_rev
-        else false, cur_entry :: entries_rev)
-      (false, [])
+      List.fold_left
+        (fun (added, entries_rev) cur_entry ->
+          if added (* nothing else to do *)
+          then added, cur_entry :: entries_rev
+          else if (* reached an entry with lower prio, put new entry before it (after in reversed list) *)
+                  cur_entry.eprio < new_entry.eprio
+          then true, cur_entry :: new_entry :: entries_rev
+          else false, cur_entry :: entries_rev)
+        (false, [])
+        tbl.tentries
+    in
+    let entries =
+      if added then List.rev entries_rev else List.rev (new_entry :: entries_rev)
+    in
+    (* update stage with new table *)
+    set_obj stage t (OTable { tbl with tentries = entries });
+    true)
+;;
+
+(* replace the action of an existing entry.
+   Returns false if there is no such entry. *)
+let update_table_entry ~(stage : int) ~(priority : int)
+    ~(key : value list) ~(action : value list -> value list)
+    ~(eaction_name : cid) ~(eaction_const_args : value list)
+    (t : t) =
+  let tbl = get_table stage t in
+  let entries =
+    List.map
+      (fun entry ->
+        if is_entry ~priority ~key entry
+        then { entry with eaction = action; eaction_name; eaction_const_args }
+        else entry)
       tbl.tentries
   in
-  let entries =
-    if added then List.rev entries_rev else List.rev (new_entry :: entries_rev)
-  in
-  entries
-in
-(* update stage with new table *)
-set_obj stage t (OTable { tbl with tentries = entries })
+  set_obj stage t (OTable { tbl with tentries = entries });
+  List.exists (is_entry ~priority ~key) tbl.tentries
+;;
+
+(* remove an entry. Returns false if there is no such entry. *)
+let remove_table_entry ~(stage : int) ~(priority : int) ~(key : value list) (t : t) =
+  let tbl = get_table stage t in
+  let entries = List.filter (fun entry -> not (is_entry ~priority ~key entry)) tbl.tentries in
+  set_obj stage t (OTable { tbl with tentries = entries });
+  List.length entries < List.length tbl.tentries
 ;;
 
 (*** control command functions.

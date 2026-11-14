@@ -11,7 +11,7 @@
       in a one-off pass until we can adjust the tofino backend 
       to not rely on this convention. 
 
-   2.convert TBuiltin table types to TName, which is still used 
+   2.convert TBuiltin table and ternary table types to TName, which is still used 
       in the current tofino and interp implementations. *)
 open CoreSyntax
 
@@ -20,7 +20,7 @@ let tbuiltin_transformer =
    object (self)
      inherit [_] s_map as super
      method! visit_TBuiltin ctx cid raw_tys = 
-      if (Cid.equals cid Tables.t_id) then (
+      if (Cid.equals cid Tables.t_id || Cid.equals cid TernaryTables.t_id) then (
          let raw_tys = List.map (self#visit_raw_ty ctx) raw_tys in
          let key_raw_ty = List.nth raw_tys 0 in
          let install_raw_ty = List.nth raw_tys 1 in
@@ -50,7 +50,7 @@ let tbuiltin_transformer =
          let tinstall_sizes = Szs (List.map rawty_to_intsize install_raw_tys) in
          let tparam_sizes = Szs (List.map rawty_to_intsize param_raw_tys) in
          let tret_sizes = Szs (List.map rawty_to_intsize ret_raw_tys) in
-         TName(Tables.t_id, [tkey_sizes; tinstall_sizes; tparam_sizes; tret_sizes])         
+         TName(cid, [tkey_sizes; tinstall_sizes; tparam_sizes; tret_sizes])         
       )
       else 
          super#visit_TBuiltin ctx cid raw_tys
@@ -59,7 +59,7 @@ let tbuiltin_transformer =
 
 
 (* we don't want _ALL_ the builtin cids, just the ones that 
-   need to be wrapped in a tupleassign, i.e., Tables *)
+   need to be wrapped in a tupleassign, i.e., Tables and TernaryTables *)
 let builtin_cids = 
 List.map
    (fun (_, _, global_funs, constructors) ->
@@ -70,7 +70,7 @@ List.map
       in
       let constructor_cids = List.map fst constructors in
       fun_cids @ constructor_cids)
-   (List.map LibraryInterface.sigty_to_tup [Tables.signature])
+   (List.map LibraryInterface.sigty_to_tup [Tables.signature; TernaryTables.signature])
 |> List.flatten
 ;;
       

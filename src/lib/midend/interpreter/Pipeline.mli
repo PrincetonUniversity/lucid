@@ -64,7 +64,6 @@ val get_table_entries:
 [@@ocamlformat "disable"]
 
 
-(* install entry into table at stage *)
 val install_table_entry:
      stage: int
    -> priority: int
@@ -73,8 +72,29 @@ val install_table_entry:
    -> eaction_name : cid
    -> eaction_const_args : value list
    -> t
-   -> unit
-[@@ocamlformat "disable"]   
+   -> bool
+[@@ocamlformat "disable"]
+
+(* replace the action of an entry in table at stage. *)
+val update_table_entry:
+     stage: int
+   -> priority: int
+   -> key : value list
+   -> action : action
+   -> eaction_name : cid
+   -> eaction_const_args : value list
+   -> t
+   -> bool
+[@@ocamlformat "disable"]
+
+(* remove an entry from table at stage. *)
+val remove_table_entry:
+     stage: int
+   -> priority: int
+   -> key : value list
+   -> t
+   -> bool
+[@@ocamlformat "disable"]
 
 (* control command operations *)
 val control_set:

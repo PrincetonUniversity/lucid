@@ -17,10 +17,10 @@ action res_t miss_acn(int x)(int a) {
 }
 
 // extend parsing to not need parens around single element tuples
-global Table.t<<int, int, int, res_t>> ftbl = Table.create(1024, [hit_acn; miss_acn], miss_acn, 0);
+global TernaryTable.t<<int, int, int, res_t>> ftbl = TernaryTable.create(1024, [hit_acn; miss_acn], miss_acn, 0);
 
 event pktin(int src, int dst) {
   Array.set(myarr, 0, dst);
-  res_t tbl_result = Table.lookup(ftbl, dst, 1234);
+  res_t tbl_result = TernaryTable.lookup(ftbl, dst, 1234);
   printf ("table result: %d", tbl_result#val);
 }

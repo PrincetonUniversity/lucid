@@ -87,7 +87,8 @@ let build_coredirectory (decls:C.decls) =
           | TName(cid, _) -> (
             match (Cid.names cid) with
             | "Array"::_ 
-            | "Table"::_ -> true
+            | "Table"::_ 
+            | "TernaryTable"::_ -> true
             | _ -> false
           )
           | _ -> false

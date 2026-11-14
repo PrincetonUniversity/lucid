@@ -103,6 +103,7 @@
    arrays
    counters
    tables
+   ternaryTables
    pairArrays
    system
    events

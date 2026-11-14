@@ -65,19 +65,19 @@ typedef struct {
   uint16_t tag;
   union {
     struct {
-      uint64_t a_1363;
-      uint8_t a_wrapped_1364;
-      uint64_t b_1365;
-      uint8_t b_wrapped_1366;
-    } pkt_1368;
+      uint64_t a_1403;
+      uint8_t a_wrapped_1404;
+      uint64_t b_1405;
+      uint8_t b_wrapped_1406;
+    } pkt_1408;
   } args;
 } event_variant_t;
-event_variant_t pkt_1368(uint64_t a_1363 , uint8_t a_wrapped_1364 , uint64_t b_1365 , uint8_t b_wrapped_1366 ){
+event_variant_t pkt_1408(uint64_t a_1403 , uint8_t a_wrapped_1404 , uint64_t b_1405 , uint8_t b_wrapped_1406 ){
   event_variant_t ev  = {0};
-  ev.args.pkt_1368.a_1363 = a_1363;
-  ev.args.pkt_1368.a_wrapped_1364 = a_wrapped_1364;
-  ev.args.pkt_1368.b_1365 = b_1365;
-  ev.args.pkt_1368.b_wrapped_1366 = b_wrapped_1366;
+  ev.args.pkt_1408.a_1403 = a_1403;
+  ev.args.pkt_1408.a_wrapped_1404 = a_wrapped_1404;
+  ev.args.pkt_1408.b_1405 = b_1405;
+  ev.args.pkt_1408.b_wrapped_1406 = b_wrapped_1406;
   ev.tag = pkt_tag;
   return ev;
 }
@@ -85,31 +85,31 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-event_t mk_pkt(uint64_t a_1363 , uint8_t a_wrapped_1364 , uint64_t b_1365 , uint8_t b_wrapped_1366 ){
-  event_t tmp_1463  = {.meta = {.len = 16, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = pkt_1368(a_1363, a_wrapped_1364, b_1365, b_wrapped_1366)};
-  return tmp_1463;
+event_t mk_pkt(uint64_t a_1403 , uint8_t a_wrapped_1404 , uint64_t b_1405 , uint8_t b_wrapped_1406 ){
+  event_t tmp_1503  = {.meta = {.len = 16, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = pkt_1408(a_1403, a_wrapped_1404, b_1405, b_wrapped_1406)};
+  return tmp_1503;
 }
 uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
 uint8_t parse_event(packet_t*  pkt , event_t*  next_event , uint32_t ingress_port ){
-  uint64_t a_1363  = ((uint64_t)(read_bits(pkt, 62))) & 4611686018427387903;
-  uint8_t a_wrapped_1364  = ((uint8_t)(read_bits(pkt, 2))) & 3;
-  uint64_t b_1365  = ((uint64_t)(read_bits(pkt, 63))) & 9223372036854775807;
-  uint8_t b_wrapped_1366  = ((uint8_t)(read_bits(pkt, 1))) & 1;
-  (*(next_event)) = mk_pkt(a_1363, a_wrapped_1364, b_1365, b_wrapped_1366);
+  uint64_t a_1403  = ((uint64_t)(read_bits(pkt, 62))) & 4611686018427387903;
+  uint8_t a_wrapped_1404  = ((uint8_t)(read_bits(pkt, 2))) & 3;
+  uint64_t b_1405  = ((uint64_t)(read_bits(pkt, 63))) & 9223372036854775807;
+  uint8_t b_wrapped_1406  = ((uint8_t)(read_bits(pkt, 1))) & 1;
+  (*(next_event)) = mk_pkt(a_1403, a_wrapped_1404, b_1405, b_wrapped_1406);
   return pkt->cursor <= pkt->end;
 }
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint64_t a_1363  = ev_out->data.args.pkt_1368.a_1363;
-      uint8_t a_wrapped_1364  = ev_out->data.args.pkt_1368.a_wrapped_1364;
-      uint64_t b_1365  = ev_out->data.args.pkt_1368.b_1365;
-      uint8_t b_wrapped_1366  = ev_out->data.args.pkt_1368.b_wrapped_1366;
-      write_bits(buf_out, ((uint64_t)(b_wrapped_1366)), 1);
-      write_bits(buf_out, ((uint64_t)(b_1365)), 63);
-      write_bits(buf_out, ((uint64_t)(a_wrapped_1364)), 2);
-      write_bits(buf_out, ((uint64_t)(a_1363)), 62);
+      uint64_t a_1403  = ev_out->data.args.pkt_1408.a_1403;
+      uint8_t a_wrapped_1404  = ev_out->data.args.pkt_1408.a_wrapped_1404;
+      uint64_t b_1405  = ev_out->data.args.pkt_1408.b_1405;
+      uint8_t b_wrapped_1406  = ev_out->data.args.pkt_1408.b_wrapped_1406;
+      write_bits(buf_out, ((uint64_t)(b_wrapped_1406)), 1);
+      write_bits(buf_out, ((uint64_t)(b_1405)), 63);
+      write_bits(buf_out, ((uint64_t)(a_wrapped_1404)), 2);
+      write_bits(buf_out, ((uint64_t)(a_1403)), 62);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -129,21 +129,21 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
-      uint64_t a_1369  = ev_in->data.args.pkt_1368.a_1363;
-      uint8_t a_wrapped_1370  = ev_in->data.args.pkt_1368.a_wrapped_1364;
-      uint64_t b_1371  = ev_in->data.args.pkt_1368.b_1365;
-      uint8_t b_wrapped_1372  = ev_in->data.args.pkt_1368.b_wrapped_1366;
-      event_t this  = mk_pkt(a_1369, a_wrapped_1370, b_1371, b_wrapped_1372);
-      uint8_t wa_1376  = 0;
-      uint8_t wb_1377  = 0;
-      if (((a_1369 + 1) & 4611686018427387903) == 0) {
-        wa_1376 = 1;
+      uint64_t a_1409  = ev_in->data.args.pkt_1408.a_1403;
+      uint8_t a_wrapped_1410  = ev_in->data.args.pkt_1408.a_wrapped_1404;
+      uint64_t b_1411  = ev_in->data.args.pkt_1408.b_1405;
+      uint8_t b_wrapped_1412  = ev_in->data.args.pkt_1408.b_wrapped_1406;
+      event_t this  = mk_pkt(a_1409, a_wrapped_1410, b_1411, b_wrapped_1412);
+      uint8_t wa_1416  = 0;
+      uint8_t wb_1417  = 0;
+      if (((a_1409 + 1) & 4611686018427387903) == 0) {
+        wa_1416 = 1;
       }
-      if (((b_1371 + 1) & 9223372036854775807) == 0) {
-        wb_1377 = 1;
+      if (((b_1411 + 1) & 9223372036854775807) == 0) {
+        wb_1417 = 1;
       }
-      out_event_t tmp_1464  = {.ev = mk_pkt((a_1369 + 1) & 4611686018427387903, wa_1376, (b_1371 + 1) & 9223372036854775807, wb_1377), .port = ev_in->meta.in_port};
-      out_events[n] = tmp_1464;
+      out_event_t tmp_1504  = {.ev = mk_pkt((a_1409 + 1) & 4611686018427387903, wa_1416, (b_1411 + 1) & 9223372036854775807, wb_1417), .port = ev_in->meta.in_port};
+      out_events[n] = tmp_1504;
       n = n + 1;
       break;
     }

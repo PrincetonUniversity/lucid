@@ -10,6 +10,7 @@ let builtin_type_info =
   ; Payloads.t_id, Payloads.sizes, Payloads.global
   ; Packet.t_id, Packet.sizes, Packet.global
   ; Tables.t_id, Tables.sizes, Tables.global
+  ; TernaryTables.t_id, TernaryTables.sizes, TernaryTables.global
   ]
 ;;
 
@@ -24,6 +25,7 @@ let builtin_modules =
   ; Payloads.signature
   ; Packet.signature 
   ; Tables.signature
+  ; TernaryTables.signature
   ]
 ;;
 let builtin_tycid_to_ty = List.filter_map 
@@ -47,5 +49,6 @@ let builtin_defs =
   @ Payloads.defs
   @ Packet.defs
   @ Tables.defs
+  @ TernaryTables.defs
 ;;
 

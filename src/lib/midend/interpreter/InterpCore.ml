@@ -631,7 +631,8 @@ let _interp_dglobal (st : InterpSwitch.state) id ty e =
 
 let interp_dglobal (st : InterpSwitch.state) id ty e =
   match e.e with
-  | ECall(cid, args, _) when (Cid.names cid) = ["Table"; "create"] -> (
+  | ECall(cid, args, _) when (Cid.names cid) = ["Table"; "create"] 
+                          || (Cid.names cid) = ["TernaryTable"; "create"] -> (
     (* eval the args *)
     let arg_ivals = List.map (fun e -> interp_exp st Env.empty e) args in
     (* construct the value *)

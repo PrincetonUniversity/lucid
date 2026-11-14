@@ -67,33 +67,33 @@ typedef struct {
   uint16_t tag;
   union {
     struct {
-      uint32_t x_931;
-    } pkt_932;
+      uint32_t x_971;
+    } pkt_972;
     struct {
-      uint32_t x_933;
-    } bg_934;
+      uint32_t x_973;
+    } bg_974;
     struct {
-      uint32_t port_in_935;
-      uint32_t x_936;
-    } report_937;
+      uint32_t port_in_975;
+      uint32_t x_976;
+    } report_977;
   } args;
 } event_variant_t;
-event_variant_t pkt_932(uint32_t x_931 ){
+event_variant_t pkt_972(uint32_t x_971 ){
   event_variant_t ev  = {0};
-  ev.args.pkt_932.x_931 = x_931;
+  ev.args.pkt_972.x_971 = x_971;
   ev.tag = pkt_tag;
   return ev;
 }
-event_variant_t bg_934(uint32_t x_933 ){
+event_variant_t bg_974(uint32_t x_973 ){
   event_variant_t ev  = {0};
-  ev.args.bg_934.x_933 = x_933;
+  ev.args.bg_974.x_973 = x_973;
   ev.tag = bg_tag;
   return ev;
 }
-event_variant_t report_937(uint32_t port_in_935 , uint32_t x_936 ){
+event_variant_t report_977(uint32_t port_in_975 , uint32_t x_976 ){
   event_variant_t ev  = {0};
-  ev.args.report_937.port_in_935 = port_in_935;
-  ev.args.report_937.x_936 = x_936;
+  ev.args.report_977.port_in_975 = port_in_975;
+  ev.args.report_977.x_976 = x_976;
   ev.tag = report_tag;
   return ev;
 }
@@ -101,17 +101,17 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-event_t mk_pkt(uint32_t x_931 ){
-  event_t tmp_998  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_932(x_931)};
-  return tmp_998;
+event_t mk_pkt(uint32_t x_971 ){
+  event_t tmp_1038  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_972(x_971)};
+  return tmp_1038;
 }
-event_t mk_bg(uint32_t x_933 ){
-  event_t tmp_999  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = bg_934(x_933)};
-  return tmp_999;
+event_t mk_bg(uint32_t x_973 ){
+  event_t tmp_1039  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = bg_974(x_973)};
+  return tmp_1039;
 }
-event_t mk_report(uint32_t port_in_935 , uint32_t x_936 ){
-  event_t tmp_1000  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = report_937(port_in_935, x_936)};
-  return tmp_1000;
+event_t mk_report(uint32_t port_in_975 , uint32_t x_976 ){
+  event_t tmp_1040  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = report_977(port_in_975, x_976)};
+  return tmp_1040;
 }
 uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
@@ -126,21 +126,21 @@ uint8_t parse_event(packet_t*  packet , event_t*  next_event , uint32_t ingress_
       uint16_t tag  = ((uint16_t)(read_bits(packet, 16)));
       switch (tag) {
         case 1: {
-          uint32_t x_931  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_pkt(x_931);
+          uint32_t x_971  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_pkt(x_971);
           return packet->cursor <= packet->end;
           break;
         }
         case 2: {
-          uint32_t x_933  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_bg(x_933);
+          uint32_t x_973  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_bg(x_973);
           return packet->cursor <= packet->end;
           break;
         }
         case 3: {
-          uint32_t port_in_935  = ((uint32_t)(read_bits(packet, 32)));
-          uint32_t x_936  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_report(port_in_935, x_936);
+          uint32_t port_in_975  = ((uint32_t)(read_bits(packet, 32)));
+          uint32_t x_976  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_report(port_in_975, x_976);
           return packet->cursor <= packet->end;
           break;
         }
@@ -161,8 +161,8 @@ uint8_t parse_event(packet_t*  packet , event_t*  next_event , uint32_t ingress_
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint32_t x_931  = ev_out->data.args.pkt_932.x_931;
-      write_bits(buf_out, ((uint64_t)(x_931)), 32);
+      uint32_t x_971  = ev_out->data.args.pkt_972.x_971;
+      write_bits(buf_out, ((uint64_t)(x_971)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -173,8 +173,8 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 2: {
-      uint32_t x_933  = ev_out->data.args.bg_934.x_933;
-      write_bits(buf_out, ((uint64_t)(x_933)), 32);
+      uint32_t x_973  = ev_out->data.args.bg_974.x_973;
+      write_bits(buf_out, ((uint64_t)(x_973)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(2)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -185,10 +185,10 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 3: {
-      uint32_t port_in_935  = ev_out->data.args.report_937.port_in_935;
-      uint32_t x_936  = ev_out->data.args.report_937.x_936;
-      write_bits(buf_out, ((uint64_t)(x_936)), 32);
-      write_bits(buf_out, ((uint64_t)(port_in_935)), 32);
+      uint32_t port_in_975  = ev_out->data.args.report_977.port_in_975;
+      uint32_t x_976  = ev_out->data.args.report_977.x_976;
+      write_bits(buf_out, ((uint64_t)(x_976)), 32);
+      write_bits(buf_out, ((uint64_t)(port_in_975)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(3)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -208,21 +208,21 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
-      uint32_t x_938  = ev_in->data.args.pkt_932.x_931;
-      event_t this  = mk_pkt(x_938);
-      out_event_t tmp_1001  = {.ev = mk_report(ev_in->meta.in_port, x_938), .port = 1};
-      out_events[n] = tmp_1001;
+      uint32_t x_978  = ev_in->data.args.pkt_972.x_971;
+      event_t this  = mk_pkt(x_978);
+      out_event_t tmp_1041  = {.ev = mk_report(ev_in->meta.in_port, x_978), .port = 1};
+      out_events[n] = tmp_1041;
       n = n + 1;
-      out_event_t tmp_1002  = {.ev = mk_bg(x_938), .port = 4294967295};
-      out_events[n] = tmp_1002;
+      out_event_t tmp_1042  = {.ev = mk_bg(x_978), .port = 4294967295};
+      out_events[n] = tmp_1042;
       n = n + 1;
       break;
     }
     case 2: {
-      uint32_t x_939  = ev_in->data.args.bg_934.x_933;
-      event_t this  = mk_bg(x_939);
-      out_event_t tmp_1003  = {.ev = mk_report(ev_in->meta.in_port, x_939), .port = 1};
-      out_events[n] = tmp_1003;
+      uint32_t x_979  = ev_in->data.args.bg_974.x_973;
+      event_t this  = mk_bg(x_979);
+      out_event_t tmp_1043  = {.ev = mk_report(ev_in->meta.in_port, x_979), .port = 1};
+      out_events[n] = tmp_1043;
       n = n + 1;
       break;
     }

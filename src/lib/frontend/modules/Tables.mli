@@ -4,6 +4,8 @@ include LibraryInterface.TypeInterface
 val is_tbl_ty : CoreSyntax.raw_ty -> bool
 (* create the table, adding it to a pipeline in a switch *)
 val create_ctor : InterpSwitch.state -> InterpSwitch.ival list -> Pipeline.t
+(* look up a key in the table and run the matching entry's action *)
+val lookup_fun : InterpSwitch.code
 
 (* helpers for tofino backend -- these will eventually be 
    eliminated, but smooth the conversion from custom table syntax 

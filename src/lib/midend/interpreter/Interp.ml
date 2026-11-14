@@ -274,7 +274,7 @@ let execute_main_parser print_log swidx port (nst: network_state) (pkt_ev : (Cor
 let execute_control swidx (nst : network_state) (ctl_ev : control_val) =
   (* construst a helper to install the table entry, as InterpControl 
      can't call back up to InterpCore *)
-  let do_tbl_install tbl_cid (cmd : entry_install_cmd) =
+  let do_tbl_install ternary tbl_cid (cmd : entry_install_cmd) =
     let etbl = exp (EVar tbl_cid) (ty@@TBool) in
     let ekey = exp 
       (ETuple(cmd.imatch)) 
@@ -289,8 +289,14 @@ let execute_control swidx (nst : network_state) (ctl_ev : control_val) =
     let eaction_constr_args = exp
       (ETuple(cmd.iargs))
       (ty@@TTuple(List.map (fun exp -> exp.ety.raw_ty) cmd.iargs)) in
-    let eargs = [etbl; ekey; emask; eaction_constr; eaction_constr_args] in
-    let ecall = C.exp (ECall(Cid.create ["Table"; "install_ternary"],eargs, false)) (ty TBool) in
+    let fcid, eargs = 
+      if ternary
+      then Cid.create ["TernaryTable"; "install"], 
+        [etbl; ekey; emask; C.vint_exp cmd.iprio 32; eaction_constr; eaction_constr_args]
+      else Cid.create ["Table"; "install"], 
+        [etbl; ekey; eaction_constr; eaction_constr_args]
+    in
+    let ecall = C.exp (ECall(fcid, eargs, false)) (ty TBool) in
     InterpCore.interp_exp nst.(swidx) Env.empty ecall
   in
   InterpControl.handle_control 

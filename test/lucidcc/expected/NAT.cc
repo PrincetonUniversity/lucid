@@ -100,55 +100,55 @@ typedef struct {
   uint16_t tag;
   union {
     struct {
-      uint32_t src_ip_4037;
-      uint32_t src_port_4038;
-    } inside_packet_4039;
+      uint32_t src_ip_4077;
+      uint32_t src_port_4078;
+    } inside_packet_4079;
     struct {
-      uint32_t src_port_4040;
-    } inside_continue_4041;
+      uint32_t src_port_4080;
+    } inside_continue_4081;
     struct {
-      uint32_t dst_port_4042;
-    } outside_packet_4043;
+      uint32_t dst_port_4082;
+    } outside_packet_4083;
     struct {
-      uint32_t dst_ip_4044;
-      uint32_t dst_port_4045;
-    } outside_continue_4046;
+      uint32_t dst_ip_4084;
+      uint32_t dst_port_4085;
+    } outside_continue_4086;
     struct {
-      uint32_t src_ip_4047;
-      uint32_t src_port_4048;
-    } add_to_nat_4049;
+      uint32_t src_ip_4087;
+      uint32_t src_port_4088;
+    } add_to_nat_4089;
   } args;
 } event_variant_t;
-event_variant_t inside_packet_4039(uint32_t src_ip_4037 , uint32_t src_port_4038 ){
+event_variant_t inside_packet_4079(uint32_t src_ip_4077 , uint32_t src_port_4078 ){
   event_variant_t ev  = {0};
-  ev.args.inside_packet_4039.src_ip_4037 = src_ip_4037;
-  ev.args.inside_packet_4039.src_port_4038 = src_port_4038;
+  ev.args.inside_packet_4079.src_ip_4077 = src_ip_4077;
+  ev.args.inside_packet_4079.src_port_4078 = src_port_4078;
   ev.tag = inside_packet_tag;
   return ev;
 }
-event_variant_t inside_continue_4041(uint32_t src_port_4040 ){
+event_variant_t inside_continue_4081(uint32_t src_port_4080 ){
   event_variant_t ev  = {0};
-  ev.args.inside_continue_4041.src_port_4040 = src_port_4040;
+  ev.args.inside_continue_4081.src_port_4080 = src_port_4080;
   ev.tag = inside_continue_tag;
   return ev;
 }
-event_variant_t outside_packet_4043(uint32_t dst_port_4042 ){
+event_variant_t outside_packet_4083(uint32_t dst_port_4082 ){
   event_variant_t ev  = {0};
-  ev.args.outside_packet_4043.dst_port_4042 = dst_port_4042;
+  ev.args.outside_packet_4083.dst_port_4082 = dst_port_4082;
   ev.tag = outside_packet_tag;
   return ev;
 }
-event_variant_t outside_continue_4046(uint32_t dst_ip_4044 , uint32_t dst_port_4045 ){
+event_variant_t outside_continue_4086(uint32_t dst_ip_4084 , uint32_t dst_port_4085 ){
   event_variant_t ev  = {0};
-  ev.args.outside_continue_4046.dst_ip_4044 = dst_ip_4044;
-  ev.args.outside_continue_4046.dst_port_4045 = dst_port_4045;
+  ev.args.outside_continue_4086.dst_ip_4084 = dst_ip_4084;
+  ev.args.outside_continue_4086.dst_port_4085 = dst_port_4085;
   ev.tag = outside_continue_tag;
   return ev;
 }
-event_variant_t add_to_nat_4049(uint32_t src_ip_4047 , uint32_t src_port_4048 ){
+event_variant_t add_to_nat_4089(uint32_t src_ip_4087 , uint32_t src_port_4088 ){
   event_variant_t ev  = {0};
-  ev.args.add_to_nat_4049.src_ip_4047 = src_ip_4047;
-  ev.args.add_to_nat_4049.src_port_4048 = src_port_4048;
+  ev.args.add_to_nat_4089.src_ip_4087 = src_ip_4087;
+  ev.args.add_to_nat_4089.src_port_4088 = src_port_4088;
   ev.tag = add_to_nat_tag;
   return ev;
 }
@@ -156,68 +156,68 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-event_t mk_inside_packet(uint32_t src_ip_4037 , uint32_t src_port_4038 ){
-  event_t tmp_4331  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = inside_packet_4039(src_ip_4037, src_port_4038)};
-  return tmp_4331;
+event_t mk_inside_packet(uint32_t src_ip_4077 , uint32_t src_port_4078 ){
+  event_t tmp_4371  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = inside_packet_4079(src_ip_4077, src_port_4078)};
+  return tmp_4371;
 }
-event_t mk_inside_continue(uint32_t src_port_4040 ){
-  event_t tmp_4332  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = inside_continue_4041(src_port_4040)};
-  return tmp_4332;
+event_t mk_inside_continue(uint32_t src_port_4080 ){
+  event_t tmp_4372  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = inside_continue_4081(src_port_4080)};
+  return tmp_4372;
 }
-event_t mk_outside_packet(uint32_t dst_port_4042 ){
-  event_t tmp_4333  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = outside_packet_4043(dst_port_4042)};
-  return tmp_4333;
+event_t mk_outside_packet(uint32_t dst_port_4082 ){
+  event_t tmp_4373  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = outside_packet_4083(dst_port_4082)};
+  return tmp_4373;
 }
-event_t mk_outside_continue(uint32_t dst_ip_4044 , uint32_t dst_port_4045 ){
-  event_t tmp_4334  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = outside_continue_4046(dst_ip_4044, dst_port_4045)};
-  return tmp_4334;
+event_t mk_outside_continue(uint32_t dst_ip_4084 , uint32_t dst_port_4085 ){
+  event_t tmp_4374  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = outside_continue_4086(dst_ip_4084, dst_port_4085)};
+  return tmp_4374;
 }
-event_t mk_add_to_nat(uint32_t src_ip_4047 , uint32_t src_port_4048 ){
-  event_t tmp_4335  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = add_to_nat_4049(src_ip_4047, src_port_4048)};
-  return tmp_4335;
+event_t mk_add_to_nat(uint32_t src_ip_4087 , uint32_t src_port_4088 ){
+  event_t tmp_4375  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = add_to_nat_4089(src_ip_4087, src_port_4088)};
+  return tmp_4375;
 }
 uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
-uint32_t nat_to_ip_4035 [16] = {0};
-uint32_t Array_update_complex_nat_to_ip_4035_set_set_memop_32_bit(uint32_t _idx , uint32_t new_val_set_memop_32_bit , uint32_t unused_set_memop_32_bit ){
-  uint32_t cell1  = nat_to_ip_4035[(((uint32_t)(_idx)) % 16)];
+uint32_t nat_to_ip_4075 [16] = {0};
+uint32_t Array_update_complex_nat_to_ip_4075_set_set_memop_32_bit(uint32_t _idx , uint32_t new_val_set_memop_32_bit , uint32_t unused_set_memop_32_bit ){
+  uint32_t cell1  = nat_to_ip_4075[(((uint32_t)(_idx)) % 16)];
   uint32_t cell2  = 0;
   uint32_t ret  = 0;
   if (true) {
     cell1 = new_val_set_memop_32_bit;
   }
-  nat_to_ip_4035[(((uint32_t)(_idx)) % 16)] = cell1;
+  nat_to_ip_4075[(((uint32_t)(_idx)) % 16)] = cell1;
   return ret;
 }
-uint32_t Array_update_complex_nat_to_ip_4035_get_get_memop_32_bit(uint32_t _idx , uint32_t unused1_get_memop_32_bit , uint32_t unused2_get_memop_32_bit ){
-  uint32_t cell1  = nat_to_ip_4035[(((uint32_t)(_idx)) % 16)];
+uint32_t Array_update_complex_nat_to_ip_4075_get_get_memop_32_bit(uint32_t _idx , uint32_t unused1_get_memop_32_bit , uint32_t unused2_get_memop_32_bit ){
+  uint32_t cell1  = nat_to_ip_4075[(((uint32_t)(_idx)) % 16)];
   uint32_t cell2  = 0;
   uint32_t ret  = 0;
   if (true) {
-    ret = nat_to_ip_4035[(((uint32_t)(_idx)) % 16)];
+    ret = nat_to_ip_4075[(((uint32_t)(_idx)) % 16)];
   }
-  nat_to_ip_4035[(((uint32_t)(_idx)) % 16)] = cell1;
+  nat_to_ip_4075[(((uint32_t)(_idx)) % 16)] = cell1;
   return ret;
 }
-uint32_t nat_to_port_4036 [16] = {0};
-uint32_t Array_update_complex_nat_to_port_4036_set_set_memop_32_bit(uint32_t _idx , uint32_t new_val_set_memop_32_bit , uint32_t unused_set_memop_32_bit ){
-  uint32_t cell1  = nat_to_port_4036[(((uint32_t)(_idx)) % 16)];
+uint32_t nat_to_port_4076 [16] = {0};
+uint32_t Array_update_complex_nat_to_port_4076_set_set_memop_32_bit(uint32_t _idx , uint32_t new_val_set_memop_32_bit , uint32_t unused_set_memop_32_bit ){
+  uint32_t cell1  = nat_to_port_4076[(((uint32_t)(_idx)) % 16)];
   uint32_t cell2  = 0;
   uint32_t ret  = 0;
   if (true) {
     cell1 = new_val_set_memop_32_bit;
   }
-  nat_to_port_4036[(((uint32_t)(_idx)) % 16)] = cell1;
+  nat_to_port_4076[(((uint32_t)(_idx)) % 16)] = cell1;
   return ret;
 }
-uint32_t Array_update_complex_nat_to_port_4036_get_get_memop_32_bit(uint32_t _idx , uint32_t unused1_get_memop_32_bit , uint32_t unused2_get_memop_32_bit ){
-  uint32_t cell1  = nat_to_port_4036[(((uint32_t)(_idx)) % 16)];
+uint32_t Array_update_complex_nat_to_port_4076_get_get_memop_32_bit(uint32_t _idx , uint32_t unused1_get_memop_32_bit , uint32_t unused2_get_memop_32_bit ){
+  uint32_t cell1  = nat_to_port_4076[(((uint32_t)(_idx)) % 16)];
   uint32_t cell2  = 0;
   uint32_t ret  = 0;
   if (true) {
-    ret = nat_to_port_4036[(((uint32_t)(_idx)) % 16)];
+    ret = nat_to_port_4076[(((uint32_t)(_idx)) % 16)];
   }
-  nat_to_port_4036[(((uint32_t)(_idx)) % 16)] = cell1;
+  nat_to_port_4076[(((uint32_t)(_idx)) % 16)] = cell1;
   return ret;
 }
 uint8_t parse_event(packet_t*  packet , event_t*  next_event , uint32_t ingress_port ){
@@ -231,35 +231,35 @@ uint8_t parse_event(packet_t*  packet , event_t*  next_event , uint32_t ingress_
       uint16_t tag  = ((uint16_t)(read_bits(packet, 16)));
       switch (tag) {
         case 1: {
-          uint32_t src_ip_4037  = ((uint32_t)(read_bits(packet, 32)));
-          uint32_t src_port_4038  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_inside_packet(src_ip_4037, src_port_4038);
+          uint32_t src_ip_4077  = ((uint32_t)(read_bits(packet, 32)));
+          uint32_t src_port_4078  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_inside_packet(src_ip_4077, src_port_4078);
           return packet->cursor <= packet->end;
           break;
         }
         case 2: {
-          uint32_t src_port_4040  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_inside_continue(src_port_4040);
+          uint32_t src_port_4080  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_inside_continue(src_port_4080);
           return packet->cursor <= packet->end;
           break;
         }
         case 3: {
-          uint32_t dst_port_4042  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_outside_packet(dst_port_4042);
+          uint32_t dst_port_4082  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_outside_packet(dst_port_4082);
           return packet->cursor <= packet->end;
           break;
         }
         case 4: {
-          uint32_t dst_ip_4044  = ((uint32_t)(read_bits(packet, 32)));
-          uint32_t dst_port_4045  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_outside_continue(dst_ip_4044, dst_port_4045);
+          uint32_t dst_ip_4084  = ((uint32_t)(read_bits(packet, 32)));
+          uint32_t dst_port_4085  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_outside_continue(dst_ip_4084, dst_port_4085);
           return packet->cursor <= packet->end;
           break;
         }
         case 5: {
-          uint32_t src_ip_4047  = ((uint32_t)(read_bits(packet, 32)));
-          uint32_t src_port_4048  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_add_to_nat(src_ip_4047, src_port_4048);
+          uint32_t src_ip_4087  = ((uint32_t)(read_bits(packet, 32)));
+          uint32_t src_port_4088  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_add_to_nat(src_ip_4087, src_port_4088);
           return packet->cursor <= packet->end;
           break;
         }
@@ -280,10 +280,10 @@ uint8_t parse_event(packet_t*  packet , event_t*  next_event , uint32_t ingress_
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint32_t src_ip_4037  = ev_out->data.args.inside_packet_4039.src_ip_4037;
-      uint32_t src_port_4038  = ev_out->data.args.inside_packet_4039.src_port_4038;
-      write_bits(buf_out, ((uint64_t)(src_port_4038)), 32);
-      write_bits(buf_out, ((uint64_t)(src_ip_4037)), 32);
+      uint32_t src_ip_4077  = ev_out->data.args.inside_packet_4079.src_ip_4077;
+      uint32_t src_port_4078  = ev_out->data.args.inside_packet_4079.src_port_4078;
+      write_bits(buf_out, ((uint64_t)(src_port_4078)), 32);
+      write_bits(buf_out, ((uint64_t)(src_ip_4077)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -294,8 +294,8 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 2: {
-      uint32_t src_port_4040  = ev_out->data.args.inside_continue_4041.src_port_4040;
-      write_bits(buf_out, ((uint64_t)(src_port_4040)), 32);
+      uint32_t src_port_4080  = ev_out->data.args.inside_continue_4081.src_port_4080;
+      write_bits(buf_out, ((uint64_t)(src_port_4080)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(2)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -306,8 +306,8 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 3: {
-      uint32_t dst_port_4042  = ev_out->data.args.outside_packet_4043.dst_port_4042;
-      write_bits(buf_out, ((uint64_t)(dst_port_4042)), 32);
+      uint32_t dst_port_4082  = ev_out->data.args.outside_packet_4083.dst_port_4082;
+      write_bits(buf_out, ((uint64_t)(dst_port_4082)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(3)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -318,10 +318,10 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 4: {
-      uint32_t dst_ip_4044  = ev_out->data.args.outside_continue_4046.dst_ip_4044;
-      uint32_t dst_port_4045  = ev_out->data.args.outside_continue_4046.dst_port_4045;
-      write_bits(buf_out, ((uint64_t)(dst_port_4045)), 32);
-      write_bits(buf_out, ((uint64_t)(dst_ip_4044)), 32);
+      uint32_t dst_ip_4084  = ev_out->data.args.outside_continue_4086.dst_ip_4084;
+      uint32_t dst_port_4085  = ev_out->data.args.outside_continue_4086.dst_port_4085;
+      write_bits(buf_out, ((uint64_t)(dst_port_4085)), 32);
+      write_bits(buf_out, ((uint64_t)(dst_ip_4084)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(4)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -332,10 +332,10 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 5: {
-      uint32_t src_ip_4047  = ev_out->data.args.add_to_nat_4049.src_ip_4047;
-      uint32_t src_port_4048  = ev_out->data.args.add_to_nat_4049.src_port_4048;
-      write_bits(buf_out, ((uint64_t)(src_port_4048)), 32);
-      write_bits(buf_out, ((uint64_t)(src_ip_4047)), 32);
+      uint32_t src_ip_4087  = ev_out->data.args.add_to_nat_4089.src_ip_4087;
+      uint32_t src_port_4088  = ev_out->data.args.add_to_nat_4089.src_port_4088;
+      write_bits(buf_out, ((uint64_t)(src_port_4088)), 32);
+      write_bits(buf_out, ((uint64_t)(src_ip_4087)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(5)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -355,67 +355,67 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 2: {
-      uint32_t src_port_4050  = ev_in->data.args.inside_continue_4041.src_port_4040;
-      event_t this  = mk_inside_continue(src_port_4050);
+      uint32_t src_port_4090  = ev_in->data.args.inside_continue_4081.src_port_4080;
+      event_t this  = mk_inside_continue(src_port_4090);
       break;
     }
     case 4: {
-      uint32_t dst_ip_4051  = ev_in->data.args.outside_continue_4046.dst_ip_4044;
-      uint32_t dst_port_4052  = ev_in->data.args.outside_continue_4046.dst_port_4045;
-      event_t this  = mk_outside_continue(dst_ip_4051, dst_port_4052);
+      uint32_t dst_ip_4091  = ev_in->data.args.outside_continue_4086.dst_ip_4084;
+      uint32_t dst_port_4092  = ev_in->data.args.outside_continue_4086.dst_port_4085;
+      event_t this  = mk_outside_continue(dst_ip_4091, dst_port_4092);
       break;
     }
     case 5: {
-      uint32_t src_ip_4053  = ev_in->data.args.add_to_nat_4049.src_ip_4047;
-      uint32_t src_port_4054  = ev_in->data.args.add_to_nat_4049.src_port_4048;
-      event_t this  = mk_add_to_nat(src_ip_4053, src_port_4054);
-      uint32_t NAT_port_4055  = ((uint32_t)(hash_args_0(1, src_ip_4053, src_port_4054)));
-      printf("Mapped (ip: %u, port: %u) to port %u\n", src_ip_4053, src_port_4054, NAT_port_4055);
-      Array_update_complex_nat_to_ip_4035_set_set_memop_32_bit(NAT_port_4055, src_ip_4053, 0);
-      Array_update_complex_nat_to_port_4036_set_set_memop_32_bit(NAT_port_4055, src_port_4054, 0);
-      out_event_t tmp_4336  = {.ev = mk_inside_continue(NAT_port_4055), .port = 4294967295};
-      out_events[n] = tmp_4336;
+      uint32_t src_ip_4093  = ev_in->data.args.add_to_nat_4089.src_ip_4087;
+      uint32_t src_port_4094  = ev_in->data.args.add_to_nat_4089.src_port_4088;
+      event_t this  = mk_add_to_nat(src_ip_4093, src_port_4094);
+      uint32_t NAT_port_4095  = ((uint32_t)(hash_args_0(1, src_ip_4093, src_port_4094)));
+      printf("Mapped (ip: %u, port: %u) to port %u\n", src_ip_4093, src_port_4094, NAT_port_4095);
+      Array_update_complex_nat_to_ip_4075_set_set_memop_32_bit(NAT_port_4095, src_ip_4093, 0);
+      Array_update_complex_nat_to_port_4076_set_set_memop_32_bit(NAT_port_4095, src_port_4094, 0);
+      out_event_t tmp_4376  = {.ev = mk_inside_continue(NAT_port_4095), .port = 4294967295};
+      out_events[n] = tmp_4376;
       n = n + 1;
       break;
     }
     case 1: {
-      uint32_t src_ip_4056  = ev_in->data.args.inside_packet_4039.src_ip_4037;
-      uint32_t src_port_4057  = ev_in->data.args.inside_packet_4039.src_port_4038;
-      event_t this  = mk_inside_packet(src_ip_4056, src_port_4057);
-      uint8_t ret_4059  = false;
-      uint32_t idx_4060  = ((uint32_t)(hash_args_0(1, src_ip_4056, src_port_4057)));
-      uint32_t ip_4061  = Array_update_complex_nat_to_ip_4035_get_get_memop_32_bit(idx_4060, 0, 0);
-      uint32_t port_4062  = Array_update_complex_nat_to_port_4036_get_get_memop_32_bit(idx_4060, 0, 0);
-      if (ip_4061 == src_ip_4056) {
-        if (port_4062 == src_port_4057) {
-          ret_4059 = true;
+      uint32_t src_ip_4096  = ev_in->data.args.inside_packet_4079.src_ip_4077;
+      uint32_t src_port_4097  = ev_in->data.args.inside_packet_4079.src_port_4078;
+      event_t this  = mk_inside_packet(src_ip_4096, src_port_4097);
+      uint8_t ret_4099  = false;
+      uint32_t idx_4100  = ((uint32_t)(hash_args_0(1, src_ip_4096, src_port_4097)));
+      uint32_t ip_4101  = Array_update_complex_nat_to_ip_4075_get_get_memop_32_bit(idx_4100, 0, 0);
+      uint32_t port_4102  = Array_update_complex_nat_to_port_4076_get_get_memop_32_bit(idx_4100, 0, 0);
+      if (ip_4101 == src_ip_4096) {
+        if (port_4102 == src_port_4097) {
+          ret_4099 = true;
         }
       }
-      if (ret_4059 == true) {
-        uint32_t NAT_port_4064  = ((uint32_t)(hash_args_0(1, src_ip_4056, src_port_4057)));
-        printf("IP already in NAT, maps to port %u\n", NAT_port_4064);
-        out_event_t tmp_4337  = {.ev = mk_inside_continue(NAT_port_4064), .port = 4294967295};
-        out_events[n] = tmp_4337;
+      if (ret_4099 == true) {
+        uint32_t NAT_port_4104  = ((uint32_t)(hash_args_0(1, src_ip_4096, src_port_4097)));
+        printf("IP already in NAT, maps to port %u\n", NAT_port_4104);
+        out_event_t tmp_4377  = {.ev = mk_inside_continue(NAT_port_4104), .port = 4294967295};
+        out_events[n] = tmp_4377;
         n = n + 1;
       }else {
         printf("Adding to NAT\n");
-        out_event_t tmp_4338  = {.ev = mk_add_to_nat(src_ip_4056, src_port_4057), .port = 4294967295};
-        out_events[n] = tmp_4338;
+        out_event_t tmp_4378  = {.ev = mk_add_to_nat(src_ip_4096, src_port_4097), .port = 4294967295};
+        out_events[n] = tmp_4378;
         n = n + 1;
       }
       break;
     }
     case 3: {
-      uint32_t dst_port_4065  = ev_in->data.args.outside_packet_4043.dst_port_4042;
-      event_t this  = mk_outside_packet(dst_port_4065);
-      uint32_t ip_4066  = Array_update_complex_nat_to_ip_4035_get_get_memop_32_bit(dst_port_4065, 0, 0);
-      uint32_t port_4067  = Array_update_complex_nat_to_port_4036_get_get_memop_32_bit(dst_port_4065, 0, 0);
-      printf("Mapped port %u to (ip: %u, port: %u)\n", dst_port_4065, ip_4066, port_4067);
-      if (ip_4066 == 0) {
+      uint32_t dst_port_4105  = ev_in->data.args.outside_packet_4083.dst_port_4082;
+      event_t this  = mk_outside_packet(dst_port_4105);
+      uint32_t ip_4106  = Array_update_complex_nat_to_ip_4075_get_get_memop_32_bit(dst_port_4105, 0, 0);
+      uint32_t port_4107  = Array_update_complex_nat_to_port_4076_get_get_memop_32_bit(dst_port_4105, 0, 0);
+      printf("Mapped port %u to (ip: %u, port: %u)\n", dst_port_4105, ip_4106, port_4107);
+      if (ip_4106 == 0) {
         printf("dropped\n");
       }else {
-        out_event_t tmp_4339  = {.ev = mk_outside_continue(ip_4066, port_4067), .port = 4294967295};
-        out_events[n] = tmp_4339;
+        out_event_t tmp_4379  = {.ev = mk_outside_continue(ip_4106, port_4107), .port = 4294967295};
+        out_events[n] = tmp_4379;
         n = n + 1;
       }
       break;

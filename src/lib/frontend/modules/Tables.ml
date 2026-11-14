@@ -1,7 +1,6 @@
 (* Tables as a builtin module *)
-(* TODO: add an install_mask_priority function *)
-(* TODO: add a remove function *)
-(* TODO: add an update function *)
+(* Table is an exact-match table. TernaryTable (TernaryTables.ml) is 
+   its ternary counterpart, with the same interpreter representation. *)
 open Batteries
 open Syntax
 open InterpSwitch
@@ -224,44 +223,37 @@ let install_ty =
     }
 ;;
 
+(* a key as exact match patterns: a (value, full mask) tuple for each field *)
+let exact_pats vkey = 
+  flatten_v (extract_ival vkey).v 
+  |> List.map v_to_flat_exact 
+  |> List.map CoreSyntax.value
+;;
+
+(* the entries of an exact table cannot overlap, so they all have one priority *)
+let exact_priority = 0
+
 (* install an exact pattern, with key value equal to mask *)
 let install_fun st args =
-  let open CoreSyntax in
   match args with
   | [vtbl; vkey; vaction; vaction_const_arg_tup] -> 
-    let target_pipe = st.pipeline in    
-    let stage = match (extract_ival vtbl).v with 
-      | VGlobal(_, stage) -> stage
-      | _-> error "Table.install: table arg didn't eval to a global"
+    let tbl_id, stage = table_arg vtbl in
+    let acn, acn_cid, vaction_const_args = 
+      bound_action st vaction vaction_const_arg_tup 
     in
-
-    let keys = flatten_v (extract_ival vkey).v in 
-    let pat_tuple_keys = List.map v_to_flat_exact keys in
-    let keys = List.map value pat_tuple_keys in 
-    let vaction_const_args = match vaction_const_arg_tup with 
-      | V({v=VTuple(vs)}) -> List.map CoreSyntax.value vs
-      | V(v) -> [v]
-      | _ -> error "Table.create: expected a tuple for the default action args"
-    in
-    let acn_cid, acn_ctor = 
-      ival_fcn_to_internal_action st vaction
-    in
-
-    let acn remaining_args = 
-      acn_ctor (vaction_const_args@remaining_args)
-    in
-
     (* install to the pipeline *)
-    Pipeline.install_table_entry 
-      stage
-      10 
-      keys
-      acn
-      acn_cid
-      vaction_const_args
-      target_pipe
-    ; 
-    V(vtup [] Span.default) (* no return *)
+    let installed = 
+      Pipeline.install_table_entry 
+        stage
+        exact_priority 
+        (exact_pats vkey)
+        acn
+        acn_cid
+        vaction_const_args
+        st.pipeline
+    in
+    if (not installed) then warn_full_table st install_cid tbl_id;
+    V(CoreSyntax.vtup [] Span.default) (* no return *)
   | _ ->
     install_error "Incorrect number of arguments to Table.install"
 
@@ -304,51 +296,108 @@ let install_ternary_ty =
     }
 ;;
 
-(* install an exact pattern, with key value equal to mask *)
+(* install a masked pattern *)
 let install_ternary_fun st args =
-  let open CoreSyntax in
   match args with
   | [vtbl; vkey; vmask; vaction; vaction_const_arg_tup] -> 
-    let target_pipe = st.pipeline in    
-    let stage = match (extract_ival vtbl).v with 
-      | VGlobal(_, stage) -> stage
-      | _-> error "Table.install: table arg didn't eval to a global"
-    in
-
-    let keys = flatten_v (extract_ival vkey).v in 
-    let masks = flatten_v (extract_ival vmask).v in
-    if (List.length keys <> List.length masks) then 
-      error "Table.install_ternary: key and mask lists are not the same length";
-    let pat_tuple_keys = List.map2 
-      (fun k m -> CoreSyntax.VTuple([k; m])) 
-      keys 
-      masks 
-    in
-    let keys = List.map value pat_tuple_keys in 
-    let vaction_const_args = match vaction_const_arg_tup with 
-      | V({v=VTuple(vs)}) -> List.map CoreSyntax.value vs
-      | V(v) -> [v]
-      | _ -> error "Table.create: expected a tuple for the default action args"
-    in
-    let acn_cid, acn_ctor = 
-      ival_fcn_to_internal_action st vaction
-    in
-    let acn remaining_args = 
-      acn_ctor (vaction_const_args@remaining_args)
+    let tbl_id, stage = table_arg vtbl in
+    let acn, acn_cid, vaction_const_args = 
+      bound_action st vaction vaction_const_arg_tup 
     in
     (* install to the pipeline *)
-    Pipeline.install_table_entry 
-      stage
-      10 
-      keys
-      acn
-      acn_cid
-      vaction_const_args
-      target_pipe
-    ; 
-    V(vtup [] Span.default) (* no return *)
+    let installed = 
+      Pipeline.install_table_entry 
+        stage
+        exact_priority 
+        (ternary_pats vkey vmask)
+        acn
+        acn_cid
+        vaction_const_args
+        st.pipeline
+    in
+    if (not installed) then warn_full_table st install_ternary_cid tbl_id;
+    V(CoreSyntax.vtup [] Span.default) (* no return *)
   | _ ->
-    install_error "Incorrect number of arguments to Table.install"
+    install_ternary_error "Incorrect number of arguments to Table.install_ternary"
+
+
+
+(* Table.update : Table.t<<'k, iarg, marg, ret>> -> 'k -> (iarg -> marg -> ret) -> iarg -> () *)
+let update_name = "update"
+let update_id = Id.create update_name
+let update_cid = Cid.create_ids [id; update_id]
+let update_error msg = module_error update_name msg
+
+let update_ty = install_ty
+
+(* replace the action and action argument of the entry for a key *)
+let update_fun st args =
+  match args with
+  | [vtbl; vkey; vaction; vaction_const_arg_tup] -> 
+    let tbl_id, stage = table_arg vtbl in
+    let acn, acn_cid, vaction_const_args = 
+      bound_action st vaction vaction_const_arg_tup 
+    in
+    let updated = 
+      Pipeline.update_table_entry 
+        stage
+        exact_priority 
+        (exact_pats vkey)
+        acn
+        acn_cid
+        vaction_const_args
+        st.pipeline
+    in
+    if (not updated) then warn_missing_entry st update_cid tbl_id;
+    V(CoreSyntax.vtup [] Span.default) (* no return *)
+  | _ ->
+    update_error "Incorrect number of arguments to Table.update"
+
+
+
+(* Table.remove : Table.t<<'k, iarg, marg, ret>> -> 'k -> () *)
+let remove_name = "remove"
+let remove_id = Id.create remove_name
+let remove_cid = Cid.create_ids [id; remove_id]
+let remove_error msg = module_error remove_name msg
+
+let remove_ty = 
+  let key_rty, iarg_rty, marg_rty, ret_rty = 
+    fresh_rawty "table_key_ty",
+    fresh_rawty "table_iarg_ty",
+    fresh_rawty "table_marg_ty",
+    fresh_rawty "table_ret_ty"
+  in
+  let start_eff = FVar (QVar (Id.fresh "eff")) in (* effect where this call begins *)
+  let tbl_eff = FVar (QVar (Id.fresh "eff")) in (* effect attached to table arg *)
+  let tbl_t = ty_eff (fresh_t (key_rty, iarg_rty, marg_rty, ret_rty)) tbl_eff in
+  let arg_tys = [
+      tbl_t; 
+      ty @@ key_rty
+    ]
+  in
+  let ret_ty = ty @@ TVoid in
+  ty @@ TFun
+    { arg_tys
+    ; ret_ty
+    ; start_eff
+    ; end_eff = FSucc tbl_eff
+    ; constraints = ref [CLeq (start_eff, tbl_eff)]
+    }
+;;
+
+(* remove the entry for a key *)
+let remove_fun st args =
+  match args with
+  | [vtbl; vkey] -> 
+    let tbl_id, stage = table_arg vtbl in
+    let removed = 
+      Pipeline.remove_table_entry stage exact_priority (exact_pats vkey) st.pipeline
+    in
+    if (not removed) then warn_missing_entry st remove_cid tbl_id;
+    V(CoreSyntax.vtup [] Span.default) (* no return *)
+  | _ ->
+    remove_error "Incorrect number of arguments to Table.remove"
 
 
 
@@ -437,6 +486,8 @@ let defs : global_fun list =
   [
     { cid = install_cid; body = install_fun; ty = install_ty };
     { cid = install_ternary_cid; body = install_ternary_fun; ty = install_ternary_ty };
+    { cid = update_cid; body = update_fun; ty = update_ty };
+    { cid = remove_cid; body = remove_fun; ty = remove_ty };
     { cid = lookup_cid; body = lookup_fun; ty = lookup_ty }  
   ]
 ;;

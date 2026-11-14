@@ -66,22 +66,22 @@ typedef struct {
   uint16_t tag;
   union {
     struct {
-      uint32_t x_1368;
-    } ping_1369;
+      uint32_t x_1408;
+    } ping_1409;
     struct {
-      uint32_t x_1370;
-    } out_1371;
+      uint32_t x_1410;
+    } out_1411;
   } args;
 } event_variant_t;
-event_variant_t ping_1369(uint32_t x_1368 ){
+event_variant_t ping_1409(uint32_t x_1408 ){
   event_variant_t ev  = {0};
-  ev.args.ping_1369.x_1368 = x_1368;
+  ev.args.ping_1409.x_1408 = x_1408;
   ev.tag = ping_tag;
   return ev;
 }
-event_variant_t out_1371(uint32_t x_1370 ){
+event_variant_t out_1411(uint32_t x_1410 ){
   event_variant_t ev  = {0};
-  ev.args.out_1371.x_1370 = x_1370;
+  ev.args.out_1411.x_1410 = x_1410;
   ev.tag = out_tag;
   return ev;
 }
@@ -89,13 +89,13 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-event_t mk_ping(uint32_t x_1368 ){
-  event_t tmp_1468  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = ping_1369(x_1368)};
-  return tmp_1468;
+event_t mk_ping(uint32_t x_1408 ){
+  event_t tmp_1508  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = ping_1409(x_1408)};
+  return tmp_1508;
 }
-event_t mk_out(uint32_t x_1370 ){
-  event_t tmp_1469  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = out_1371(x_1370)};
-  return tmp_1469;
+event_t mk_out(uint32_t x_1410 ){
+  event_t tmp_1509  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = out_1411(x_1410)};
+  return tmp_1509;
 }
 uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
@@ -110,14 +110,14 @@ uint8_t parse_event(packet_t*  packet , event_t*  next_event , uint32_t ingress_
       uint16_t tag  = ((uint16_t)(read_bits(packet, 16)));
       switch (tag) {
         case 1: {
-          uint32_t x_1368  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_ping(x_1368);
+          uint32_t x_1408  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_ping(x_1408);
           return packet->cursor <= packet->end;
           break;
         }
         case 2: {
-          uint32_t x_1370  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_out(x_1370);
+          uint32_t x_1410  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_out(x_1410);
           return packet->cursor <= packet->end;
           break;
         }
@@ -138,8 +138,8 @@ uint8_t parse_event(packet_t*  packet , event_t*  next_event , uint32_t ingress_
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint32_t x_1368  = ev_out->data.args.ping_1369.x_1368;
-      write_bits(buf_out, ((uint64_t)(x_1368)), 32);
+      uint32_t x_1408  = ev_out->data.args.ping_1409.x_1408;
+      write_bits(buf_out, ((uint64_t)(x_1408)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -150,8 +150,8 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 2: {
-      uint32_t x_1370  = ev_out->data.args.out_1371.x_1370;
-      write_bits(buf_out, ((uint64_t)(x_1370)), 32);
+      uint32_t x_1410  = ev_out->data.args.out_1411.x_1410;
+      write_bits(buf_out, ((uint64_t)(x_1410)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(2)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -172,17 +172,17 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
-      uint32_t x_1372  = ev_in->data.args.ping_1369.x_1368;
-      event_t this  = mk_ping(x_1372);
-      out_event_t tmp_1470  = {.ev = mk_out(100 + x_1372), .port = 1, .delay = 0};
-      out_events[n] = tmp_1470;
+      uint32_t x_1412  = ev_in->data.args.ping_1409.x_1408;
+      event_t this  = mk_ping(x_1412);
+      out_event_t tmp_1510  = {.ev = mk_out(100 + x_1412), .port = 1, .delay = 0};
+      out_events[n] = tmp_1510;
       n = n + 1;
-      out_event_t tmp_1471  = {.ev = mk_out(x_1372), .port = 1, .delay = 2500000};
-      out_events[n] = tmp_1471;
+      out_event_t tmp_1511  = {.ev = mk_out(x_1412), .port = 1, .delay = 2500000};
+      out_events[n] = tmp_1511;
       n = n + 1;
-      if (x_1372 < 2) {
-        out_event_t tmp_1472  = {.ev = mk_ping(x_1372 + 1), .port = 4294967295, .delay = 1000000};
-        out_events[n] = tmp_1472;
+      if (x_1412 < 2) {
+        out_event_t tmp_1512  = {.ev = mk_ping(x_1412 + 1), .port = 4294967295, .delay = 1000000};
+        out_events[n] = tmp_1512;
         n = n + 1;
       }
       break;

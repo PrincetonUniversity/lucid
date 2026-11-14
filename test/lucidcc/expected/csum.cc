@@ -124,56 +124,56 @@ typedef struct {
   uint16_t tag;
   union {
     struct {
-      uint64_t eth_0_3557;
-      uint64_t eth_1_3558;
-      uint16_t eth_2_3559;
-      uint8_t ip_0_3560;
-      uint8_t ip_1_3561;
-      uint8_t ip_2_3562;
-      uint8_t ip_3_3563;
-      uint16_t ip_4_3564;
-      uint16_t ip_5_3565;
-      uint8_t ip_6_3566;
-      uint16_t ip_7_3567;
-      uint8_t ip_8_3568;
-      uint8_t ip_9_3569;
-      uint16_t ip_10_3570;
-      uint32_t ip_11_3571;
-      uint32_t ip_12_3572;
-    } ippkt_3574;
+      uint64_t eth_0_3597;
+      uint64_t eth_1_3598;
+      uint16_t eth_2_3599;
+      uint8_t ip_0_3600;
+      uint8_t ip_1_3601;
+      uint8_t ip_2_3602;
+      uint8_t ip_3_3603;
+      uint16_t ip_4_3604;
+      uint16_t ip_5_3605;
+      uint8_t ip_6_3606;
+      uint16_t ip_7_3607;
+      uint8_t ip_8_3608;
+      uint8_t ip_9_3609;
+      uint16_t ip_10_3610;
+      uint32_t ip_11_3611;
+      uint32_t ip_12_3612;
+    } ippkt_3614;
     struct {
-      uint64_t eth_0_3575;
-      uint64_t eth_1_3576;
-      uint16_t eth_2_3577;
-    } other_3579;
+      uint64_t eth_0_3615;
+      uint64_t eth_1_3616;
+      uint16_t eth_2_3617;
+    } other_3619;
   } args;
 } event_variant_t;
-event_variant_t ippkt_3574(uint64_t eth_0_3557 , uint64_t eth_1_3558 , uint16_t eth_2_3559 , uint8_t ip_0_3560 , uint8_t ip_1_3561 , uint8_t ip_2_3562 , uint8_t ip_3_3563 , uint16_t ip_4_3564 , uint16_t ip_5_3565 , uint8_t ip_6_3566 , uint16_t ip_7_3567 , uint8_t ip_8_3568 , uint8_t ip_9_3569 , uint16_t ip_10_3570 , uint32_t ip_11_3571 , uint32_t ip_12_3572 ){
+event_variant_t ippkt_3614(uint64_t eth_0_3597 , uint64_t eth_1_3598 , uint16_t eth_2_3599 , uint8_t ip_0_3600 , uint8_t ip_1_3601 , uint8_t ip_2_3602 , uint8_t ip_3_3603 , uint16_t ip_4_3604 , uint16_t ip_5_3605 , uint8_t ip_6_3606 , uint16_t ip_7_3607 , uint8_t ip_8_3608 , uint8_t ip_9_3609 , uint16_t ip_10_3610 , uint32_t ip_11_3611 , uint32_t ip_12_3612 ){
   event_variant_t ev  = {0};
-  ev.args.ippkt_3574.eth_0_3557 = eth_0_3557;
-  ev.args.ippkt_3574.eth_1_3558 = eth_1_3558;
-  ev.args.ippkt_3574.eth_2_3559 = eth_2_3559;
-  ev.args.ippkt_3574.ip_0_3560 = ip_0_3560;
-  ev.args.ippkt_3574.ip_1_3561 = ip_1_3561;
-  ev.args.ippkt_3574.ip_2_3562 = ip_2_3562;
-  ev.args.ippkt_3574.ip_3_3563 = ip_3_3563;
-  ev.args.ippkt_3574.ip_4_3564 = ip_4_3564;
-  ev.args.ippkt_3574.ip_5_3565 = ip_5_3565;
-  ev.args.ippkt_3574.ip_6_3566 = ip_6_3566;
-  ev.args.ippkt_3574.ip_7_3567 = ip_7_3567;
-  ev.args.ippkt_3574.ip_8_3568 = ip_8_3568;
-  ev.args.ippkt_3574.ip_9_3569 = ip_9_3569;
-  ev.args.ippkt_3574.ip_10_3570 = ip_10_3570;
-  ev.args.ippkt_3574.ip_11_3571 = ip_11_3571;
-  ev.args.ippkt_3574.ip_12_3572 = ip_12_3572;
+  ev.args.ippkt_3614.eth_0_3597 = eth_0_3597;
+  ev.args.ippkt_3614.eth_1_3598 = eth_1_3598;
+  ev.args.ippkt_3614.eth_2_3599 = eth_2_3599;
+  ev.args.ippkt_3614.ip_0_3600 = ip_0_3600;
+  ev.args.ippkt_3614.ip_1_3601 = ip_1_3601;
+  ev.args.ippkt_3614.ip_2_3602 = ip_2_3602;
+  ev.args.ippkt_3614.ip_3_3603 = ip_3_3603;
+  ev.args.ippkt_3614.ip_4_3604 = ip_4_3604;
+  ev.args.ippkt_3614.ip_5_3605 = ip_5_3605;
+  ev.args.ippkt_3614.ip_6_3606 = ip_6_3606;
+  ev.args.ippkt_3614.ip_7_3607 = ip_7_3607;
+  ev.args.ippkt_3614.ip_8_3608 = ip_8_3608;
+  ev.args.ippkt_3614.ip_9_3609 = ip_9_3609;
+  ev.args.ippkt_3614.ip_10_3610 = ip_10_3610;
+  ev.args.ippkt_3614.ip_11_3611 = ip_11_3611;
+  ev.args.ippkt_3614.ip_12_3612 = ip_12_3612;
   ev.tag = ippkt_tag;
   return ev;
 }
-event_variant_t other_3579(uint64_t eth_0_3575 , uint64_t eth_1_3576 , uint16_t eth_2_3577 ){
+event_variant_t other_3619(uint64_t eth_0_3615 , uint64_t eth_1_3616 , uint16_t eth_2_3617 ){
   event_variant_t ev  = {0};
-  ev.args.other_3579.eth_0_3575 = eth_0_3575;
-  ev.args.other_3579.eth_1_3576 = eth_1_3576;
-  ev.args.other_3579.eth_2_3577 = eth_2_3577;
+  ev.args.other_3619.eth_0_3615 = eth_0_3615;
+  ev.args.other_3619.eth_1_3616 = eth_1_3616;
+  ev.args.other_3619.eth_2_3617 = eth_2_3617;
   ev.tag = other_tag;
   return ev;
 }
@@ -181,48 +181,48 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-event_t mk_ippkt(uint64_t eth_0_3557 , uint64_t eth_1_3558 , uint16_t eth_2_3559 , uint8_t ip_0_3560 , uint8_t ip_1_3561 , uint8_t ip_2_3562 , uint8_t ip_3_3563 , uint16_t ip_4_3564 , uint16_t ip_5_3565 , uint8_t ip_6_3566 , uint16_t ip_7_3567 , uint8_t ip_8_3568 , uint8_t ip_9_3569 , uint16_t ip_10_3570 , uint32_t ip_11_3571 , uint32_t ip_12_3572 ){
-  event_t tmp_3912  = {.meta = {.len = 34, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = ippkt_3574(eth_0_3557, eth_1_3558, eth_2_3559, ip_0_3560, ip_1_3561, ip_2_3562, ip_3_3563, ip_4_3564, ip_5_3565, ip_6_3566, ip_7_3567, ip_8_3568, ip_9_3569, ip_10_3570, ip_11_3571, ip_12_3572)};
-  return tmp_3912;
+event_t mk_ippkt(uint64_t eth_0_3597 , uint64_t eth_1_3598 , uint16_t eth_2_3599 , uint8_t ip_0_3600 , uint8_t ip_1_3601 , uint8_t ip_2_3602 , uint8_t ip_3_3603 , uint16_t ip_4_3604 , uint16_t ip_5_3605 , uint8_t ip_6_3606 , uint16_t ip_7_3607 , uint8_t ip_8_3608 , uint8_t ip_9_3609 , uint16_t ip_10_3610 , uint32_t ip_11_3611 , uint32_t ip_12_3612 ){
+  event_t tmp_3952  = {.meta = {.len = 34, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = ippkt_3614(eth_0_3597, eth_1_3598, eth_2_3599, ip_0_3600, ip_1_3601, ip_2_3602, ip_3_3603, ip_4_3604, ip_5_3605, ip_6_3606, ip_7_3607, ip_8_3608, ip_9_3609, ip_10_3610, ip_11_3611, ip_12_3612)};
+  return tmp_3952;
 }
-event_t mk_other(uint64_t eth_0_3575 , uint64_t eth_1_3576 , uint16_t eth_2_3577 ){
-  event_t tmp_3913  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = other_3579(eth_0_3575, eth_1_3576, eth_2_3577)};
-  return tmp_3913;
+event_t mk_other(uint64_t eth_0_3615 , uint64_t eth_1_3616 , uint16_t eth_2_3617 ){
+  event_t tmp_3953  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = other_3619(eth_0_3615, eth_1_3616, eth_2_3617)};
+  return tmp_3953;
 }
 uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
-typedef tuple_1 eth_t_3555;
-typedef tuple_2 ip_t_3556;
-uint8_t parse_event(packet_t*  pkt_3580 , event_t*  next_event , uint32_t ingress_port ){
-  uint64_t e_0_3581  = ((uint64_t)(read_bits(pkt_3580, 48))) & 281474976710655;
-  uint64_t e_1_3582  = ((uint64_t)(read_bits(pkt_3580, 48))) & 281474976710655;
-  uint16_t e_2_3583  = ((uint16_t)(read_bits(pkt_3580, 16)));
-  switch (e_2_3583) {
+typedef tuple_1 eth_t_3595;
+typedef tuple_2 ip_t_3596;
+uint8_t parse_event(packet_t*  pkt_3620 , event_t*  next_event , uint32_t ingress_port ){
+  uint64_t e_0_3621  = ((uint64_t)(read_bits(pkt_3620, 48))) & 281474976710655;
+  uint64_t e_1_3622  = ((uint64_t)(read_bits(pkt_3620, 48))) & 281474976710655;
+  uint16_t e_2_3623  = ((uint16_t)(read_bits(pkt_3620, 16)));
+  switch (e_2_3623) {
     case 666: {
       return 0;
       break;
     }
     case 2048: {
-      uint8_t ip_0_3584  = ((uint8_t)(read_bits(pkt_3580, 4))) & 15;
-      uint8_t ip_1_3585  = ((uint8_t)(read_bits(pkt_3580, 4))) & 15;
-      uint8_t ip_2_3586  = ((uint8_t)(read_bits(pkt_3580, 6))) & 63;
-      uint8_t ip_3_3587  = ((uint8_t)(read_bits(pkt_3580, 2))) & 3;
-      uint16_t ip_4_3588  = ((uint16_t)(read_bits(pkt_3580, 16)));
-      uint16_t ip_5_3589  = ((uint16_t)(read_bits(pkt_3580, 16)));
-      uint8_t ip_6_3590  = ((uint8_t)(read_bits(pkt_3580, 3))) & 7;
-      uint16_t ip_7_3591  = ((uint16_t)(read_bits(pkt_3580, 13))) & 8191;
-      uint8_t ip_8_3592  = ((uint8_t)(read_bits(pkt_3580, 8)));
-      uint8_t ip_9_3593  = ((uint8_t)(read_bits(pkt_3580, 8)));
-      uint16_t ip_10_3594  = ((uint16_t)(read_bits(pkt_3580, 16)));
-      uint32_t ip_11_3595  = ((uint32_t)(read_bits(pkt_3580, 32)));
-      uint32_t ip_12_3596  = ((uint32_t)(read_bits(pkt_3580, 32)));
-      (*(next_event)) = mk_ippkt(e_0_3581, e_1_3582, e_2_3583, ip_0_3584, ip_1_3585, ip_2_3586, ip_3_3587, ip_4_3588, ip_5_3589, ip_6_3590, ip_7_3591, ip_8_3592, ip_9_3593, ip_10_3594, ip_11_3595, ip_12_3596);
-      return pkt_3580->cursor <= pkt_3580->end;
+      uint8_t ip_0_3624  = ((uint8_t)(read_bits(pkt_3620, 4))) & 15;
+      uint8_t ip_1_3625  = ((uint8_t)(read_bits(pkt_3620, 4))) & 15;
+      uint8_t ip_2_3626  = ((uint8_t)(read_bits(pkt_3620, 6))) & 63;
+      uint8_t ip_3_3627  = ((uint8_t)(read_bits(pkt_3620, 2))) & 3;
+      uint16_t ip_4_3628  = ((uint16_t)(read_bits(pkt_3620, 16)));
+      uint16_t ip_5_3629  = ((uint16_t)(read_bits(pkt_3620, 16)));
+      uint8_t ip_6_3630  = ((uint8_t)(read_bits(pkt_3620, 3))) & 7;
+      uint16_t ip_7_3631  = ((uint16_t)(read_bits(pkt_3620, 13))) & 8191;
+      uint8_t ip_8_3632  = ((uint8_t)(read_bits(pkt_3620, 8)));
+      uint8_t ip_9_3633  = ((uint8_t)(read_bits(pkt_3620, 8)));
+      uint16_t ip_10_3634  = ((uint16_t)(read_bits(pkt_3620, 16)));
+      uint32_t ip_11_3635  = ((uint32_t)(read_bits(pkt_3620, 32)));
+      uint32_t ip_12_3636  = ((uint32_t)(read_bits(pkt_3620, 32)));
+      (*(next_event)) = mk_ippkt(e_0_3621, e_1_3622, e_2_3623, ip_0_3624, ip_1_3625, ip_2_3626, ip_3_3627, ip_4_3628, ip_5_3629, ip_6_3630, ip_7_3631, ip_8_3632, ip_9_3633, ip_10_3634, ip_11_3635, ip_12_3636);
+      return pkt_3620->cursor <= pkt_3620->end;
       break;
     }
     default: {
-      (*(next_event)) = mk_other(e_0_3581, e_1_3582, e_2_3583);
-      return pkt_3580->cursor <= pkt_3580->end;
+      (*(next_event)) = mk_other(e_0_3621, e_1_3622, e_2_3623);
+      return pkt_3620->cursor <= pkt_3620->end;
       break;
     }
   }
@@ -231,38 +231,38 @@ uint8_t parse_event(packet_t*  pkt_3580 , event_t*  next_event , uint32_t ingres
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint64_t eth_0_3557  = ev_out->data.args.ippkt_3574.eth_0_3557;
-      uint64_t eth_1_3558  = ev_out->data.args.ippkt_3574.eth_1_3558;
-      uint16_t eth_2_3559  = ev_out->data.args.ippkt_3574.eth_2_3559;
-      uint8_t ip_0_3560  = ev_out->data.args.ippkt_3574.ip_0_3560;
-      uint8_t ip_1_3561  = ev_out->data.args.ippkt_3574.ip_1_3561;
-      uint8_t ip_2_3562  = ev_out->data.args.ippkt_3574.ip_2_3562;
-      uint8_t ip_3_3563  = ev_out->data.args.ippkt_3574.ip_3_3563;
-      uint16_t ip_4_3564  = ev_out->data.args.ippkt_3574.ip_4_3564;
-      uint16_t ip_5_3565  = ev_out->data.args.ippkt_3574.ip_5_3565;
-      uint8_t ip_6_3566  = ev_out->data.args.ippkt_3574.ip_6_3566;
-      uint16_t ip_7_3567  = ev_out->data.args.ippkt_3574.ip_7_3567;
-      uint8_t ip_8_3568  = ev_out->data.args.ippkt_3574.ip_8_3568;
-      uint8_t ip_9_3569  = ev_out->data.args.ippkt_3574.ip_9_3569;
-      uint16_t ip_10_3570  = ev_out->data.args.ippkt_3574.ip_10_3570;
-      uint32_t ip_11_3571  = ev_out->data.args.ippkt_3574.ip_11_3571;
-      uint32_t ip_12_3572  = ev_out->data.args.ippkt_3574.ip_12_3572;
-      write_bits(buf_out, ((uint64_t)(ip_12_3572)), 32);
-      write_bits(buf_out, ((uint64_t)(ip_11_3571)), 32);
-      write_bits(buf_out, ((uint64_t)(ip_10_3570)), 16);
-      write_bits(buf_out, ((uint64_t)(ip_9_3569)), 8);
-      write_bits(buf_out, ((uint64_t)(ip_8_3568)), 8);
-      write_bits(buf_out, ((uint64_t)(ip_7_3567)), 13);
-      write_bits(buf_out, ((uint64_t)(ip_6_3566)), 3);
-      write_bits(buf_out, ((uint64_t)(ip_5_3565)), 16);
-      write_bits(buf_out, ((uint64_t)(ip_4_3564)), 16);
-      write_bits(buf_out, ((uint64_t)(ip_3_3563)), 2);
-      write_bits(buf_out, ((uint64_t)(ip_2_3562)), 6);
-      write_bits(buf_out, ((uint64_t)(ip_1_3561)), 4);
-      write_bits(buf_out, ((uint64_t)(ip_0_3560)), 4);
-      write_bits(buf_out, ((uint64_t)(eth_2_3559)), 16);
-      write_bits(buf_out, ((uint64_t)(eth_1_3558)), 48);
-      write_bits(buf_out, ((uint64_t)(eth_0_3557)), 48);
+      uint64_t eth_0_3597  = ev_out->data.args.ippkt_3614.eth_0_3597;
+      uint64_t eth_1_3598  = ev_out->data.args.ippkt_3614.eth_1_3598;
+      uint16_t eth_2_3599  = ev_out->data.args.ippkt_3614.eth_2_3599;
+      uint8_t ip_0_3600  = ev_out->data.args.ippkt_3614.ip_0_3600;
+      uint8_t ip_1_3601  = ev_out->data.args.ippkt_3614.ip_1_3601;
+      uint8_t ip_2_3602  = ev_out->data.args.ippkt_3614.ip_2_3602;
+      uint8_t ip_3_3603  = ev_out->data.args.ippkt_3614.ip_3_3603;
+      uint16_t ip_4_3604  = ev_out->data.args.ippkt_3614.ip_4_3604;
+      uint16_t ip_5_3605  = ev_out->data.args.ippkt_3614.ip_5_3605;
+      uint8_t ip_6_3606  = ev_out->data.args.ippkt_3614.ip_6_3606;
+      uint16_t ip_7_3607  = ev_out->data.args.ippkt_3614.ip_7_3607;
+      uint8_t ip_8_3608  = ev_out->data.args.ippkt_3614.ip_8_3608;
+      uint8_t ip_9_3609  = ev_out->data.args.ippkt_3614.ip_9_3609;
+      uint16_t ip_10_3610  = ev_out->data.args.ippkt_3614.ip_10_3610;
+      uint32_t ip_11_3611  = ev_out->data.args.ippkt_3614.ip_11_3611;
+      uint32_t ip_12_3612  = ev_out->data.args.ippkt_3614.ip_12_3612;
+      write_bits(buf_out, ((uint64_t)(ip_12_3612)), 32);
+      write_bits(buf_out, ((uint64_t)(ip_11_3611)), 32);
+      write_bits(buf_out, ((uint64_t)(ip_10_3610)), 16);
+      write_bits(buf_out, ((uint64_t)(ip_9_3609)), 8);
+      write_bits(buf_out, ((uint64_t)(ip_8_3608)), 8);
+      write_bits(buf_out, ((uint64_t)(ip_7_3607)), 13);
+      write_bits(buf_out, ((uint64_t)(ip_6_3606)), 3);
+      write_bits(buf_out, ((uint64_t)(ip_5_3605)), 16);
+      write_bits(buf_out, ((uint64_t)(ip_4_3604)), 16);
+      write_bits(buf_out, ((uint64_t)(ip_3_3603)), 2);
+      write_bits(buf_out, ((uint64_t)(ip_2_3602)), 6);
+      write_bits(buf_out, ((uint64_t)(ip_1_3601)), 4);
+      write_bits(buf_out, ((uint64_t)(ip_0_3600)), 4);
+      write_bits(buf_out, ((uint64_t)(eth_2_3599)), 16);
+      write_bits(buf_out, ((uint64_t)(eth_1_3598)), 48);
+      write_bits(buf_out, ((uint64_t)(eth_0_3597)), 48);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -273,12 +273,12 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 2: {
-      uint64_t eth_0_3575  = ev_out->data.args.other_3579.eth_0_3575;
-      uint64_t eth_1_3576  = ev_out->data.args.other_3579.eth_1_3576;
-      uint16_t eth_2_3577  = ev_out->data.args.other_3579.eth_2_3577;
-      write_bits(buf_out, ((uint64_t)(eth_2_3577)), 16);
-      write_bits(buf_out, ((uint64_t)(eth_1_3576)), 48);
-      write_bits(buf_out, ((uint64_t)(eth_0_3575)), 48);
+      uint64_t eth_0_3615  = ev_out->data.args.other_3619.eth_0_3615;
+      uint64_t eth_1_3616  = ev_out->data.args.other_3619.eth_1_3616;
+      uint16_t eth_2_3617  = ev_out->data.args.other_3619.eth_2_3617;
+      write_bits(buf_out, ((uint64_t)(eth_2_3617)), 16);
+      write_bits(buf_out, ((uint64_t)(eth_1_3616)), 48);
+      write_bits(buf_out, ((uint64_t)(eth_0_3615)), 48);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(2)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -298,36 +298,36 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
-      uint64_t eth_0_3597  = ev_in->data.args.ippkt_3574.eth_0_3557;
-      uint64_t eth_1_3598  = ev_in->data.args.ippkt_3574.eth_1_3558;
-      uint16_t eth_2_3599  = ev_in->data.args.ippkt_3574.eth_2_3559;
-      uint8_t ip_0_3600  = ev_in->data.args.ippkt_3574.ip_0_3560;
-      uint8_t ip_1_3601  = ev_in->data.args.ippkt_3574.ip_1_3561;
-      uint8_t ip_2_3602  = ev_in->data.args.ippkt_3574.ip_2_3562;
-      uint8_t ip_3_3603  = ev_in->data.args.ippkt_3574.ip_3_3563;
-      uint16_t ip_4_3604  = ev_in->data.args.ippkt_3574.ip_4_3564;
-      uint16_t ip_5_3605  = ev_in->data.args.ippkt_3574.ip_5_3565;
-      uint8_t ip_6_3606  = ev_in->data.args.ippkt_3574.ip_6_3566;
-      uint16_t ip_7_3607  = ev_in->data.args.ippkt_3574.ip_7_3567;
-      uint8_t ip_8_3608  = ev_in->data.args.ippkt_3574.ip_8_3568;
-      uint8_t ip_9_3609  = ev_in->data.args.ippkt_3574.ip_9_3569;
-      uint16_t ip_10_3610  = ev_in->data.args.ippkt_3574.ip_10_3570;
-      uint32_t ip_11_3611  = ev_in->data.args.ippkt_3574.ip_11_3571;
-      uint32_t ip_12_3612  = ev_in->data.args.ippkt_3574.ip_12_3572;
-      event_t this  = mk_ippkt(eth_0_3597, eth_1_3598, eth_2_3599, ip_0_3600, ip_1_3601, ip_2_3602, ip_3_3603, ip_4_3604, ip_5_3605, ip_6_3606, ip_7_3607, ip_8_3608, ip_9_3609, ip_10_3610, ip_11_3611, ip_12_3612);
-      uint16_t fixed_10_3637  = checksum16_0(ip_0_3600, ip_1_3601, ip_2_3602, ip_3_3603, ip_4_3604, ip_5_3605, ip_6_3606, ip_7_3607, ip_8_3608, ip_9_3609, 0, ip_11_3611, ip_12_3612);
-      out_event_t tmp_3914  = {.ev = mk_ippkt(eth_0_3597, eth_1_3598, eth_2_3599, ip_0_3600, ip_1_3601, ip_2_3602, ip_3_3603, ip_4_3604, ip_5_3605, ip_6_3606, ip_7_3607, ip_8_3608, ip_9_3609, fixed_10_3637, ip_11_3611, ip_12_3612), .port = ev_in->meta.in_port};
-      out_events[n] = tmp_3914;
+      uint64_t eth_0_3637  = ev_in->data.args.ippkt_3614.eth_0_3597;
+      uint64_t eth_1_3638  = ev_in->data.args.ippkt_3614.eth_1_3598;
+      uint16_t eth_2_3639  = ev_in->data.args.ippkt_3614.eth_2_3599;
+      uint8_t ip_0_3640  = ev_in->data.args.ippkt_3614.ip_0_3600;
+      uint8_t ip_1_3641  = ev_in->data.args.ippkt_3614.ip_1_3601;
+      uint8_t ip_2_3642  = ev_in->data.args.ippkt_3614.ip_2_3602;
+      uint8_t ip_3_3643  = ev_in->data.args.ippkt_3614.ip_3_3603;
+      uint16_t ip_4_3644  = ev_in->data.args.ippkt_3614.ip_4_3604;
+      uint16_t ip_5_3645  = ev_in->data.args.ippkt_3614.ip_5_3605;
+      uint8_t ip_6_3646  = ev_in->data.args.ippkt_3614.ip_6_3606;
+      uint16_t ip_7_3647  = ev_in->data.args.ippkt_3614.ip_7_3607;
+      uint8_t ip_8_3648  = ev_in->data.args.ippkt_3614.ip_8_3608;
+      uint8_t ip_9_3649  = ev_in->data.args.ippkt_3614.ip_9_3609;
+      uint16_t ip_10_3650  = ev_in->data.args.ippkt_3614.ip_10_3610;
+      uint32_t ip_11_3651  = ev_in->data.args.ippkt_3614.ip_11_3611;
+      uint32_t ip_12_3652  = ev_in->data.args.ippkt_3614.ip_12_3612;
+      event_t this  = mk_ippkt(eth_0_3637, eth_1_3638, eth_2_3639, ip_0_3640, ip_1_3641, ip_2_3642, ip_3_3643, ip_4_3644, ip_5_3645, ip_6_3646, ip_7_3647, ip_8_3648, ip_9_3649, ip_10_3650, ip_11_3651, ip_12_3652);
+      uint16_t fixed_10_3677  = checksum16_0(ip_0_3640, ip_1_3641, ip_2_3642, ip_3_3643, ip_4_3644, ip_5_3645, ip_6_3646, ip_7_3647, ip_8_3648, ip_9_3649, 0, ip_11_3651, ip_12_3652);
+      out_event_t tmp_3954  = {.ev = mk_ippkt(eth_0_3637, eth_1_3638, eth_2_3639, ip_0_3640, ip_1_3641, ip_2_3642, ip_3_3643, ip_4_3644, ip_5_3645, ip_6_3646, ip_7_3647, ip_8_3648, ip_9_3649, fixed_10_3677, ip_11_3651, ip_12_3652), .port = ev_in->meta.in_port};
+      out_events[n] = tmp_3954;
       n = n + 1;
       break;
     }
     case 2: {
-      uint64_t eth_0_3640  = ev_in->data.args.other_3579.eth_0_3575;
-      uint64_t eth_1_3641  = ev_in->data.args.other_3579.eth_1_3576;
-      uint16_t eth_2_3642  = ev_in->data.args.other_3579.eth_2_3577;
-      event_t this  = mk_other(eth_0_3640, eth_1_3641, eth_2_3642);
-      out_event_t tmp_3915  = {.ev = this, .port = ev_in->meta.in_port};
-      out_events[n] = tmp_3915;
+      uint64_t eth_0_3680  = ev_in->data.args.other_3619.eth_0_3615;
+      uint64_t eth_1_3681  = ev_in->data.args.other_3619.eth_1_3616;
+      uint16_t eth_2_3682  = ev_in->data.args.other_3619.eth_2_3617;
+      event_t this  = mk_other(eth_0_3680, eth_1_3681, eth_2_3682);
+      out_event_t tmp_3955  = {.ev = this, .port = ev_in->meta.in_port};
+      out_events[n] = tmp_3955;
       n = n + 1;
       break;
     }

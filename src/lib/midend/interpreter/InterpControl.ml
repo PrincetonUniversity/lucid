@@ -8,9 +8,9 @@ open Pipeline
 (* TODO -- make this tbl_entry an unevaluated expression, 
    which handle_control should transform into an action function *)
 type entry_install_cmd = {
-  iprio : int;
+  iprio : int;       (* TernaryTable only *)
   imatch : exp list;  
-  imask  : exp list;
+  imask  : exp list; (* TernaryTable only *)
   iaction : id;
   iargs : exp list;
 }
@@ -21,6 +21,7 @@ type control_val =
   | ArrayGet of string * value
   | ArrayGetRange of string * value * value
   | TableInstall of string * entry_install_cmd
+  | TernaryTableInstall of string * entry_install_cmd
   | Print of string
   | Noop
 
@@ -76,15 +77,18 @@ let handle_control do_tbl_install p global_names ctl_val =
         ; "values", `List vals ]
     in
     print_endline (Yojson.Basic.pretty_to_string result_json)
-  | TableInstall (tblname, entry) ->
+  | TableInstall (tblname, entry) 
+  | TernaryTableInstall (tblname, entry) ->
+    let ternary = match ctl_val with TernaryTableInstall _ -> true | _ -> false in
     let tbl_cid = name_to_compiled_cid global_names tblname in
     (* resolve correct action constructor name *)
     let eaction' =
       name_to_compiled_cid global_names (fst entry.iaction) |> Cid.to_id
     in
     let entry = {entry with iaction = eaction' } in
-    (* use the callback, which should call Tables.install_fun *)
-    let _ = do_tbl_install tbl_cid entry in
+    (* use the callback, which should call Tables.install_fun 
+       or TernaryTables.install_fun *)
+    let _ = do_tbl_install ternary tbl_cid entry in
     ()
   | _ -> error "[execute_control] unknown control command"
 ;;

@@ -68,30 +68,30 @@ typedef struct {
   union {
     struct {
       
-    } tick_670;
+    } tick_710;
     struct {
-      uint32_t x_671;
-    } pkt_in_672;
+      uint32_t x_711;
+    } pkt_in_712;
     struct {
-      uint32_t x_673;
-    } pkt_out_674;
+      uint32_t x_713;
+    } pkt_out_714;
   } args;
 } event_variant_t;
-event_variant_t tick_670(){
+event_variant_t tick_710(){
   event_variant_t ev  = {0};
   
   ev.tag = tick_tag;
   return ev;
 }
-event_variant_t pkt_in_672(uint32_t x_671 ){
+event_variant_t pkt_in_712(uint32_t x_711 ){
   event_variant_t ev  = {0};
-  ev.args.pkt_in_672.x_671 = x_671;
+  ev.args.pkt_in_712.x_711 = x_711;
   ev.tag = pkt_in_tag;
   return ev;
 }
-event_variant_t pkt_out_674(uint32_t x_673 ){
+event_variant_t pkt_out_714(uint32_t x_713 ){
   event_variant_t ev  = {0};
-  ev.args.pkt_out_674.x_673 = x_673;
+  ev.args.pkt_out_714.x_713 = x_713;
   ev.tag = pkt_out_tag;
   return ev;
 }
@@ -100,16 +100,16 @@ typedef struct {
   event_variant_t data;
 } event_t;
 event_t mk_tick(){
-  event_t tmp_716  = {.meta = {.len = 0, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = tick_670()};
-  return tmp_716;
+  event_t tmp_756  = {.meta = {.len = 0, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = tick_710()};
+  return tmp_756;
 }
-event_t mk_pkt_in(uint32_t x_671 ){
-  event_t tmp_717  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_in_672(x_671)};
-  return tmp_717;
+event_t mk_pkt_in(uint32_t x_711 ){
+  event_t tmp_757  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_in_712(x_711)};
+  return tmp_757;
 }
-event_t mk_pkt_out(uint32_t x_673 ){
-  event_t tmp_718  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_out_674(x_673)};
-  return tmp_718;
+event_t mk_pkt_out(uint32_t x_713 ){
+  event_t tmp_758  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_out_714(x_713)};
+  return tmp_758;
 }
 uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
@@ -129,14 +129,14 @@ uint8_t parse_event(packet_t*  packet , event_t*  next_event , uint32_t ingress_
           break;
         }
         case 2: {
-          uint32_t x_671  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_pkt_in(x_671);
+          uint32_t x_711  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_pkt_in(x_711);
           return packet->cursor <= packet->end;
           break;
         }
         case 3: {
-          uint32_t x_673  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_pkt_out(x_673);
+          uint32_t x_713  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_pkt_out(x_713);
           return packet->cursor <= packet->end;
           break;
         }
@@ -168,8 +168,8 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 2: {
-      uint32_t x_671  = ev_out->data.args.pkt_in_672.x_671;
-      write_bits(buf_out, ((uint64_t)(x_671)), 32);
+      uint32_t x_711  = ev_out->data.args.pkt_in_712.x_711;
+      write_bits(buf_out, ((uint64_t)(x_711)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(2)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -180,8 +180,8 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 3: {
-      uint32_t x_673  = ev_out->data.args.pkt_out_674.x_673;
-      write_bits(buf_out, ((uint64_t)(x_673)), 32);
+      uint32_t x_713  = ev_out->data.args.pkt_out_714.x_713;
+      write_bits(buf_out, ((uint64_t)(x_713)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(3)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -201,23 +201,23 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 3: {
-      uint32_t x_675  = ev_in->data.args.pkt_out_674.x_673;
-      event_t this  = mk_pkt_out(x_675);
+      uint32_t x_715  = ev_in->data.args.pkt_out_714.x_713;
+      event_t this  = mk_pkt_out(x_715);
       break;
     }
     case 1: {
       
       event_t this  = mk_tick();
-      out_event_t tmp_719  = {.ev = mk_tick(), .port = 4294967295};
-      out_events[n] = tmp_719;
+      out_event_t tmp_759  = {.ev = mk_tick(), .port = 4294967295};
+      out_events[n] = tmp_759;
       n = n + 1;
       break;
     }
     case 2: {
-      uint32_t x_676  = ev_in->data.args.pkt_in_672.x_671;
-      event_t this  = mk_pkt_in(x_676);
-      out_event_t tmp_720  = {.ev = mk_pkt_out(x_676), .port = 0};
-      out_events[n] = tmp_720;
+      uint32_t x_716  = ev_in->data.args.pkt_in_712.x_711;
+      event_t this  = mk_pkt_in(x_716);
+      out_event_t tmp_760  = {.ev = mk_pkt_out(x_716), .port = 0};
+      out_events[n] = tmp_760;
       n = n + 1;
       break;
     }

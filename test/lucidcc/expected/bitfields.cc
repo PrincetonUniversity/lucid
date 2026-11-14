@@ -65,21 +65,21 @@ typedef struct {
   uint16_t tag;
   union {
     struct {
-      uint8_t ver_894;
-      uint16_t len_895;
-      uint64_t dst_896;
-      uint64_t src_897;
-      uint16_t ety_898;
-    } hdr_900;
+      uint8_t ver_934;
+      uint16_t len_935;
+      uint64_t dst_936;
+      uint64_t src_937;
+      uint16_t ety_938;
+    } hdr_940;
   } args;
 } event_variant_t;
-event_variant_t hdr_900(uint8_t ver_894 , uint16_t len_895 , uint64_t dst_896 , uint64_t src_897 , uint16_t ety_898 ){
+event_variant_t hdr_940(uint8_t ver_934 , uint16_t len_935 , uint64_t dst_936 , uint64_t src_937 , uint16_t ety_938 ){
   event_variant_t ev  = {0};
-  ev.args.hdr_900.ver_894 = ver_894;
-  ev.args.hdr_900.len_895 = len_895;
-  ev.args.hdr_900.dst_896 = dst_896;
-  ev.args.hdr_900.src_897 = src_897;
-  ev.args.hdr_900.ety_898 = ety_898;
+  ev.args.hdr_940.ver_934 = ver_934;
+  ev.args.hdr_940.len_935 = len_935;
+  ev.args.hdr_940.dst_936 = dst_936;
+  ev.args.hdr_940.src_937 = src_937;
+  ev.args.hdr_940.ety_938 = ety_938;
   ev.tag = hdr_tag;
   return ev;
 }
@@ -87,34 +87,34 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-event_t mk_hdr(uint8_t ver_894 , uint16_t len_895 , uint64_t dst_896 , uint64_t src_897 , uint16_t ety_898 ){
-  event_t tmp_957  = {.meta = {.len = 16, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = hdr_900(ver_894, len_895, dst_896, src_897, ety_898)};
-  return tmp_957;
+event_t mk_hdr(uint8_t ver_934 , uint16_t len_935 , uint64_t dst_936 , uint64_t src_937 , uint16_t ety_938 ){
+  event_t tmp_997  = {.meta = {.len = 16, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = hdr_940(ver_934, len_935, dst_936, src_937, ety_938)};
+  return tmp_997;
 }
 uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
 uint8_t parse_event(packet_t*  pkt , event_t*  next_event , uint32_t ingress_port ){
-  uint8_t ver_894  = ((uint8_t)(read_bits(pkt, 4))) & 15;
-  uint16_t len_895  = ((uint16_t)(read_bits(pkt, 12))) & 4095;
-  uint64_t dst_896  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
-  uint64_t src_897  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
-  uint16_t ety_898  = ((uint16_t)(read_bits(pkt, 16)));
-  (*(next_event)) = mk_hdr(ver_894, len_895, dst_896, src_897, ety_898);
+  uint8_t ver_934  = ((uint8_t)(read_bits(pkt, 4))) & 15;
+  uint16_t len_935  = ((uint16_t)(read_bits(pkt, 12))) & 4095;
+  uint64_t dst_936  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
+  uint64_t src_937  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
+  uint16_t ety_938  = ((uint16_t)(read_bits(pkt, 16)));
+  (*(next_event)) = mk_hdr(ver_934, len_935, dst_936, src_937, ety_938);
   return pkt->cursor <= pkt->end;
 }
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint8_t ver_894  = ev_out->data.args.hdr_900.ver_894;
-      uint16_t len_895  = ev_out->data.args.hdr_900.len_895;
-      uint64_t dst_896  = ev_out->data.args.hdr_900.dst_896;
-      uint64_t src_897  = ev_out->data.args.hdr_900.src_897;
-      uint16_t ety_898  = ev_out->data.args.hdr_900.ety_898;
-      write_bits(buf_out, ((uint64_t)(ety_898)), 16);
-      write_bits(buf_out, ((uint64_t)(src_897)), 48);
-      write_bits(buf_out, ((uint64_t)(dst_896)), 48);
-      write_bits(buf_out, ((uint64_t)(len_895)), 12);
-      write_bits(buf_out, ((uint64_t)(ver_894)), 4);
+      uint8_t ver_934  = ev_out->data.args.hdr_940.ver_934;
+      uint16_t len_935  = ev_out->data.args.hdr_940.len_935;
+      uint64_t dst_936  = ev_out->data.args.hdr_940.dst_936;
+      uint64_t src_937  = ev_out->data.args.hdr_940.src_937;
+      uint16_t ety_938  = ev_out->data.args.hdr_940.ety_938;
+      write_bits(buf_out, ((uint64_t)(ety_938)), 16);
+      write_bits(buf_out, ((uint64_t)(src_937)), 48);
+      write_bits(buf_out, ((uint64_t)(dst_936)), 48);
+      write_bits(buf_out, ((uint64_t)(len_935)), 12);
+      write_bits(buf_out, ((uint64_t)(ver_934)), 4);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -134,14 +134,14 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
-      uint8_t ver_901  = ev_in->data.args.hdr_900.ver_894;
-      uint16_t len_902  = ev_in->data.args.hdr_900.len_895;
-      uint64_t dst_903  = ev_in->data.args.hdr_900.dst_896;
-      uint64_t src_904  = ev_in->data.args.hdr_900.src_897;
-      uint16_t ety_905  = ev_in->data.args.hdr_900.ety_898;
-      event_t this  = mk_hdr(ver_901, len_902, dst_903, src_904, ety_905);
-      out_event_t tmp_958  = {.ev = mk_hdr(ver_901, (len_902 + 1) & 4095, dst_903, src_904, ety_905), .port = ev_in->meta.in_port};
-      out_events[n] = tmp_958;
+      uint8_t ver_941  = ev_in->data.args.hdr_940.ver_934;
+      uint16_t len_942  = ev_in->data.args.hdr_940.len_935;
+      uint64_t dst_943  = ev_in->data.args.hdr_940.dst_936;
+      uint64_t src_944  = ev_in->data.args.hdr_940.src_937;
+      uint16_t ety_945  = ev_in->data.args.hdr_940.ety_938;
+      event_t this  = mk_hdr(ver_941, len_942, dst_943, src_944, ety_945);
+      out_event_t tmp_998  = {.ev = mk_hdr(ver_941, (len_942 + 1) & 4095, dst_943, src_944, ety_945), .port = ev_in->meta.in_port};
+      out_events[n] = tmp_998;
       n = n + 1;
       break;
     }

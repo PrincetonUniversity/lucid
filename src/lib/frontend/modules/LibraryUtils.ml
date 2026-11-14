@@ -84,14 +84,69 @@ let ival_fcn_to_internal_action st vaction =
   acn_cid, acn_f
 ;;
 
-let rec flatten_v (v : CoreSyntax.v) = 
-  match v with 
-  | VTuple(vs) -> 
+let rec flatten_v (v : CoreSyntax.v) =
+  match v with
+  | VTuple(vs) ->
     (List.map flatten_v vs) |> List.flatten
-  | VRecord(id_vs) -> 
+  | VRecord(id_vs) ->
     List.split id_vs |> snd |> List.map flatten_v |> List.flatten
-  | VBool _ | VInt _ | VEvent _ | VGlobal _ 
+  | VBool _ | VInt _ | VEvent _ | VGlobal _
   | VPat _  | VGroup _ | VBits _ -> [v]
+;;
+
+(*** helpers for the table install / update / remove functions ***)
+
+(* the name and pipeline stage of a table argument *)
+let table_arg vtbl =
+  match (extract_ival vtbl).v with
+  | CoreSyntax.VGlobal(tbl_id, stage) -> tbl_id, stage
+  | _ -> error "table arg didn't eval to a global"
+;;
+
+(* a key and mask as match patterns: a (value, mask) tuple for each field *)
+let ternary_pats vkey vmask =
+  let keys = flatten_v (extract_ival vkey).v in
+  let masks = flatten_v (extract_ival vmask).v in
+  if (List.length keys <> List.length masks) then
+    error "table key and mask do not have the same number of fields";
+  List.map2
+    (fun k m -> CoreSyntax.value (CoreSyntax.VTuple([k; m])))
+    keys
+    masks
+;;
+
+(* an action bound to its install-time arguments.
+   Returns the action function, the action's name, and the arguments. *)
+let bound_action st vaction vaction_const_arg_tup =
+  let vaction_const_args = match vaction_const_arg_tup with
+    | V({v=VTuple(vs)}) -> List.map CoreSyntax.value vs
+    | V(v) -> [v]
+    | _ -> error "expected a tuple for the action args"
+  in
+  let acn_cid, acn_ctor =
+    ival_fcn_to_internal_action st vaction
+  in
+  let acn remaining_args =
+    acn_ctor (vaction_const_args@remaining_args)
+  in
+  acn, acn_cid, vaction_const_args
+;;
+
+(* report a warning from a builtin function. The interpreter keeps running. *)
+let warn (st : InterpSwitch.state) msg =
+  if InterpConfig.cfg.json || InterpConfig.cfg.interactive
+  then print_endline (InterpJson.interp_report_json "warning" msg (Some st.swid))
+  else Console.warning msg
+;;
+
+let warn_full_table st fun_cid tbl_id =
+  warn st (Printf.sprintf "%s: table %s is full, the entry was not installed"
+    (String.concat "." (Cid.names fun_cid)) (Id.name tbl_id))
+;;
+
+let warn_missing_entry st fun_cid tbl_id =
+  warn st (Printf.sprintf "%s: table %s has no such entry"
+    (String.concat "." (Cid.names fun_cid)) (Id.name tbl_id))
 ;;
 
 

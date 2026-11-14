@@ -169,33 +169,9 @@ let parse_pat patjson =
   | _ -> error "not a pattern string"
 ;;
 
-(* just get the mask component *)
-let rec v_to_mask (v : CoreSyntax.v) = 
-  match v with 
-    | VTuple(vs) -> 
-      CoreSyntax.VTuple(List.map v_to_mask vs)
-    | VRecord(id_vs) -> 
-      VRecord(
-        List.combine
-          ((List.split id_vs) |> fst)
-          (List.split id_vs |> snd |> List.map v_to_mask))
-    | VBool _ -> CoreSyntax.VBool true
-    | VInt(z) -> 
-      let mask = Integer.max_int (Integer.size z) in
-      CoreSyntax.VInt(mask)
-    | VBits b -> 
-      (* let v = BitString.bits_to_int b  in  *)
-      (* let v = Integer.create ~value:v ~size:(List.length b) in *)
-      let m  = Integer.max_int (BitString.length b) in
-      CoreSyntax.VInt(m)
-    | VGlobal _ -> Console.error "a global cannot appear as a key in a table"
-    | VEvent _ -> Console.error "an event cannot appear as a key in a table"
-    | VPat _  -> Console.error "pat values are depreciated"
-    | VGroup _ -> Console.error "group values cannot appear as a key in a table"
-  ;;
-
-
-let parse_entry entrylst =
+(* parse a table entry. A ternary entry has a mask and a priority, 
+   an exact entry has neither. *)
+let parse_entry ternary entrylst =
   let key = match (List.assoc "key" entrylst) with
     | `List intlist -> List.map JP.to_eval_int intlist
     (* | `List patlst -> List.map parse_pat patlst |> List.map value_to_exp *)
@@ -203,15 +179,11 @@ let parse_entry entrylst =
   in
 
   let mask = match (List.assoc_opt "mask" entrylst) with
-    | Some(`List intlist) -> List.map JP.to_eval_int intlist
+    | Some(`List intlist) when ternary -> List.map JP.to_eval_int intlist
+    | Some(`List _) -> error "[parse_entry] a Table.install command has no mask (use TernaryTable.install)"
     | Some(_) -> error "[parse_entry] mask is in wrong format"
-    | None -> (
-      let exp_to_mask exp = match exp.e with 
-        | EVal({v; vty; vspan}) -> {exp with e=EVal({v=v_to_mask v; vty; vspan})}
-        | _ -> error "[parse_entry] key expression is not a value"
-      in
-      List.map exp_to_mask key
-    )
+    | None when ternary -> error "[parse_entry] a TernaryTable.install command needs a mask"
+    | None -> []
   in
 
   let action = match (List.assoc "action" entrylst) with
@@ -220,8 +192,10 @@ let parse_entry entrylst =
     | _ -> error "[parse_entry] action name is wrong format"
   in
   let priority = match (List.assoc_opt "priority" entrylst) with
-    | Some(v) -> JP.to_size v
-    | _ -> 50
+    | Some(v) when ternary -> JP.to_size v
+    | Some(_) -> error "[parse_entry] a Table.install command has no priority (use TernaryTable.install)"
+    | None when ternary -> error "[parse_entry] a TernaryTable.install command needs a priority"
+    | None -> 0
   in
   let action_args = match (List.assoc "args" entrylst) with
     | `List argslst -> 
@@ -249,20 +223,32 @@ let parse_str_field lst field = match (List.assoc field lst) with
     "args":{
       "table":"mytbl", 
       "key":["4<32>", "0<32>"],
-      "mask":["3<32>", "0<32>"],
       "action":"hit_acn", 
-      "args":[3], 
-      "priority":1
+      "args":[3]
     }
   }
-  Note: mask is optional, the default is an exact mask    *)
-let parse_table_install lst =
+  TernaryTable.install format: 
+  { "type":"command", 
+    "name": "TernaryTable.install", 
+    "args":{
+      "table":"mytbl", 
+      "key":["4<32>", "0<32>"],
+      "mask":["3<32>", "0<32>"],
+      "priority":1,
+      "action":"hit_acn", 
+      "args":[3]
+    }
+  }
+  Note: a higher priority number is a higher priority *)
+let parse_table_install ternary lst =
   let tblname, entry = match (List.assoc "args" lst) with
     | `Assoc entrylst -> 
-      parse_str_field entrylst "table", parse_entry entrylst
+      parse_str_field entrylst "table", parse_entry ternary entrylst
     | _ -> error "[parse_table_install] args is wrong type"
   in
-  TableInstall(tblname, entry)
+  if ternary 
+  then TernaryTableInstall(tblname, entry)
+  else TableInstall(tblname, entry)
 ;;
 
 let parse_control_e lst =
@@ -271,7 +257,8 @@ let parse_control_e lst =
     | (`String "Array.setrange") -> parse_array_setrange lst      
     | (`String "Array.get") -> parse_array_get lst
     | (`String "Array.getrange") -> parse_array_getrange lst
-    | (`String "Table.install") -> parse_table_install lst
+    | (`String "Table.install") -> parse_table_install false lst
+    | (`String "TernaryTable.install") -> parse_table_install true lst
     | _ -> error "unknown control command"
     (* | None -> error "control command has no name field" *)
 ;;

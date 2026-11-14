@@ -65,17 +65,17 @@ typedef struct {
   uint16_t tag;
   union {
     struct {
-      uint64_t dst_752;
-      uint64_t src_753;
-      uint16_t ety_754;
-    } ethpkt_756;
+      uint64_t dst_792;
+      uint64_t src_793;
+      uint16_t ety_794;
+    } ethpkt_796;
   } args;
 } event_variant_t;
-event_variant_t ethpkt_756(uint64_t dst_752 , uint64_t src_753 , uint16_t ety_754 ){
+event_variant_t ethpkt_796(uint64_t dst_792 , uint64_t src_793 , uint16_t ety_794 ){
   event_variant_t ev  = {0};
-  ev.args.ethpkt_756.dst_752 = dst_752;
-  ev.args.ethpkt_756.src_753 = src_753;
-  ev.args.ethpkt_756.ety_754 = ety_754;
+  ev.args.ethpkt_796.dst_792 = dst_792;
+  ev.args.ethpkt_796.src_793 = src_793;
+  ev.args.ethpkt_796.ety_794 = ety_794;
   ev.tag = ethpkt_tag;
   return ev;
 }
@@ -83,28 +83,28 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-event_t mk_ethpkt(uint64_t dst_752 , uint64_t src_753 , uint16_t ety_754 ){
-  event_t tmp_802  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = ethpkt_756(dst_752, src_753, ety_754)};
-  return tmp_802;
+event_t mk_ethpkt(uint64_t dst_792 , uint64_t src_793 , uint16_t ety_794 ){
+  event_t tmp_842  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = ethpkt_796(dst_792, src_793, ety_794)};
+  return tmp_842;
 }
 uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
 uint8_t parse_event(packet_t*  pkt , event_t*  next_event , uint32_t ingress_port ){
-  uint64_t dst_752  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
-  uint64_t src_753  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
-  uint16_t ety_754  = ((uint16_t)(read_bits(pkt, 16)));
-  (*(next_event)) = mk_ethpkt(dst_752, src_753, ety_754);
+  uint64_t dst_792  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
+  uint64_t src_793  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
+  uint16_t ety_794  = ((uint16_t)(read_bits(pkt, 16)));
+  (*(next_event)) = mk_ethpkt(dst_792, src_793, ety_794);
   return pkt->cursor <= pkt->end;
 }
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint64_t dst_752  = ev_out->data.args.ethpkt_756.dst_752;
-      uint64_t src_753  = ev_out->data.args.ethpkt_756.src_753;
-      uint16_t ety_754  = ev_out->data.args.ethpkt_756.ety_754;
-      write_bits(buf_out, ((uint64_t)(ety_754)), 16);
-      write_bits(buf_out, ((uint64_t)(src_753)), 48);
-      write_bits(buf_out, ((uint64_t)(dst_752)), 48);
+      uint64_t dst_792  = ev_out->data.args.ethpkt_796.dst_792;
+      uint64_t src_793  = ev_out->data.args.ethpkt_796.src_793;
+      uint16_t ety_794  = ev_out->data.args.ethpkt_796.ety_794;
+      write_bits(buf_out, ((uint64_t)(ety_794)), 16);
+      write_bits(buf_out, ((uint64_t)(src_793)), 48);
+      write_bits(buf_out, ((uint64_t)(dst_792)), 48);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -124,13 +124,13 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
-      uint64_t dst_757  = ev_in->data.args.ethpkt_756.dst_752;
-      uint64_t src_758  = ev_in->data.args.ethpkt_756.src_753;
-      uint16_t ety_759  = ev_in->data.args.ethpkt_756.ety_754;
-      event_t this  = mk_ethpkt(dst_757, src_758, ety_759);
-      if (ety_759 == 2048) {
-        out_event_t tmp_803  = {.ev = mk_ethpkt(src_758, dst_757, ety_759), .port = ev_in->meta.in_port};
-        out_events[n] = tmp_803;
+      uint64_t dst_797  = ev_in->data.args.ethpkt_796.dst_792;
+      uint64_t src_798  = ev_in->data.args.ethpkt_796.src_793;
+      uint16_t ety_799  = ev_in->data.args.ethpkt_796.ety_794;
+      event_t this  = mk_ethpkt(dst_797, src_798, ety_799);
+      if (ety_799 == 2048) {
+        out_event_t tmp_843  = {.ev = mk_ethpkt(src_798, dst_797, ety_799), .port = ev_in->meta.in_port};
+        out_events[n] = tmp_843;
         n = n + 1;
       }
       break;

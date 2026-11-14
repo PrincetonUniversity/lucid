@@ -65,17 +65,17 @@ typedef struct {
   uint16_t tag;
   union {
     struct {
-      uint32_t a_858;
-      uint64_t b_859;
-      uint64_t c_860;
-    } pkt_862;
+      uint32_t a_898;
+      uint64_t b_899;
+      uint64_t c_900;
+    } pkt_902;
   } args;
 } event_variant_t;
-event_variant_t pkt_862(uint32_t a_858 , uint64_t b_859 , uint64_t c_860 ){
+event_variant_t pkt_902(uint32_t a_898 , uint64_t b_899 , uint64_t c_900 ){
   event_variant_t ev  = {0};
-  ev.args.pkt_862.a_858 = a_858;
-  ev.args.pkt_862.b_859 = b_859;
-  ev.args.pkt_862.c_860 = c_860;
+  ev.args.pkt_902.a_898 = a_898;
+  ev.args.pkt_902.b_899 = b_899;
+  ev.args.pkt_902.c_900 = c_900;
   ev.tag = pkt_tag;
   return ev;
 }
@@ -83,30 +83,30 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-event_t mk_pkt(uint32_t a_858 , uint64_t b_859 , uint64_t c_860 ){
-  event_t tmp_914  = {.meta = {.len = 18, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = pkt_862(a_858, b_859, c_860)};
-  return tmp_914;
+event_t mk_pkt(uint32_t a_898 , uint64_t b_899 , uint64_t c_900 ){
+  event_t tmp_954  = {.meta = {.len = 18, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = pkt_902(a_898, b_899, c_900)};
+  return tmp_954;
 }
 uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
 typedef const char* cstr;
 cstr lucid_bool_str(uint8_t b ){ return b ? "true" : "false"; }
 uint8_t parse_event(packet_t*  pkt , event_t*  next_event , uint32_t ingress_port ){
-  uint32_t a_858  = ((uint32_t)(read_bits(pkt, 32)));
-  uint64_t b_859  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
-  uint64_t c_860  = ((uint64_t)(read_bits(pkt, 64)));
-  (*(next_event)) = mk_pkt(a_858, b_859, c_860);
+  uint32_t a_898  = ((uint32_t)(read_bits(pkt, 32)));
+  uint64_t b_899  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
+  uint64_t c_900  = ((uint64_t)(read_bits(pkt, 64)));
+  (*(next_event)) = mk_pkt(a_898, b_899, c_900);
   return pkt->cursor <= pkt->end;
 }
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint32_t a_858  = ev_out->data.args.pkt_862.a_858;
-      uint64_t b_859  = ev_out->data.args.pkt_862.b_859;
-      uint64_t c_860  = ev_out->data.args.pkt_862.c_860;
-      write_bits(buf_out, ((uint64_t)(c_860)), 64);
-      write_bits(buf_out, ((uint64_t)(b_859)), 48);
-      write_bits(buf_out, ((uint64_t)(a_858)), 32);
+      uint32_t a_898  = ev_out->data.args.pkt_902.a_898;
+      uint64_t b_899  = ev_out->data.args.pkt_902.b_899;
+      uint64_t c_900  = ev_out->data.args.pkt_902.c_900;
+      write_bits(buf_out, ((uint64_t)(c_900)), 64);
+      write_bits(buf_out, ((uint64_t)(b_899)), 48);
+      write_bits(buf_out, ((uint64_t)(a_898)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -126,13 +126,13 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
-      uint32_t a_863  = ev_in->data.args.pkt_862.a_858;
-      uint64_t b_864  = ev_in->data.args.pkt_862.b_859;
-      uint64_t c_865  = ev_in->data.args.pkt_862.c_860;
-      event_t this  = mk_pkt(a_863, b_864, c_865);
-      printf("a=%u b=%llu c=%llu big=%s\n", a_863, ((unsigned long long)(b_864)), ((unsigned long long)(c_865)), lucid_bool_str(a_863 == 4294967280));
-      out_event_t tmp_915  = {.ev = mk_pkt(a_863, b_864, c_865), .port = ev_in->meta.in_port};
-      out_events[n] = tmp_915;
+      uint32_t a_903  = ev_in->data.args.pkt_902.a_898;
+      uint64_t b_904  = ev_in->data.args.pkt_902.b_899;
+      uint64_t c_905  = ev_in->data.args.pkt_902.c_900;
+      event_t this  = mk_pkt(a_903, b_904, c_905);
+      printf("a=%u b=%llu c=%llu big=%s\n", a_903, ((unsigned long long)(b_904)), ((unsigned long long)(c_905)), lucid_bool_str(a_903 == 4294967280));
+      out_event_t tmp_955  = {.ev = mk_pkt(a_903, b_904, c_905), .port = ev_in->meta.in_port};
+      out_events[n] = tmp_955;
       n = n + 1;
       break;
     }

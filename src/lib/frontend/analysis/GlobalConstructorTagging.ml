@@ -30,6 +30,7 @@ let gty_to_tag ty = match (TyTQVar.strip_links ty.raw_ty) with
     | "Array"::_ -> (arraytag)
     | "PairArray"::_ -> (arraytag)
     | "Table"::_ -> (tabletag)
+    | "TernaryTable"::_ -> (tabletag)
     | _ -> unknowntag
 
     (* error ("[gty_to_tag] unknown global constructor type: "^(Printing.ty_to_string ty)) *)
@@ -93,7 +94,8 @@ let rec globals_of_econstr user_constrs parent_tcid var_tcid constr_exp : (exp) 
     match (Cid.names constr_cid) with
     | ["Array"; "create"] -> 
       annotate_espan constr_exp parent_tcid var_tcid
-    | ["Table"; "create"] -> (
+    | ["Table"; "create"] 
+    | ["TernaryTable"; "create"] -> (
       let (len, actions, def, def_arg) = match constr_args with 
         | [len; actions; def; def_arg] -> (len, actions, def, def_arg)
         | _ -> error "[globals_of_econstr] error: unexpected constructor expression form" 
@@ -375,7 +377,7 @@ let debug_tagged_global_names decls =
     method! visit_ECall () cid args _ = 
       (* if this is a call to Table.create, gather the actions *)
       let tbl_action_exps = List.nth args 1 |> SyntaxUtils.flatten_exp in
-      if (Cid.names cid) = ["Table"; "create"] then (
+      if (Cid.names cid) = ["Table"; "create"] || (Cid.names cid) = ["TernaryTable"; "create"] then (
         let action_names = List.map 
           (fun eaction -> 
             SyntaxUtils.cid_of_exp eaction, Option.get eaction.espan.global_created_in_src)
