@@ -1,0 +1,12 @@
+{
+  "comment": "The reflector with a table: frames whose destination MAC (low 32 bits) has an entry get ethertype 0x0801; others keep theirs. The last input is raw bytes, through the explicit main parser.",
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"name": "do_install", "args": [5, "0x0801"], "locations": ["0:1"], "timestamp": 0},
+    {"name": "do_install", "args": [9, "0x0801"], "locations": ["0:1"], "timestamp": 1000000},
+    {"name": "ethpkt", "args": ["0x000200000005", "0x112233445566", "0x0800", "5041594c4f41442d444154415041594c4f41442d444154415041594c4f41442d444154415041594c4f41442d44415441"], "locations": ["0:1"], "timestamp": 2000000},
+    {"name": "ethpkt", "args": ["0x000200000007", "0x112233445566", "0x0800", "5041594c4f41442d444154415041594c4f41442d444154415041594c4f41442d444154415041594c4f41442d44415441"], "locations": ["0:1"], "timestamp": 3000000},
+    {"name": "ethpkt", "args": ["0x000200000009", "0x112233445566", "0x86dd", "5041594c4f41442d444154415041594c4f41442d444154415041594c4f41442d444154415041594c4f41442d44415441"], "locations": ["0:1"], "timestamp": 4000000},
+    {"type": "packet", "bytes": "00020000000511223344556608066172702d7061796c6f6164", "locations": ["0:2"], "timestamp": 5000000}
+  ]
+}
