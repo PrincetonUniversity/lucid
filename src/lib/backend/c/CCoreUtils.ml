@@ -86,6 +86,30 @@ let rec compound_masked_eq e1 e2 m =
     (* builtins and names -- opaque, can't compare *)
     | TBuiltin _ -> err "no equality for builtins"
 ;;
+(* equality expression e1 == e2 for all comparable types 
+   or compounds of comparable types *)
+let rec compound_eq e1 e2 = 
+  let ty = e1.ety in
+  if (equiv_tys e1.ety e2.ety <> true) then err "type mismatch" else
+  match ty.raw_ty with 
+    | TUnit -> eval@@vbool true; (* two units are always the same *)
+    | TInt _ 
+    | TBool -> (e1 /== e2)
+    | TRecord(ids, _) -> 
+      emacro_and_fold (List.map (fun id -> compound_eq (e1/.id) (e2/.id)) ids)
+    | TTuple(tys) -> 
+      emacro_and_fold (List.mapi (fun i _ -> compound_eq (e1/.@i) (e2/.@i)) tys)
+    | TList(_, n) ->
+      emacro_and_fold (List.init (n)
+        (fun i ->
+          let idx =(eval@@vint i 32)  in
+          compound_eq (e1/@idx) (e2/@idx)))
+    | TPtr(_) -> compound_eq (ederef e1) (ederef e2)
+    | TName(_, def_opt) -> (match def_opt with
+      | Some d -> compound_eq {e1 with ety=d} {e2 with ety=d}
+      | None -> err "cannot generate equality exp for opaque named type")
+    | _ -> err "cannot generate equality exp for this type"
+;;
 (* a banner comment for the generated C, marking a major file section *)
 let section_marker str =
   let str = "SECTION: " ^ str in

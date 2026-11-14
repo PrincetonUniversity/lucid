@@ -8,8 +8,8 @@ table MISS. Installing hit_acn(3) for current key.
 t=10000: Handling event do_match(2) at switch 0, port 0
 return of table match: 3
 table HIT.
-t=20000: Handling event do_install(3,2) at switch 0, port 0
-installing entry: (3 &&& 2)
+t=20000: Handling event do_install(3) at switch 0, port 0
+installing entry: 3
 t=30000: Handling event do_match(3) at switch 0, port 0
 return of table match: 2
 table HIT.
@@ -21,7 +21,6 @@ Switch 0 : {
     ftbl(0) :[
   {key: ((2,4294967295)); action: hit_acn(3)}
   {key: ((3,4294967295)); action: hit_acn(2)}
-  {key: ((3,2)); action: hit_acn(3)}
   {default_action: miss_acn(1);}
 ]
   ]

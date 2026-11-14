@@ -197,6 +197,7 @@ int main(int argc, char** argv) {
     }
     fflush(stdout);
     fprintf(stderr, "Processed %llu packets\n", (unsigned long long)pkt_ct);
+    report_table_stats();
     for (int i = 0; i < g_port_map.nports; i++) {
         pcap_dump_close(g_port_map.ports[i].out);
         pcap_close(g_port_map.ports[i].in);

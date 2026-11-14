@@ -53,6 +53,13 @@ void write_bits(packet_t* bs, uint64_t v, int n) {
     }
 }
 uint32_t flood(uint32_t port ){ return port + 10000;/* TODO!*/ }
+
+/* installs that a full table rejected */
+static uint64_t table_full_installs = 0;
+static void report_table_stats(void) {
+    if (table_full_installs)
+        fprintf(stderr, "table installs rejected (table full): %llu\n", (unsigned long long)table_full_installs);
+}
 typedef struct {
   uint16_t len;
   uint8_t is_packet;
@@ -67,35 +74,35 @@ typedef struct {
   uint16_t tag;
   union {
     struct {
-      uint32_t src_ip_1224;
-      uint32_t src_port_1225;
-    } pkt_in_1226;
+      uint32_t src_ip_1213;
+      uint32_t src_port_1214;
+    } pkt_in_1215;
     struct {
-      uint32_t src_port_1227;
-    } bg_cmd_1228;
+      uint32_t src_port_1216;
+    } bg_cmd_1217;
     struct {
-      uint32_t src_ip_1229;
-      uint32_t src_port_1230;
-    } pkt_out_1231;
+      uint32_t src_ip_1218;
+      uint32_t src_port_1219;
+    } pkt_out_1220;
   } args;
 } event_variant_t;
-event_variant_t pkt_in_1226(uint32_t src_ip_1224 , uint32_t src_port_1225 ){
+event_variant_t pkt_in_1215(uint32_t src_ip_1213 , uint32_t src_port_1214 ){
   event_variant_t ev  = {0};
-  ev.args.pkt_in_1226.src_ip_1224 = src_ip_1224;
-  ev.args.pkt_in_1226.src_port_1225 = src_port_1225;
+  ev.args.pkt_in_1215.src_ip_1213 = src_ip_1213;
+  ev.args.pkt_in_1215.src_port_1214 = src_port_1214;
   ev.tag = pkt_in_tag;
   return ev;
 }
-event_variant_t bg_cmd_1228(uint32_t src_port_1227 ){
+event_variant_t bg_cmd_1217(uint32_t src_port_1216 ){
   event_variant_t ev  = {0};
-  ev.args.bg_cmd_1228.src_port_1227 = src_port_1227;
+  ev.args.bg_cmd_1217.src_port_1216 = src_port_1216;
   ev.tag = bg_cmd_tag;
   return ev;
 }
-event_variant_t pkt_out_1231(uint32_t src_ip_1229 , uint32_t src_port_1230 ){
+event_variant_t pkt_out_1220(uint32_t src_ip_1218 , uint32_t src_port_1219 ){
   event_variant_t ev  = {0};
-  ev.args.pkt_out_1231.src_ip_1229 = src_ip_1229;
-  ev.args.pkt_out_1231.src_port_1230 = src_port_1230;
+  ev.args.pkt_out_1220.src_ip_1218 = src_ip_1218;
+  ev.args.pkt_out_1220.src_port_1219 = src_port_1219;
   ev.tag = pkt_out_tag;
   return ev;
 }
@@ -103,17 +110,17 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-event_t mk_pkt_in(uint32_t src_ip_1224 , uint32_t src_port_1225 ){
-  event_t tmp_1310  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_in_1226(src_ip_1224, src_port_1225)};
-  return tmp_1310;
+event_t mk_pkt_in(uint32_t src_ip_1213 , uint32_t src_port_1214 ){
+  event_t tmp_1299  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_in_1215(src_ip_1213, src_port_1214)};
+  return tmp_1299;
 }
-event_t mk_bg_cmd(uint32_t src_port_1227 ){
-  event_t tmp_1311  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = bg_cmd_1228(src_port_1227)};
-  return tmp_1311;
+event_t mk_bg_cmd(uint32_t src_port_1216 ){
+  event_t tmp_1300  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = bg_cmd_1217(src_port_1216)};
+  return tmp_1300;
 }
-event_t mk_pkt_out(uint32_t src_ip_1229 , uint32_t src_port_1230 ){
-  event_t tmp_1312  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_out_1231(src_ip_1229, src_port_1230)};
-  return tmp_1312;
+event_t mk_pkt_out(uint32_t src_ip_1218 , uint32_t src_port_1219 ){
+  event_t tmp_1301  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_out_1220(src_ip_1218, src_port_1219)};
+  return tmp_1301;
 }
 uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
@@ -128,22 +135,22 @@ uint8_t parse_event(packet_t*  packet , event_t*  next_event , uint32_t ingress_
       uint16_t tag  = ((uint16_t)(read_bits(packet, 16)));
       switch (tag) {
         case 1: {
-          uint32_t src_ip_1224  = ((uint32_t)(read_bits(packet, 32)));
-          uint32_t src_port_1225  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_pkt_in(src_ip_1224, src_port_1225);
+          uint32_t src_ip_1213  = ((uint32_t)(read_bits(packet, 32)));
+          uint32_t src_port_1214  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_pkt_in(src_ip_1213, src_port_1214);
           return packet->cursor <= packet->end;
           break;
         }
         case 2: {
-          uint32_t src_port_1227  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_bg_cmd(src_port_1227);
+          uint32_t src_port_1216  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_bg_cmd(src_port_1216);
           return packet->cursor <= packet->end;
           break;
         }
         case 3: {
-          uint32_t src_ip_1229  = ((uint32_t)(read_bits(packet, 32)));
-          uint32_t src_port_1230  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_pkt_out(src_ip_1229, src_port_1230);
+          uint32_t src_ip_1218  = ((uint32_t)(read_bits(packet, 32)));
+          uint32_t src_port_1219  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_pkt_out(src_ip_1218, src_port_1219);
           return packet->cursor <= packet->end;
           break;
         }
@@ -164,10 +171,10 @@ uint8_t parse_event(packet_t*  packet , event_t*  next_event , uint32_t ingress_
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint32_t src_ip_1224  = ev_out->data.args.pkt_in_1226.src_ip_1224;
-      uint32_t src_port_1225  = ev_out->data.args.pkt_in_1226.src_port_1225;
-      write_bits(buf_out, ((uint64_t)(src_port_1225)), 32);
-      write_bits(buf_out, ((uint64_t)(src_ip_1224)), 32);
+      uint32_t src_ip_1213  = ev_out->data.args.pkt_in_1215.src_ip_1213;
+      uint32_t src_port_1214  = ev_out->data.args.pkt_in_1215.src_port_1214;
+      write_bits(buf_out, ((uint64_t)(src_port_1214)), 32);
+      write_bits(buf_out, ((uint64_t)(src_ip_1213)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -178,8 +185,8 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 2: {
-      uint32_t src_port_1227  = ev_out->data.args.bg_cmd_1228.src_port_1227;
-      write_bits(buf_out, ((uint64_t)(src_port_1227)), 32);
+      uint32_t src_port_1216  = ev_out->data.args.bg_cmd_1217.src_port_1216;
+      write_bits(buf_out, ((uint64_t)(src_port_1216)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(2)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -190,10 +197,10 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 3: {
-      uint32_t src_ip_1229  = ev_out->data.args.pkt_out_1231.src_ip_1229;
-      uint32_t src_port_1230  = ev_out->data.args.pkt_out_1231.src_port_1230;
-      write_bits(buf_out, ((uint64_t)(src_port_1230)), 32);
-      write_bits(buf_out, ((uint64_t)(src_ip_1229)), 32);
+      uint32_t src_ip_1218  = ev_out->data.args.pkt_out_1220.src_ip_1218;
+      uint32_t src_port_1219  = ev_out->data.args.pkt_out_1220.src_port_1219;
+      write_bits(buf_out, ((uint64_t)(src_port_1219)), 32);
+      write_bits(buf_out, ((uint64_t)(src_ip_1218)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(3)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -213,32 +220,32 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 2: {
-      uint32_t src_port_1232  = ev_in->data.args.bg_cmd_1228.src_port_1227;
-      event_t this  = mk_bg_cmd(src_port_1232);
+      uint32_t src_port_1221  = ev_in->data.args.bg_cmd_1217.src_port_1216;
+      event_t this  = mk_bg_cmd(src_port_1221);
       break;
     }
     case 3: {
-      uint32_t src_ip_1233  = ev_in->data.args.pkt_out_1231.src_ip_1229;
-      uint32_t src_port_1234  = ev_in->data.args.pkt_out_1231.src_port_1230;
-      event_t this  = mk_pkt_out(src_ip_1233, src_port_1234);
+      uint32_t src_ip_1222  = ev_in->data.args.pkt_out_1220.src_ip_1218;
+      uint32_t src_port_1223  = ev_in->data.args.pkt_out_1220.src_port_1219;
+      event_t this  = mk_pkt_out(src_ip_1222, src_port_1223);
       break;
     }
     case 1: {
-      uint32_t src_ip_1235  = ev_in->data.args.pkt_in_1226.src_ip_1224;
-      uint32_t src_port_1236  = ev_in->data.args.pkt_in_1226.src_port_1225;
-      event_t this  = mk_pkt_in(src_ip_1235, src_port_1236);
-      printf("Received packet from (ip: %u, port: %u)\n", src_ip_1235, src_port_1236);
-      event_t MY_EVENT_1237  = mk_pkt_out(src_ip_1235, src_port_1236);
-      out_event_t tmp_1313  = {.ev = mk_bg_cmd(src_port_1236), .port = 4294967295};
-      out_events[n] = tmp_1313;
+      uint32_t src_ip_1224  = ev_in->data.args.pkt_in_1215.src_ip_1213;
+      uint32_t src_port_1225  = ev_in->data.args.pkt_in_1215.src_port_1214;
+      event_t this  = mk_pkt_in(src_ip_1224, src_port_1225);
+      printf("Received packet from (ip: %u, port: %u)\n", src_ip_1224, src_port_1225);
+      event_t MY_EVENT_1226  = mk_pkt_out(src_ip_1224, src_port_1225);
+      out_event_t tmp_1302  = {.ev = mk_bg_cmd(src_port_1225), .port = 4294967295};
+      out_events[n] = tmp_1302;
       n = n + 1;
-      switch (MY_EVENT_1237.data.tag) {
+      switch (MY_EVENT_1226.data.tag) {
         case 3: {
-          uint32_t ip_1238  = MY_EVENT_1237.data.args.pkt_out_1231.src_ip_1229;
-          uint32_t port_1239  = MY_EVENT_1237.data.args.pkt_out_1231.src_port_1230;
-          printf("Sending packet to (ip: %u, port: %u)\n", ip_1238, port_1239);
-          out_event_t tmp_1314  = {.ev = mk_pkt_out(src_ip_1235, src_port_1236), .port = 0};
-          out_events[n] = tmp_1314;
+          uint32_t ip_1227  = MY_EVENT_1226.data.args.pkt_out_1220.src_ip_1218;
+          uint32_t port_1228  = MY_EVENT_1226.data.args.pkt_out_1220.src_port_1219;
+          printf("Sending packet to (ip: %u, port: %u)\n", ip_1227, port_1228);
+          out_event_t tmp_1303  = {.ev = mk_pkt_out(src_ip_1224, src_port_1225), .port = 0};
+          out_events[n] = tmp_1303;
           n = n + 1;
           break;
         }

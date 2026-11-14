@@ -53,6 +53,13 @@ void write_bits(packet_t* bs, uint64_t v, int n) {
     }
 }
 uint32_t flood(uint32_t port ){ return port + 10000;/* TODO!*/ }
+
+/* installs that a full table rejected */
+static uint64_t table_full_installs = 0;
+static void report_table_stats(void) {
+    if (table_full_installs)
+        fprintf(stderr, "table installs rejected (table full): %llu\n", (unsigned long long)table_full_installs);
+}
 typedef struct {
   uint16_t len;
   uint8_t is_packet;
@@ -65,15 +72,15 @@ typedef struct {
   uint16_t tag;
   union {
     struct {
-      uint64_t a_887;
-      uint64_t b_888;
-    } pkt_890;
+      uint64_t a_876;
+      uint64_t b_877;
+    } pkt_879;
   } args;
 } event_variant_t;
-event_variant_t pkt_890(uint64_t a_887 , uint64_t b_888 ){
+event_variant_t pkt_879(uint64_t a_876 , uint64_t b_877 ){
   event_variant_t ev  = {0};
-  ev.args.pkt_890.a_887 = a_887;
-  ev.args.pkt_890.b_888 = b_888;
+  ev.args.pkt_879.a_876 = a_876;
+  ev.args.pkt_879.b_877 = b_877;
   ev.tag = pkt_tag;
   return ev;
 }
@@ -81,25 +88,25 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-event_t mk_pkt(uint64_t a_887 , uint64_t b_888 ){
-  event_t tmp_945  = {.meta = {.len = 16, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = pkt_890(a_887, b_888)};
-  return tmp_945;
+event_t mk_pkt(uint64_t a_876 , uint64_t b_877 ){
+  event_t tmp_934  = {.meta = {.len = 16, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = pkt_879(a_876, b_877)};
+  return tmp_934;
 }
 uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
 uint8_t parse_event(packet_t*  pkt , event_t*  next_event , uint32_t ingress_port ){
-  uint64_t a_887  = ((uint64_t)(read_bits(pkt, 64)));
-  uint64_t b_888  = ((uint64_t)(read_bits(pkt, 64)));
-  (*(next_event)) = mk_pkt(a_887, b_888);
+  uint64_t a_876  = ((uint64_t)(read_bits(pkt, 64)));
+  uint64_t b_877  = ((uint64_t)(read_bits(pkt, 64)));
+  (*(next_event)) = mk_pkt(a_876, b_877);
   return pkt->cursor <= pkt->end;
 }
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint64_t a_887  = ev_out->data.args.pkt_890.a_887;
-      uint64_t b_888  = ev_out->data.args.pkt_890.b_888;
-      write_bits(buf_out, ((uint64_t)(b_888)), 64);
-      write_bits(buf_out, ((uint64_t)(a_887)), 64);
+      uint64_t a_876  = ev_out->data.args.pkt_879.a_876;
+      uint64_t b_877  = ev_out->data.args.pkt_879.b_877;
+      write_bits(buf_out, ((uint64_t)(b_877)), 64);
+      write_bits(buf_out, ((uint64_t)(a_876)), 64);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -119,11 +126,11 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
-      uint64_t a_891  = ev_in->data.args.pkt_890.a_887;
-      uint64_t b_892  = ev_in->data.args.pkt_890.b_888;
-      event_t this  = mk_pkt(a_891, b_892);
-      out_event_t tmp_946  = {.ev = mk_pkt(a_891 + 18446744073709551615ULL, b_892 + 4611686018427387904), .port = ev_in->meta.in_port};
-      out_events[n] = tmp_946;
+      uint64_t a_880  = ev_in->data.args.pkt_879.a_876;
+      uint64_t b_881  = ev_in->data.args.pkt_879.b_877;
+      event_t this  = mk_pkt(a_880, b_881);
+      out_event_t tmp_935  = {.ev = mk_pkt(a_880 + 18446744073709551615ULL, b_881 + 4611686018427387904), .port = ev_in->meta.in_port};
+      out_events[n] = tmp_935;
       n = n + 1;
       break;
     }

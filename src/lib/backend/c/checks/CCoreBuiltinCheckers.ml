@@ -24,14 +24,28 @@ let check_action_ty aparam_ty aarg_ty aret_ty taction =
   else err "action type mismatch"
 ;;
 
-let table_create_cid = Tables.constructors |> List.hd |> fst
+(* the type arguments of a Table.t or TernaryTable.t: 
+   the types of its key, action param, action arg, and action return *)
+let table_ty_args (tbl_ty : ty) = 
+  let bty_cid, bty_args = extract_tbuiltin tbl_ty in
+  match (Cid.names bty_cid), bty_args with 
+    | ["Table"; "t"], [key_ty; aparam_ty; aarg_ty; aret_ty] 
+    | ["TernaryTable"; "t"], [key_ty; aparam_ty; aarg_ty; aret_ty] -> 
+      key_ty, aparam_ty, aarg_ty, aret_ty
+    | _ -> ty_err "expected a Table.t or a TernaryTable.t"
+;;
 
+let table_create_cid = Tables.constructors |> List.hd |> fst
+let ternary_table_create_cid = TernaryTables.constructors |> List.hd |> fst
+
+(* Table.create(size, actions, default_action, default_action_arg), 
+   TernaryTable.create(size, actions, default_action, default_action_arg) *)
 let table_create_check ty_opt constr_exp =
   let ty = Option.get ty_opt in
   let constr_args = extract_ecall constr_exp |> snd in
-  let bty_cid, bty_args = extract_tbuiltin ty in
-  match (Cid.names bty_cid), bty_args, constr_args with 
-    | ["Table"; "t"], [_; aparam_ty; aarg_ty; aret_ty], [size_arg; actions_arg; def_action_arg; def_action_def_arg_arg] -> (
+  let _, aparam_ty, aarg_ty, aret_ty = table_ty_args ty in
+  match constr_args with 
+    | [size_arg; actions_arg; def_action_arg; def_action_def_arg_arg] -> (
       check_action_ty aparam_ty aarg_ty aret_ty def_action_arg.ety;
       let all_actions = extract_etuple actions_arg in
       List.iter (fun action -> check_action_ty aparam_ty aarg_ty aret_ty action.ety) all_actions;
@@ -45,21 +59,16 @@ let table_create_check ty_opt constr_exp =
         ty_err "size arg is not an int";
       ty
     )
-    | _ -> ty_err "Table.create call is malformed.";
+    | _ -> ty_err "table create call is malformed.";
 ;;
 
 let table_lookup_cid = Cid.create ["Table"; "lookup"] ;;
-(* Table.lookup(tbl, key, arg) *)
+let ternary_table_lookup_cid = Cid.create ["TernaryTable"; "lookup"] ;;
+(* Table.lookup(tbl, key, arg), TernaryTable.lookup(tbl, key, arg) *)
 let table_lookup_check _ exp = 
-  let _, args = extract_ecall exp in
-  if List.length args <> 3 then 
-    ty_err "Table.lookup takes exactly three arguments";
-  let tbl = List.hd args in
-  let key = List.nth args 1 in
-  let arg = List.nth args 2 in
-  let bty_cid, bty_args = extract_tbuiltin tbl.ety in
-  match (Cid.names bty_cid), bty_args with 
-    | ["Table"; "t"], [key_ty'; _; arg_ty'; ret_ty'] -> (
+  match extract_ecall exp |> snd with 
+    | [tbl; key; arg] -> (
+      let key_ty', _, arg_ty', ret_ty' = table_ty_args tbl.ety in
       if (not (equiv_tys key.ety (base_type key_ty'))) then (
         print_endline@@"argument key type:\n"^(CCorePPrint.ty_to_string ~use_abstract_name:true key.ety)^"\ntable key type:\n"^(CCorePPrint.ty_to_string ~use_abstract_name:true key_ty');
         ty_err "key type does not match table key type");
@@ -67,64 +76,79 @@ let table_lookup_check _ exp =
         ty_err "arg type does not match table arg type";
       ret_ty'
     )
-    | _ -> ty_err "Table.lookup call is malformed.";
+    | _ -> ty_err "table lookup takes exactly three arguments";
+;;
+
+(* check a key or a mask of an entry *)
+let check_entry_key (tbl : exp) (key : exp) = 
+  let key_ty', _, _, _ = table_ty_args tbl.ety in
+  if (not (equiv_tys key.ety (base_type key_ty'))) then 
+    ty_err "entry key or mask type does not match table key type";
+;;
+let check_entry_prio (prio : exp) = 
+  if (not (equiv_tys prio.ety (tint 32))) then 
+    ty_err "entry priority is not a 32-bit int";
+;;
+(* check the action of an entry and the argument that it is bound to *)
+let check_entry_action (tbl : exp) (action : exp) (forwarded_param : exp) = 
+  let _, param_ty', arg_ty', ret_ty' = table_ty_args tbl.ety in
+  check_action_ty param_ty' arg_ty' ret_ty' action.ety;
+  if (not (equiv_tys forwarded_param.ety (base_type param_ty'))) then (
+    print_endline ("forwarded param: "^(CCorePPrint.ty_to_string ~use_abstract_name:true (forwarded_param.ety))^" vs "^(CCorePPrint.ty_to_string ~use_abstract_name:true param_ty'));                  
+    ty_err "argument to action does not match its install-time param type");
+;;
+let table_ret_ty (tbl : exp) = 
+  let _, _, _, ret_ty' = table_ty_args tbl.ety in
+  ret_ty'
 ;;
 
 let table_install_cid = Cid.create ["Table"; "install"] ;;
-(* Table.install(tbl, key, action, param) *)
+let table_update_cid = Cid.create ["Table"; "update"] ;;
+(* Table.install(tbl, key, action, param), Table.update(tbl, key, action, param) *)
 let table_install_check _ exp = 
-  let _, args = extract_ecall exp in
-  if List.length args <> 4 then 
-    ty_err "Table.install takes exactly four arguments";
-  let tbl = (List.hd args) in
-  let key = List.nth args 1 in
-  let action = List.nth args 2 in
-  let forwarded_param = List.nth args 3 in
-  let bty_cid, bty_args = extract_tbuiltin tbl.ety in
-  match (Cid.names bty_cid), bty_args with 
-    | ["Table"; "t"], [key_ty'; param_ty' ; arg_ty'; ret_ty'] -> (
-      (* check action *)
-      check_action_ty param_ty' arg_ty' ret_ty' action.ety;
-      (* check key: not part of action *)
-      if (not (equiv_tys key.ety (base_type key_ty'))) then 
-        ty_err "table key type does not match table key type";
-      (* check argument to the action *)
-      if (not (equiv_tys forwarded_param.ety (base_type param_ty'))) then (
-        print_endline ("forwarded param: "^(CCorePPrint.ty_to_string ~use_abstract_name:true (forwarded_param.ety))^" vs "^(CCorePPrint.ty_to_string ~use_abstract_name:true param_ty'));                  
-        ty_err "argument to action does not match its install-time param type");
-      ret_ty'
-    )
-    | _ -> ty_err "Table.install call is malformed.";
+  match extract_ecall exp |> snd with 
+    | [tbl; key; action; forwarded_param] -> 
+      check_entry_key tbl key;
+      check_entry_action tbl action forwarded_param;
+      table_ret_ty tbl
+    | _ -> ty_err "Table.install and Table.update take exactly four arguments";
 ;;
 
-let table_install_ternary_cid = Cid.create ["Table"; "install_ternary"] ;;
-(* Table.install(tbl, key, action, param) *)
-let table_install_ternary_check _ exp = 
-  let _, args = extract_ecall exp in
-  if List.length args <> 5 then 
-    ty_err "Table.install_ternary takes exactly four arguments";
-  let tbl = (List.hd args) in
-  let key = List.nth args 1 in
-  let mask = List.nth args 2 in
-  let action = List.nth args 3 in
-  let forwarded_param = List.nth args 4 in
-  let bty_cid, bty_args = extract_tbuiltin tbl.ety in
-  match (Cid.names bty_cid), bty_args with 
-    | ["Table"; "t"], [key_ty'; param_ty' ; arg_ty'; ret_ty'] -> (
-      (* check action *)
-      check_action_ty param_ty' arg_ty' ret_ty' action.ety;
-      (* check key: not part of action *)
-      if (not (equiv_tys key.ety (base_type key_ty'))) then 
-        ty_err "entry key type does not match table";
-      if (not (equiv_tys mask.ety (base_type key_ty'))) then 
-        ty_err "entry mask type does not match table";
-      (* check argument to the action *)
-      if (not (equiv_tys forwarded_param.ety (base_type param_ty'))) then (
-        print_endline ("forwarded param: "^(CCorePPrint.ty_to_string ~use_abstract_name:true (forwarded_param.ety))^" vs "^(CCorePPrint.ty_to_string ~use_abstract_name:true param_ty'));                  
-        ty_err "argument to action does not match its install-time param type");
-      ret_ty'
-    )
-    | _ -> ty_err "Table.install call is malformed.";
+let table_remove_cid = Cid.create ["Table"; "remove"] ;;
+(* Table.remove(tbl, key) *)
+let table_remove_check _ exp = 
+  match extract_ecall exp |> snd with 
+    | [tbl; key] -> 
+      check_entry_key tbl key;
+      table_ret_ty tbl
+    | _ -> ty_err "Table.remove takes exactly two arguments";
+;;
+
+let ternary_table_install_cid = Cid.create ["TernaryTable"; "install"] ;;
+let ternary_table_update_cid = Cid.create ["TernaryTable"; "update"] ;;
+(* TernaryTable.install(tbl, key, mask, prio, action, param), 
+   TernaryTable.update(tbl, key, mask, prio, action, param) *)
+let ternary_table_install_check _ exp = 
+  match extract_ecall exp |> snd with 
+    | [tbl; key; mask; prio; action; forwarded_param] -> 
+      check_entry_key tbl key;
+      check_entry_key tbl mask;
+      check_entry_prio prio;
+      check_entry_action tbl action forwarded_param;
+      table_ret_ty tbl
+    | _ -> ty_err "TernaryTable.install and TernaryTable.update take exactly six arguments";
+;;
+
+let ternary_table_remove_cid = Cid.create ["TernaryTable"; "remove"] ;;
+(* TernaryTable.remove(tbl, key, mask, prio) *)
+let ternary_table_remove_check _ exp = 
+  match extract_ecall exp |> snd with 
+    | [tbl; key; mask; prio] -> 
+      check_entry_key tbl key;
+      check_entry_key tbl mask;
+      check_entry_prio prio;
+      table_ret_ty tbl
+    | _ -> ty_err "TernaryTable.remove takes exactly four arguments";
 ;;
 
 
@@ -227,7 +251,13 @@ let builtin_checkers =
     table_create_cid, table_create_check;
     table_lookup_cid, table_lookup_check;
     table_install_cid, table_install_check;
-    table_install_ternary_cid, table_install_ternary_check;
+    table_update_cid, table_install_check;
+    table_remove_cid, table_remove_check;
+    ternary_table_create_cid, table_create_check;
+    ternary_table_lookup_cid, table_lookup_check;
+    ternary_table_install_cid, ternary_table_install_check;
+    ternary_table_update_cid, ternary_table_install_check;
+    ternary_table_remove_cid, ternary_table_remove_check;
     array_create_cid, array_create_check;
     array_update_complex_cid, array_update_complex_check;
     generate_self_cid, generate_arg_check "generate_self" [tevent];

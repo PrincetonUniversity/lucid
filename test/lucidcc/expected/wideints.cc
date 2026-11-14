@@ -53,6 +53,13 @@ void write_bits(packet_t* bs, uint64_t v, int n) {
     }
 }
 uint32_t flood(uint32_t port ){ return port + 10000;/* TODO!*/ }
+
+/* installs that a full table rejected */
+static uint64_t table_full_installs = 0;
+static void report_table_stats(void) {
+    if (table_full_installs)
+        fprintf(stderr, "table installs rejected (table full): %llu\n", (unsigned long long)table_full_installs);
+}
 typedef struct {
   uint16_t len;
   uint8_t is_packet;
@@ -65,19 +72,19 @@ typedef struct {
   uint16_t tag;
   union {
     struct {
-      uint64_t a_1403;
-      uint8_t a_wrapped_1404;
-      uint64_t b_1405;
-      uint8_t b_wrapped_1406;
-    } pkt_1408;
+      uint64_t a_1392;
+      uint8_t a_wrapped_1393;
+      uint64_t b_1394;
+      uint8_t b_wrapped_1395;
+    } pkt_1397;
   } args;
 } event_variant_t;
-event_variant_t pkt_1408(uint64_t a_1403 , uint8_t a_wrapped_1404 , uint64_t b_1405 , uint8_t b_wrapped_1406 ){
+event_variant_t pkt_1397(uint64_t a_1392 , uint8_t a_wrapped_1393 , uint64_t b_1394 , uint8_t b_wrapped_1395 ){
   event_variant_t ev  = {0};
-  ev.args.pkt_1408.a_1403 = a_1403;
-  ev.args.pkt_1408.a_wrapped_1404 = a_wrapped_1404;
-  ev.args.pkt_1408.b_1405 = b_1405;
-  ev.args.pkt_1408.b_wrapped_1406 = b_wrapped_1406;
+  ev.args.pkt_1397.a_1392 = a_1392;
+  ev.args.pkt_1397.a_wrapped_1393 = a_wrapped_1393;
+  ev.args.pkt_1397.b_1394 = b_1394;
+  ev.args.pkt_1397.b_wrapped_1395 = b_wrapped_1395;
   ev.tag = pkt_tag;
   return ev;
 }
@@ -85,31 +92,31 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-event_t mk_pkt(uint64_t a_1403 , uint8_t a_wrapped_1404 , uint64_t b_1405 , uint8_t b_wrapped_1406 ){
-  event_t tmp_1503  = {.meta = {.len = 16, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = pkt_1408(a_1403, a_wrapped_1404, b_1405, b_wrapped_1406)};
-  return tmp_1503;
+event_t mk_pkt(uint64_t a_1392 , uint8_t a_wrapped_1393 , uint64_t b_1394 , uint8_t b_wrapped_1395 ){
+  event_t tmp_1492  = {.meta = {.len = 16, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = pkt_1397(a_1392, a_wrapped_1393, b_1394, b_wrapped_1395)};
+  return tmp_1492;
 }
 uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
 uint8_t parse_event(packet_t*  pkt , event_t*  next_event , uint32_t ingress_port ){
-  uint64_t a_1403  = ((uint64_t)(read_bits(pkt, 62))) & 4611686018427387903;
-  uint8_t a_wrapped_1404  = ((uint8_t)(read_bits(pkt, 2))) & 3;
-  uint64_t b_1405  = ((uint64_t)(read_bits(pkt, 63))) & 9223372036854775807;
-  uint8_t b_wrapped_1406  = ((uint8_t)(read_bits(pkt, 1))) & 1;
-  (*(next_event)) = mk_pkt(a_1403, a_wrapped_1404, b_1405, b_wrapped_1406);
+  uint64_t a_1392  = ((uint64_t)(read_bits(pkt, 62))) & 4611686018427387903;
+  uint8_t a_wrapped_1393  = ((uint8_t)(read_bits(pkt, 2))) & 3;
+  uint64_t b_1394  = ((uint64_t)(read_bits(pkt, 63))) & 9223372036854775807;
+  uint8_t b_wrapped_1395  = ((uint8_t)(read_bits(pkt, 1))) & 1;
+  (*(next_event)) = mk_pkt(a_1392, a_wrapped_1393, b_1394, b_wrapped_1395);
   return pkt->cursor <= pkt->end;
 }
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint64_t a_1403  = ev_out->data.args.pkt_1408.a_1403;
-      uint8_t a_wrapped_1404  = ev_out->data.args.pkt_1408.a_wrapped_1404;
-      uint64_t b_1405  = ev_out->data.args.pkt_1408.b_1405;
-      uint8_t b_wrapped_1406  = ev_out->data.args.pkt_1408.b_wrapped_1406;
-      write_bits(buf_out, ((uint64_t)(b_wrapped_1406)), 1);
-      write_bits(buf_out, ((uint64_t)(b_1405)), 63);
-      write_bits(buf_out, ((uint64_t)(a_wrapped_1404)), 2);
-      write_bits(buf_out, ((uint64_t)(a_1403)), 62);
+      uint64_t a_1392  = ev_out->data.args.pkt_1397.a_1392;
+      uint8_t a_wrapped_1393  = ev_out->data.args.pkt_1397.a_wrapped_1393;
+      uint64_t b_1394  = ev_out->data.args.pkt_1397.b_1394;
+      uint8_t b_wrapped_1395  = ev_out->data.args.pkt_1397.b_wrapped_1395;
+      write_bits(buf_out, ((uint64_t)(b_wrapped_1395)), 1);
+      write_bits(buf_out, ((uint64_t)(b_1394)), 63);
+      write_bits(buf_out, ((uint64_t)(a_wrapped_1393)), 2);
+      write_bits(buf_out, ((uint64_t)(a_1392)), 62);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -129,21 +136,21 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
-      uint64_t a_1409  = ev_in->data.args.pkt_1408.a_1403;
-      uint8_t a_wrapped_1410  = ev_in->data.args.pkt_1408.a_wrapped_1404;
-      uint64_t b_1411  = ev_in->data.args.pkt_1408.b_1405;
-      uint8_t b_wrapped_1412  = ev_in->data.args.pkt_1408.b_wrapped_1406;
-      event_t this  = mk_pkt(a_1409, a_wrapped_1410, b_1411, b_wrapped_1412);
-      uint8_t wa_1416  = 0;
-      uint8_t wb_1417  = 0;
-      if (((a_1409 + 1) & 4611686018427387903) == 0) {
-        wa_1416 = 1;
+      uint64_t a_1398  = ev_in->data.args.pkt_1397.a_1392;
+      uint8_t a_wrapped_1399  = ev_in->data.args.pkt_1397.a_wrapped_1393;
+      uint64_t b_1400  = ev_in->data.args.pkt_1397.b_1394;
+      uint8_t b_wrapped_1401  = ev_in->data.args.pkt_1397.b_wrapped_1395;
+      event_t this  = mk_pkt(a_1398, a_wrapped_1399, b_1400, b_wrapped_1401);
+      uint8_t wa_1405  = 0;
+      uint8_t wb_1406  = 0;
+      if (((a_1398 + 1) & 4611686018427387903) == 0) {
+        wa_1405 = 1;
       }
-      if (((b_1411 + 1) & 9223372036854775807) == 0) {
-        wb_1417 = 1;
+      if (((b_1400 + 1) & 9223372036854775807) == 0) {
+        wb_1406 = 1;
       }
-      out_event_t tmp_1504  = {.ev = mk_pkt((a_1409 + 1) & 4611686018427387903, wa_1416, (b_1411 + 1) & 9223372036854775807, wb_1417), .port = ev_in->meta.in_port};
-      out_events[n] = tmp_1504;
+      out_event_t tmp_1493  = {.ev = mk_pkt((a_1398 + 1) & 4611686018427387903, wa_1405, (b_1400 + 1) & 9223372036854775807, wb_1406), .port = ev_in->meta.in_port};
+      out_events[n] = tmp_1493;
       n = n + 1;
       break;
     }

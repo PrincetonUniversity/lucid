@@ -259,69 +259,6 @@ let install_fun st args =
 
 
 
-(* Table.install_ternary : Table.t<<'k, iarg, marg, ret>> -> 'k -> 'k -> (iarg -> marg -> ret) -> iarg -> () *)
-let install_ternary_name = "install_ternary"
-let install_ternary_id = Id.create install_ternary_name
-let install_ternary_cid = Cid.create_ids [id; install_ternary_id]
-let install_ternary_error msg = module_error install_ternary_name msg
-
-let install_ternary_ty = 
-  let key_rty, iarg_rty, marg_rty, ret_rty = 
-    fresh_rawty "table_key_ty",
-    fresh_rawty "table_iarg_ty",
-    fresh_rawty "table_marg_ty",
-    fresh_rawty "table_ret_ty"
-  in
-  let mask_rawty = key_rty in
-  let acn_rty = taction iarg_rty marg_rty ret_rty in  
-  let start_eff = FVar (QVar (Id.fresh "eff")) in (* effect where this call begins *)
-  (* table argument *)
-  let tbl_eff = FVar (QVar (Id.fresh "eff")) in (* effect attached to table arg *)
-  let tbl_t = ty_eff (fresh_t (key_rty, iarg_rty, marg_rty, ret_rty)) tbl_eff in
-  let arg_tys = [
-      tbl_t; 
-      ty @@ key_rty;
-      ty @@ mask_rawty;
-      ty @@ acn_rty;
-      ty @@ iarg_rty
-    ]
-  in
-  let ret_ty = ty @@ TVoid in
-  ty @@ TFun
-    { arg_tys
-    ; ret_ty
-    ; start_eff
-    ; end_eff = FSucc tbl_eff
-    ; constraints = ref [CLeq (start_eff, tbl_eff)]
-    }
-;;
-
-(* install a masked pattern *)
-let install_ternary_fun st args =
-  match args with
-  | [vtbl; vkey; vmask; vaction; vaction_const_arg_tup] -> 
-    let tbl_id, stage = table_arg vtbl in
-    let acn, acn_cid, vaction_const_args = 
-      bound_action st vaction vaction_const_arg_tup 
-    in
-    (* install to the pipeline *)
-    let installed = 
-      Pipeline.install_table_entry 
-        stage
-        exact_priority 
-        (ternary_pats vkey vmask)
-        acn
-        acn_cid
-        vaction_const_args
-        st.pipeline
-    in
-    if (not installed) then warn_full_table st install_ternary_cid tbl_id;
-    V(CoreSyntax.vtup [] Span.default) (* no return *)
-  | _ ->
-    install_ternary_error "Incorrect number of arguments to Table.install_ternary"
-
-
-
 (* Table.update : Table.t<<'k, iarg, marg, ret>> -> 'k -> (iarg -> marg -> ret) -> iarg -> () *)
 let update_name = "update"
 let update_id = Id.create update_name
@@ -485,7 +422,6 @@ let constructors = [create_id, create_sig]
 let defs : global_fun list =
   [
     { cid = install_cid; body = install_fun; ty = install_ty };
-    { cid = install_ternary_cid; body = install_ternary_fun; ty = install_ternary_ty };
     { cid = update_cid; body = update_fun; ty = update_ty };
     { cid = remove_cid; body = remove_fun; ty = remove_ty };
     { cid = lookup_cid; body = lookup_fun; ty = lookup_ty }  

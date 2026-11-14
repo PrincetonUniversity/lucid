@@ -53,6 +53,13 @@ void write_bits(packet_t* bs, uint64_t v, int n) {
     }
 }
 uint32_t flood(uint32_t port ){ return port + 10000;/* TODO!*/ }
+
+/* installs that a full table rejected */
+static uint64_t table_full_installs = 0;
+static void report_table_stats(void) {
+    if (table_full_installs)
+        fprintf(stderr, "table installs rejected (table full): %llu\n", (unsigned long long)table_full_installs);
+}
 typedef struct {
   uint16_t len;
   uint8_t is_packet;
@@ -65,17 +72,17 @@ typedef struct {
   uint16_t tag;
   union {
     struct {
-      uint64_t dst_639;
-      uint64_t src_640;
-      uint16_t ety_641;
-    } ethhdr_642;
+      uint64_t dst_628;
+      uint64_t src_629;
+      uint16_t ety_630;
+    } ethhdr_631;
   } args;
 } event_variant_t;
-event_variant_t ethhdr_642(uint64_t dst_639 , uint64_t src_640 , uint16_t ety_641 ){
+event_variant_t ethhdr_631(uint64_t dst_628 , uint64_t src_629 , uint16_t ety_630 ){
   event_variant_t ev  = {0};
-  ev.args.ethhdr_642.dst_639 = dst_639;
-  ev.args.ethhdr_642.src_640 = src_640;
-  ev.args.ethhdr_642.ety_641 = ety_641;
+  ev.args.ethhdr_631.dst_628 = dst_628;
+  ev.args.ethhdr_631.src_629 = src_629;
+  ev.args.ethhdr_631.ety_630 = ety_630;
   ev.tag = ethhdr_tag;
   return ev;
 }
@@ -83,28 +90,28 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-event_t mk_ethhdr(uint64_t dst_639 , uint64_t src_640 , uint16_t ety_641 ){
-  event_t tmp_677  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = ethhdr_642(dst_639, src_640, ety_641)};
-  return tmp_677;
+event_t mk_ethhdr(uint64_t dst_628 , uint64_t src_629 , uint16_t ety_630 ){
+  event_t tmp_666  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = ethhdr_631(dst_628, src_629, ety_630)};
+  return tmp_666;
 }
 uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
 uint8_t parse_event(packet_t*  pkt , event_t*  next_event , uint32_t ingress_port ){
-  uint64_t dst_639  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
-  uint64_t src_640  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
-  uint16_t ety_641  = ((uint16_t)(read_bits(pkt, 16)));
-  (*(next_event)) = mk_ethhdr(dst_639, src_640, ety_641);
+  uint64_t dst_628  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
+  uint64_t src_629  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
+  uint16_t ety_630  = ((uint16_t)(read_bits(pkt, 16)));
+  (*(next_event)) = mk_ethhdr(dst_628, src_629, ety_630);
   return pkt->cursor <= pkt->end;
 }
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint64_t dst_639  = ev_out->data.args.ethhdr_642.dst_639;
-      uint64_t src_640  = ev_out->data.args.ethhdr_642.src_640;
-      uint16_t ety_641  = ev_out->data.args.ethhdr_642.ety_641;
-      write_bits(buf_out, ((uint64_t)(ety_641)), 16);
-      write_bits(buf_out, ((uint64_t)(src_640)), 48);
-      write_bits(buf_out, ((uint64_t)(dst_639)), 48);
+      uint64_t dst_628  = ev_out->data.args.ethhdr_631.dst_628;
+      uint64_t src_629  = ev_out->data.args.ethhdr_631.src_629;
+      uint16_t ety_630  = ev_out->data.args.ethhdr_631.ety_630;
+      write_bits(buf_out, ((uint64_t)(ety_630)), 16);
+      write_bits(buf_out, ((uint64_t)(src_629)), 48);
+      write_bits(buf_out, ((uint64_t)(dst_628)), 48);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -124,12 +131,12 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
-      uint64_t dst_643  = ev_in->data.args.ethhdr_642.dst_639;
-      uint64_t src_644  = ev_in->data.args.ethhdr_642.src_640;
-      uint16_t ety_645  = ev_in->data.args.ethhdr_642.ety_641;
-      event_t this  = mk_ethhdr(dst_643, src_644, ety_645);
-      out_event_t tmp_678  = {.ev = mk_ethhdr(dst_643, src_644, ety_645), .port = ev_in->meta.in_port};
-      out_events[n] = tmp_678;
+      uint64_t dst_632  = ev_in->data.args.ethhdr_631.dst_628;
+      uint64_t src_633  = ev_in->data.args.ethhdr_631.src_629;
+      uint16_t ety_634  = ev_in->data.args.ethhdr_631.ety_630;
+      event_t this  = mk_ethhdr(dst_632, src_633, ety_634);
+      out_event_t tmp_667  = {.ev = mk_ethhdr(dst_632, src_633, ety_634), .port = ev_in->meta.in_port};
+      out_events[n] = tmp_667;
       n = n + 1;
       break;
     }

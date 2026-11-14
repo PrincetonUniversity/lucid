@@ -53,6 +53,13 @@ void write_bits(packet_t* bs, uint64_t v, int n) {
     }
 }
 uint32_t flood(uint32_t port ){ return port + 10000;/* TODO!*/ }
+
+/* installs that a full table rejected */
+static uint64_t table_full_installs = 0;
+static void report_table_stats(void) {
+    if (table_full_installs)
+        fprintf(stderr, "table installs rejected (table full): %llu\n", (unsigned long long)table_full_installs);
+}
 typedef struct {
   uint16_t len;
   uint8_t is_packet;
@@ -65,17 +72,17 @@ typedef struct {
   uint16_t tag;
   union {
     struct {
-      uint64_t dst_792;
-      uint64_t src_793;
-      uint16_t ety_794;
-    } ethpkt_796;
+      uint64_t dst_781;
+      uint64_t src_782;
+      uint16_t ety_783;
+    } ethpkt_785;
   } args;
 } event_variant_t;
-event_variant_t ethpkt_796(uint64_t dst_792 , uint64_t src_793 , uint16_t ety_794 ){
+event_variant_t ethpkt_785(uint64_t dst_781 , uint64_t src_782 , uint16_t ety_783 ){
   event_variant_t ev  = {0};
-  ev.args.ethpkt_796.dst_792 = dst_792;
-  ev.args.ethpkt_796.src_793 = src_793;
-  ev.args.ethpkt_796.ety_794 = ety_794;
+  ev.args.ethpkt_785.dst_781 = dst_781;
+  ev.args.ethpkt_785.src_782 = src_782;
+  ev.args.ethpkt_785.ety_783 = ety_783;
   ev.tag = ethpkt_tag;
   return ev;
 }
@@ -83,28 +90,28 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-event_t mk_ethpkt(uint64_t dst_792 , uint64_t src_793 , uint16_t ety_794 ){
-  event_t tmp_842  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = ethpkt_796(dst_792, src_793, ety_794)};
-  return tmp_842;
+event_t mk_ethpkt(uint64_t dst_781 , uint64_t src_782 , uint16_t ety_783 ){
+  event_t tmp_831  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = ethpkt_785(dst_781, src_782, ety_783)};
+  return tmp_831;
 }
 uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
 uint8_t parse_event(packet_t*  pkt , event_t*  next_event , uint32_t ingress_port ){
-  uint64_t dst_792  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
-  uint64_t src_793  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
-  uint16_t ety_794  = ((uint16_t)(read_bits(pkt, 16)));
-  (*(next_event)) = mk_ethpkt(dst_792, src_793, ety_794);
+  uint64_t dst_781  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
+  uint64_t src_782  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
+  uint16_t ety_783  = ((uint16_t)(read_bits(pkt, 16)));
+  (*(next_event)) = mk_ethpkt(dst_781, src_782, ety_783);
   return pkt->cursor <= pkt->end;
 }
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint64_t dst_792  = ev_out->data.args.ethpkt_796.dst_792;
-      uint64_t src_793  = ev_out->data.args.ethpkt_796.src_793;
-      uint16_t ety_794  = ev_out->data.args.ethpkt_796.ety_794;
-      write_bits(buf_out, ((uint64_t)(ety_794)), 16);
-      write_bits(buf_out, ((uint64_t)(src_793)), 48);
-      write_bits(buf_out, ((uint64_t)(dst_792)), 48);
+      uint64_t dst_781  = ev_out->data.args.ethpkt_785.dst_781;
+      uint64_t src_782  = ev_out->data.args.ethpkt_785.src_782;
+      uint16_t ety_783  = ev_out->data.args.ethpkt_785.ety_783;
+      write_bits(buf_out, ((uint64_t)(ety_783)), 16);
+      write_bits(buf_out, ((uint64_t)(src_782)), 48);
+      write_bits(buf_out, ((uint64_t)(dst_781)), 48);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -124,13 +131,13 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
-      uint64_t dst_797  = ev_in->data.args.ethpkt_796.dst_792;
-      uint64_t src_798  = ev_in->data.args.ethpkt_796.src_793;
-      uint16_t ety_799  = ev_in->data.args.ethpkt_796.ety_794;
-      event_t this  = mk_ethpkt(dst_797, src_798, ety_799);
-      if (ety_799 == 2048) {
-        out_event_t tmp_843  = {.ev = mk_ethpkt(src_798, dst_797, ety_799), .port = ev_in->meta.in_port};
-        out_events[n] = tmp_843;
+      uint64_t dst_786  = ev_in->data.args.ethpkt_785.dst_781;
+      uint64_t src_787  = ev_in->data.args.ethpkt_785.src_782;
+      uint16_t ety_788  = ev_in->data.args.ethpkt_785.ety_783;
+      event_t this  = mk_ethpkt(dst_786, src_787, ety_788);
+      if (ety_788 == 2048) {
+        out_event_t tmp_832  = {.ev = mk_ethpkt(src_787, dst_786, ety_788), .port = ev_in->meta.in_port};
+        out_events[n] = tmp_832;
         n = n + 1;
       }
       break;

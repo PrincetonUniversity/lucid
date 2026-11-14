@@ -53,6 +53,13 @@ void write_bits(packet_t* bs, uint64_t v, int n) {
     }
 }
 uint32_t flood(uint32_t port ){ return port + 10000;/* TODO!*/ }
+
+/* installs that a full table rejected */
+static uint64_t table_full_installs = 0;
+static void report_table_stats(void) {
+    if (table_full_installs)
+        fprintf(stderr, "table installs rejected (table full): %llu\n", (unsigned long long)table_full_installs);
+}
 typedef struct {
   uint16_t len;
   uint8_t is_packet;
@@ -65,21 +72,21 @@ typedef struct {
   uint16_t tag;
   union {
     struct {
-      uint8_t ver_934;
-      uint16_t len_935;
-      uint64_t dst_936;
-      uint64_t src_937;
-      uint16_t ety_938;
-    } hdr_940;
+      uint8_t ver_923;
+      uint16_t len_924;
+      uint64_t dst_925;
+      uint64_t src_926;
+      uint16_t ety_927;
+    } hdr_929;
   } args;
 } event_variant_t;
-event_variant_t hdr_940(uint8_t ver_934 , uint16_t len_935 , uint64_t dst_936 , uint64_t src_937 , uint16_t ety_938 ){
+event_variant_t hdr_929(uint8_t ver_923 , uint16_t len_924 , uint64_t dst_925 , uint64_t src_926 , uint16_t ety_927 ){
   event_variant_t ev  = {0};
-  ev.args.hdr_940.ver_934 = ver_934;
-  ev.args.hdr_940.len_935 = len_935;
-  ev.args.hdr_940.dst_936 = dst_936;
-  ev.args.hdr_940.src_937 = src_937;
-  ev.args.hdr_940.ety_938 = ety_938;
+  ev.args.hdr_929.ver_923 = ver_923;
+  ev.args.hdr_929.len_924 = len_924;
+  ev.args.hdr_929.dst_925 = dst_925;
+  ev.args.hdr_929.src_926 = src_926;
+  ev.args.hdr_929.ety_927 = ety_927;
   ev.tag = hdr_tag;
   return ev;
 }
@@ -87,34 +94,34 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-event_t mk_hdr(uint8_t ver_934 , uint16_t len_935 , uint64_t dst_936 , uint64_t src_937 , uint16_t ety_938 ){
-  event_t tmp_997  = {.meta = {.len = 16, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = hdr_940(ver_934, len_935, dst_936, src_937, ety_938)};
-  return tmp_997;
+event_t mk_hdr(uint8_t ver_923 , uint16_t len_924 , uint64_t dst_925 , uint64_t src_926 , uint16_t ety_927 ){
+  event_t tmp_986  = {.meta = {.len = 16, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = hdr_929(ver_923, len_924, dst_925, src_926, ety_927)};
+  return tmp_986;
 }
 uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
 uint8_t parse_event(packet_t*  pkt , event_t*  next_event , uint32_t ingress_port ){
-  uint8_t ver_934  = ((uint8_t)(read_bits(pkt, 4))) & 15;
-  uint16_t len_935  = ((uint16_t)(read_bits(pkt, 12))) & 4095;
-  uint64_t dst_936  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
-  uint64_t src_937  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
-  uint16_t ety_938  = ((uint16_t)(read_bits(pkt, 16)));
-  (*(next_event)) = mk_hdr(ver_934, len_935, dst_936, src_937, ety_938);
+  uint8_t ver_923  = ((uint8_t)(read_bits(pkt, 4))) & 15;
+  uint16_t len_924  = ((uint16_t)(read_bits(pkt, 12))) & 4095;
+  uint64_t dst_925  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
+  uint64_t src_926  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
+  uint16_t ety_927  = ((uint16_t)(read_bits(pkt, 16)));
+  (*(next_event)) = mk_hdr(ver_923, len_924, dst_925, src_926, ety_927);
   return pkt->cursor <= pkt->end;
 }
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint8_t ver_934  = ev_out->data.args.hdr_940.ver_934;
-      uint16_t len_935  = ev_out->data.args.hdr_940.len_935;
-      uint64_t dst_936  = ev_out->data.args.hdr_940.dst_936;
-      uint64_t src_937  = ev_out->data.args.hdr_940.src_937;
-      uint16_t ety_938  = ev_out->data.args.hdr_940.ety_938;
-      write_bits(buf_out, ((uint64_t)(ety_938)), 16);
-      write_bits(buf_out, ((uint64_t)(src_937)), 48);
-      write_bits(buf_out, ((uint64_t)(dst_936)), 48);
-      write_bits(buf_out, ((uint64_t)(len_935)), 12);
-      write_bits(buf_out, ((uint64_t)(ver_934)), 4);
+      uint8_t ver_923  = ev_out->data.args.hdr_929.ver_923;
+      uint16_t len_924  = ev_out->data.args.hdr_929.len_924;
+      uint64_t dst_925  = ev_out->data.args.hdr_929.dst_925;
+      uint64_t src_926  = ev_out->data.args.hdr_929.src_926;
+      uint16_t ety_927  = ev_out->data.args.hdr_929.ety_927;
+      write_bits(buf_out, ((uint64_t)(ety_927)), 16);
+      write_bits(buf_out, ((uint64_t)(src_926)), 48);
+      write_bits(buf_out, ((uint64_t)(dst_925)), 48);
+      write_bits(buf_out, ((uint64_t)(len_924)), 12);
+      write_bits(buf_out, ((uint64_t)(ver_923)), 4);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -134,14 +141,14 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
-      uint8_t ver_941  = ev_in->data.args.hdr_940.ver_934;
-      uint16_t len_942  = ev_in->data.args.hdr_940.len_935;
-      uint64_t dst_943  = ev_in->data.args.hdr_940.dst_936;
-      uint64_t src_944  = ev_in->data.args.hdr_940.src_937;
-      uint16_t ety_945  = ev_in->data.args.hdr_940.ety_938;
-      event_t this  = mk_hdr(ver_941, len_942, dst_943, src_944, ety_945);
-      out_event_t tmp_998  = {.ev = mk_hdr(ver_941, (len_942 + 1) & 4095, dst_943, src_944, ety_945), .port = ev_in->meta.in_port};
-      out_events[n] = tmp_998;
+      uint8_t ver_930  = ev_in->data.args.hdr_929.ver_923;
+      uint16_t len_931  = ev_in->data.args.hdr_929.len_924;
+      uint64_t dst_932  = ev_in->data.args.hdr_929.dst_925;
+      uint64_t src_933  = ev_in->data.args.hdr_929.src_926;
+      uint16_t ety_934  = ev_in->data.args.hdr_929.ety_927;
+      event_t this  = mk_hdr(ver_930, len_931, dst_932, src_933, ety_934);
+      out_event_t tmp_987  = {.ev = mk_hdr(ver_930, (len_931 + 1) & 4095, dst_932, src_933, ety_934), .port = ev_in->meta.in_port};
+      out_events[n] = tmp_987;
       n = n + 1;
       break;
     }

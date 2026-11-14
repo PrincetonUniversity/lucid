@@ -56,8 +56,7 @@ event do_match(int<32> s) {
 
 
 
-event do_install(int<32> v, int<32> m) {
-  printf("installing entry: (%d &&& %d)", v, m);
+event do_install(int<32> v) {
+  printf("installing entry: %d", v);
   Table.install<unordered>(ftbl, v, hit_acn, 2);
-  Table.install_ternary<unordered>(ftbl, v, m, hit_acn, 3);
  }

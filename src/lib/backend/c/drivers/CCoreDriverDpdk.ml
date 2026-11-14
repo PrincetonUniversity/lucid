@@ -343,6 +343,7 @@ static void dpdk_shutdown(void) {
 		" recirc-full %"PRIu64" alloc %"PRIu64" no-port %"PRIu64" tx-full %"PRIu64" calendar %"PRIu64" bug %"PRIu64"\n",
 		st.rx, st.tx, st.recirc, st.parse_drop, st.seg_drop, st.recirc_drop, st.alloc_drop, st.port_drop,
 		st.tx_drop, st.cal_drop, st.bug_drop);
+	report_table_stats();
 }
 |}]
 

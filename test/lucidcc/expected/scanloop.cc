@@ -53,6 +53,13 @@ void write_bits(packet_t* bs, uint64_t v, int n) {
     }
 }
 uint32_t flood(uint32_t port ){ return port + 10000;/* TODO!*/ }
+
+/* installs that a full table rejected */
+static uint64_t table_full_installs = 0;
+static void report_table_stats(void) {
+    if (table_full_installs)
+        fprintf(stderr, "table installs rejected (table full): %llu\n", (unsigned long long)table_full_installs);
+}
 typedef struct {
   uint16_t len;
   uint8_t is_packet;
@@ -68,30 +75,30 @@ typedef struct {
   union {
     struct {
       
-    } tick_710;
+    } tick_699;
     struct {
-      uint32_t x_711;
-    } pkt_in_712;
+      uint32_t x_700;
+    } pkt_in_701;
     struct {
-      uint32_t x_713;
-    } pkt_out_714;
+      uint32_t x_702;
+    } pkt_out_703;
   } args;
 } event_variant_t;
-event_variant_t tick_710(){
+event_variant_t tick_699(){
   event_variant_t ev  = {0};
   
   ev.tag = tick_tag;
   return ev;
 }
-event_variant_t pkt_in_712(uint32_t x_711 ){
+event_variant_t pkt_in_701(uint32_t x_700 ){
   event_variant_t ev  = {0};
-  ev.args.pkt_in_712.x_711 = x_711;
+  ev.args.pkt_in_701.x_700 = x_700;
   ev.tag = pkt_in_tag;
   return ev;
 }
-event_variant_t pkt_out_714(uint32_t x_713 ){
+event_variant_t pkt_out_703(uint32_t x_702 ){
   event_variant_t ev  = {0};
-  ev.args.pkt_out_714.x_713 = x_713;
+  ev.args.pkt_out_703.x_702 = x_702;
   ev.tag = pkt_out_tag;
   return ev;
 }
@@ -100,16 +107,16 @@ typedef struct {
   event_variant_t data;
 } event_t;
 event_t mk_tick(){
-  event_t tmp_756  = {.meta = {.len = 0, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = tick_710()};
-  return tmp_756;
+  event_t tmp_745  = {.meta = {.len = 0, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = tick_699()};
+  return tmp_745;
 }
-event_t mk_pkt_in(uint32_t x_711 ){
-  event_t tmp_757  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_in_712(x_711)};
-  return tmp_757;
+event_t mk_pkt_in(uint32_t x_700 ){
+  event_t tmp_746  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_in_701(x_700)};
+  return tmp_746;
 }
-event_t mk_pkt_out(uint32_t x_713 ){
-  event_t tmp_758  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_out_714(x_713)};
-  return tmp_758;
+event_t mk_pkt_out(uint32_t x_702 ){
+  event_t tmp_747  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_out_703(x_702)};
+  return tmp_747;
 }
 uint32_t recirculation_port  = 196;
 uint32_t self  = 0;
@@ -129,14 +136,14 @@ uint8_t parse_event(packet_t*  packet , event_t*  next_event , uint32_t ingress_
           break;
         }
         case 2: {
-          uint32_t x_711  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_pkt_in(x_711);
+          uint32_t x_700  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_pkt_in(x_700);
           return packet->cursor <= packet->end;
           break;
         }
         case 3: {
-          uint32_t x_713  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_pkt_out(x_713);
+          uint32_t x_702  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_pkt_out(x_702);
           return packet->cursor <= packet->end;
           break;
         }
@@ -168,8 +175,8 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 2: {
-      uint32_t x_711  = ev_out->data.args.pkt_in_712.x_711;
-      write_bits(buf_out, ((uint64_t)(x_711)), 32);
+      uint32_t x_700  = ev_out->data.args.pkt_in_701.x_700;
+      write_bits(buf_out, ((uint64_t)(x_700)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(2)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -180,8 +187,8 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 3: {
-      uint32_t x_713  = ev_out->data.args.pkt_out_714.x_713;
-      write_bits(buf_out, ((uint64_t)(x_713)), 32);
+      uint32_t x_702  = ev_out->data.args.pkt_out_703.x_702;
+      write_bits(buf_out, ((uint64_t)(x_702)), 32);
       if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(3)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -201,23 +208,23 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 3: {
-      uint32_t x_715  = ev_in->data.args.pkt_out_714.x_713;
-      event_t this  = mk_pkt_out(x_715);
+      uint32_t x_704  = ev_in->data.args.pkt_out_703.x_702;
+      event_t this  = mk_pkt_out(x_704);
       break;
     }
     case 1: {
       
       event_t this  = mk_tick();
-      out_event_t tmp_759  = {.ev = mk_tick(), .port = 4294967295};
-      out_events[n] = tmp_759;
+      out_event_t tmp_748  = {.ev = mk_tick(), .port = 4294967295};
+      out_events[n] = tmp_748;
       n = n + 1;
       break;
     }
     case 2: {
-      uint32_t x_716  = ev_in->data.args.pkt_in_712.x_711;
-      event_t this  = mk_pkt_in(x_716);
-      out_event_t tmp_760  = {.ev = mk_pkt_out(x_716), .port = 0};
-      out_events[n] = tmp_760;
+      uint32_t x_705  = ev_in->data.args.pkt_in_701.x_700;
+      event_t this  = mk_pkt_in(x_705);
+      out_event_t tmp_749  = {.ev = mk_pkt_out(x_705), .port = 0};
+      out_events[n] = tmp_749;
       n = n + 1;
       break;
     }

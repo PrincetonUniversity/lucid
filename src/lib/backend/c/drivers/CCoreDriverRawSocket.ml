@@ -522,6 +522,7 @@ int main(int argc, char** argv) {
         do_tx();        // fan out a bounded burst: deparse+send; recirc re-enqueues
     }
     printf("Processed %llu packets\n", (unsigned long long)pkt_ct);
+    report_table_stats();
     return 0;
 }
 |}]

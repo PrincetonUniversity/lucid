@@ -7,7 +7,7 @@
  "events": [
    {"name":"do_match", "args":[2]},
    {"name":"do_match", "args":[2]},
-   {"name":"do_install", "args":[3, 2]},
+   {"name":"do_install", "args":[3]},
    {"name":"do_match", "args":[3]}
  ]
 }

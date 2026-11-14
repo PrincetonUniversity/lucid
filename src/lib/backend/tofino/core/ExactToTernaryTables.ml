@@ -39,8 +39,6 @@ let process ds =
           ECall(ternary_cid fname, args, unordered)
         | ["Table"; ("install" | "update" as fname)], [tbl; key; acn; acn_arg] ->
           ECall(ternary_cid fname, [tbl; key; mask key; prio; acn; acn_arg], unordered)
-        | ["Table"; "install_ternary"], [tbl; key; mask; acn; acn_arg] ->
-          ECall(ternary_cid "install", [tbl; key; mask; prio; acn; acn_arg], unordered)
         | ["Table"; "remove"], [tbl; key] ->
           ECall(ternary_cid "remove", [tbl; key; mask key; prio], unordered)
         | "Table"::_, _ ->
