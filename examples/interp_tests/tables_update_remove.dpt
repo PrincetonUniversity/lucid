@@ -1,0 +1,39 @@
+// update and remove on an exact-match table, plus the cases that 
+// leave the table unchanged: installing an entry that already exists, 
+// installing into a full table, and updating or removing a missing entry.
+
+type res_t = {
+  int val;
+  bool is_hit;
+}
+
+action res_t hit_acn(int x)(int a) {
+  return {val = x; is_hit = true};
+}
+
+action res_t miss_acn(int x)(int a) {
+  return {val = x; is_hit = false};
+}
+
+// a table with room for 2 entries
+global Table.t<<int, int, int, res_t>> tbl = Table.create(2, [hit_acn; miss_acn], miss_acn, 0);
+
+event do_lookup(int k) {
+  res_t r = Table.lookup(tbl, k, 0);
+  printf("lookup %d: val=%d hit=%b", k, r#val, r#is_hit);
+}
+
+event do_install(int k, int v) {
+  printf("install %d -> %d", k, v);
+  Table.install(tbl, k, hit_acn, v);
+}
+
+event do_update(int k, int v) {
+  printf("update %d -> %d", k, v);
+  Table.update(tbl, k, hit_acn, v);
+}
+
+event do_remove(int k) {
+  printf("remove %d", k);
+  Table.remove(tbl, k);
+}

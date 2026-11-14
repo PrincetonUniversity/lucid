@@ -53,10 +53,11 @@ The handler uses this twice:
   with `new_ip.hdr_csum` pre-zeroed.
 
 ## Notes
-- **LPM via `Table.install` masks.** Lucid's `Table.install_ternary` 
-  (which also backs the JSON `Table.install` command
-  when a `mask` field is provided) supports ordered rules with wildcard
-  bits. This example uses it for LPM.
+- **LPM as host routes.** The JSON installs one exact entry per /32 host,
+  so an exact-match `Table` is enough for this example. A table with
+  shorter prefixes would be a `TernaryTable`: each prefix is a
+  `TernaryTable.install` command with a `mask`, and a `priority` equal to
+  the prefix length so that the longest prefix wins.
 - **Install-time data is a tuple `(int<48>, int<32>)`.** The two action
   install args (`dmac`, `port`) are declared positionally on the actions and
   the table's data_ty reflects that as a tuple. The JSON `Table.install`

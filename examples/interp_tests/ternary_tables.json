@@ -1,0 +1,28 @@
+{
+  "random seed": 0,
+  "max time": 9999999,
+  "default input gap": 10000,
+  "events": [
+    {"name":"do_install", "args":[0, 0, 1, 100]},
+    {"name":"do_lookup", "args":[5]},
+    {"name":"do_install", "args":[4, 252, 5, 200]},
+    {"name":"do_lookup", "args":[5]},
+    {"name":"do_lookup", "args":[9]},
+    {"name":"do_install", "args":[5, 4294967295, 5, 300]},
+    {"name":"do_lookup", "args":[5]},
+    {"name":"do_install", "args":[5, 4294967295, 9, 400]},
+    {"name":"do_lookup", "args":[5]},
+    {"name":"do_install", "args":[7, 252, 5, 999]},
+    {"name":"do_lookup", "args":[6]},
+    {"name":"do_install", "args":[8, 4294967295, 1, 500]},
+    {"name":"do_lookup", "args":[8]},
+    {"name":"do_update", "args":[4, 252, 5, 201]},
+    {"name":"do_lookup", "args":[6]},
+    {"name":"do_update", "args":[4, 252, 6, 1]},
+    {"name":"do_remove", "args":[5, 4294967295, 9]},
+    {"name":"do_lookup", "args":[5]},
+    {"name":"do_remove", "args":[5, 4294967295, 9]},
+    {"type": "command", "name":"TernaryTable.install", "args":{"table":"tbl", "key":["8<32>"], "mask":["4294967295<32>"], "priority":7, "action":"tbl.hit_acn", "args":[500]}},
+    {"name":"do_lookup", "args":[8]}
+  ]
+}

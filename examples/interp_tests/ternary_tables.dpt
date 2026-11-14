@@ -1,0 +1,40 @@
+// a ternary table: masks, priorities, update and remove. 
+// An entry is identified by its key, mask and priority. A lookup uses the 
+// matching entry with the highest priority (a higher number is a higher 
+// priority); among entries of equal priority, the first one installed.
+
+type res_t = {
+  int val;
+  bool is_hit;
+}
+
+action res_t hit_acn(int x)(int a) {
+  return {val = x; is_hit = true};
+}
+
+action res_t miss_acn(int x)(int a) {
+  return {val = x; is_hit = false};
+}
+
+// a table with room for 4 entries
+global TernaryTable.t<<int, int, int, res_t>> tbl = TernaryTable.create(4, [hit_acn; miss_acn], miss_acn, 0);
+
+event do_lookup(int k) {
+  res_t r = TernaryTable.lookup(tbl, k, 0);
+  printf("lookup %d: val=%d hit=%b", k, r#val, r#is_hit);
+}
+
+event do_install(int k, int m, int prio, int v) {
+  printf("install (%d &&& %d) prio %d -> %d", k, m, prio, v);
+  TernaryTable.install(tbl, k, m, prio, hit_acn, v);
+}
+
+event do_update(int k, int m, int prio, int v) {
+  printf("update (%d &&& %d) prio %d -> %d", k, m, prio, v);
+  TernaryTable.update(tbl, k, m, prio, hit_acn, v);
+}
+
+event do_remove(int k, int m, int prio) {
+  printf("remove (%d &&& %d) prio %d", k, m, prio);
+  TernaryTable.remove(tbl, k, m, prio);
+}

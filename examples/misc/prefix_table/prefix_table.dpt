@@ -14,14 +14,15 @@ and the mask for a /24 prefix is 0xFFFFFF00 (24 bits set to 1, 8 bits set to 0).
 As a decimal integer, the mask is 0xFFFFFF00 = 4294967040.
 
 so, prefix 1.2.3.0/24, written as a value and mask, is 16909056<32> and 4294967040<32>.
-And so you want a Table.install command (in the json) with that value and mask, for example: 
+And so you want a TernaryTable.install command (in the json) with that value and mask, for example: 
 {
     "type": "command", 
-    "name":"Table.install", 
+    "name":"TernaryTable.install", 
     "args":{
         "table":"mytbl", 
         "key":["16909056<32>"], 
         "mask":["4294967040<32>"], 
+        "priority":24,
         "action":"mytbl.get_flag", 
         "args":["true"]
     }
@@ -34,29 +35,33 @@ But 16909054, which is 1.2.2.255, will not.
 
 ========== match order =========
 Usually when you match on prefixes, you want the longest prefix to match first.
-One way to do this in Lucid is to add the rules for the longer prefixes first, 
-because the lucid interpreter will match rules in the order they are added to the table.
+The way to do this in Lucid is to give each rule a priority equal to its prefix length, 
+because a ternary table uses the matching rule with the highest priority 
+(a higher number is a higher priority). 
 
-For example, suppose that the json we add these two rules: 
+For example, suppose that in the json we add these two rules: 
         {
             "type": "command", 
-            "name":"Table.install", 
-            "args":{
-                "table":"mytbl", 
-                "key":["16909057<32>"], 
-                "action":"mytbl.get_flag", 
-                "args":["false"]
-            }
-        },  
-        {
-            "type": "command", 
-            "name":"Table.install", 
+            "name":"TernaryTable.install", 
             "args":{
                 "table":"mytbl", 
                 "key":["16909056<32>"], 
                 "mask":["4294967040<32>"], 
+                "priority":24,
                 "action":"mytbl.get_flag", 
                 "args":["true"]
+            }
+        },
+        {
+            "type": "command", 
+            "name":"TernaryTable.install", 
+            "args":{
+                "table":"mytbl", 
+                "key":["16909057<32>"], 
+                "mask":["4294967295<32>"], 
+                "priority":32,
+                "action":"mytbl.get_flag", 
+                "args":["false"]
             }
         }
 
@@ -65,27 +70,19 @@ and anything else in the (1.2.3.0/24) subnet will match the true rule.
 
 */
 
-table_type mytbl_t = {
-    key_type: (int)
-    arg_type: ()
-    ret_type: bool
+action bool get_flag(bool flag)() {
+    return flag;
 }
 
-action_constr get_flag(bool flag) = {
-    return action bool get_flag_action() {
-        return flag;
-    };
-};
-
 // table that returns "false" by default
-global mytbl_t mytbl = table_create<mytbl_t>((get_flag),1024, get_flag(false)); 
+global TernaryTable.t<<int, bool, (), bool>> mytbl = TernaryTable.create(1024, [get_flag], get_flag, false);
 
 
 
 event ip_pkt(int dst);
 handle ip_pkt(int dst) {
     printf("inside of ip_pkt(%d)", dst);
-    bool flag = table_match(mytbl, dst, ());
+    bool flag = TernaryTable.lookup(mytbl, dst, ());
     if (flag) {
         printf("flag is true");
     } else {

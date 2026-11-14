@@ -1,0 +1,65 @@
+dpt: Auto-detected specification file examples/interp_tests/tables_update_remove.json
+dpt: Simulating...
+dpt: Using random seed: 0
+
+t=0: Handling event do_install(1,10) at switch 0, port 0
+install 1 -> 10
+t=10000: Handling event do_lookup(1) at switch 0, port 0
+lookup 1: val=10 hit=true
+t=20000: Handling event do_install(1,99) at switch 0, port 0
+install 1 -> 99
+t=30000: Handling event do_lookup(1) at switch 0, port 0
+lookup 1: val=10 hit=true
+t=40000: Handling event do_update(1,11) at switch 0, port 0
+update 1 -> 11
+t=50000: Handling event do_lookup(1) at switch 0, port 0
+lookup 1: val=11 hit=true
+t=60000: Handling event do_update(5,50) at switch 0, port 0
+update 5 -> 50
+warning: Table.update: table tbl has no such entry
+t=70000: Handling event do_lookup(5) at switch 0, port 0
+lookup 5: val=0 hit=false
+t=80000: Handling event do_install(2,20) at switch 0, port 0
+install 2 -> 20
+t=90000: Handling event do_install(3,30) at switch 0, port 0
+install 3 -> 30
+warning: Table.install: table tbl is full, the entry was not installed
+t=100000: Handling event do_lookup(3) at switch 0, port 0
+lookup 3: val=0 hit=false
+t=110000: Handling event do_install(2,21) at switch 0, port 0
+install 2 -> 21
+t=120000: Handling event do_lookup(2) at switch 0, port 0
+lookup 2: val=20 hit=true
+t=130000: Handling event do_remove(1) at switch 0, port 0
+remove 1
+t=140000: Handling event do_lookup(1) at switch 0, port 0
+lookup 1: val=0 hit=false
+t=150000: Handling event do_remove(1) at switch 0, port 0
+remove 1
+warning: Table.remove: table tbl has no such entry
+t=160000: Handling event do_install(3,30) at switch 0, port 0
+install 3 -> 30
+t=170000: Handling event do_lookup(3) at switch 0, port 0
+lookup 3: val=30 hit=true
+dpt: Final State:
+
+Switch 0 : {
+
+ Pipeline : [
+    tbl(0) :[
+  {key: ((2,4294967295)); action: hit_acn(20)}
+  {key: ((3,4294967295)); action: hit_acn(30)}
+  {default_action: miss_acn(0);}
+]
+  ]
+
+ Events :   [ ]
+
+ Exits :    [ ]
+
+ Drops :    [ ]
+
+ packet events handled: 0
+ total events handled: 18
+
+}

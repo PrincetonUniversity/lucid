@@ -1,0 +1,25 @@
+{
+  "random seed": 0,
+  "max time": 9999999,
+  "default input gap": 10000,
+  "events": [
+    {"name":"do_install", "args":[1, 10]},
+    {"name":"do_lookup", "args":[1]},
+    {"name":"do_install", "args":[1, 99]},
+    {"name":"do_lookup", "args":[1]},
+    {"name":"do_update", "args":[1, 11]},
+    {"name":"do_lookup", "args":[1]},
+    {"name":"do_update", "args":[5, 50]},
+    {"name":"do_lookup", "args":[5]},
+    {"name":"do_install", "args":[2, 20]},
+    {"name":"do_install", "args":[3, 30]},
+    {"name":"do_lookup", "args":[3]},
+    {"name":"do_install", "args":[2, 21]},
+    {"name":"do_lookup", "args":[2]},
+    {"name":"do_remove", "args":[1]},
+    {"name":"do_lookup", "args":[1]},
+    {"name":"do_remove", "args":[1]},
+    {"name":"do_install", "args":[3, 30]},
+    {"name":"do_lookup", "args":[3]}
+  ]
+}
