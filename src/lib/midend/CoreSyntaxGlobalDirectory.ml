@@ -27,10 +27,6 @@ let core_exp_to_arrmeta id (exp:C.exp) =
 ;;
 
 let core_exp_to_tblmeta id (exp : C.exp) = 
-  let user_key sz = {kid = None; kty = "ternary"; ksize = sz;} in
-  let priority_key = 
-    {kid = Some(Cid.create ["$MATCH_PRIORITY"]); kty = "exact"; ksize = 32}
-  in
   let evar_to_action (exp : C.exp) = 
     let aid = match exp.espan.global_created_in_src with
       | None -> error "[evar_to_action] action expression not annotated with source id"
@@ -46,13 +42,15 @@ let core_exp_to_tblmeta id (exp : C.exp) =
     in
     {aid; acompiled_id; arg_sizes}
   in  
+  (* a ternary table has ternary keys and a priority, 
+     an exact table has exact keys *)
   let keys = match exp.ety.raw_ty with
-    | TName(_, sizes) -> 
+    | TName(cid, sizes) -> (
       let key_sizes = CoreSyntax.size_to_ints (List.hd sizes) in
-      (List.map user_key key_sizes)@[priority_key]
-    (* | TTable(tty) -> 
-      let key_sizes = List.map (fun sz -> match sz with | C.Sz sz -> sz | _ -> error "need singleton size") tty.tkey_sizes in
-      (List.map user_key key_sizes)@[priority_key]  *)
+      let user_key kty sz = {kid = None; kty; ksize = sz;} in
+      match (Cid.names cid) with 
+      | "TernaryTable"::_ -> (List.map (user_key "ternary") key_sizes)@[priority_key]
+      | _ -> List.map (user_key "exact") key_sizes)
     | _ -> error "[exp_to_tblmeta] expression is not a table type"
   in
   let actions, length = match exp.e with

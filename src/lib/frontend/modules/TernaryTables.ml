@@ -284,3 +284,148 @@ let signature =
   , defs
   , constructors )
 ;;
+
+
+(*** helpers to convert to old syntax for tofino backend. 
+     The tofino backend only has ternary tables: ExactToTernaryTables 
+     converts every Table into a TernaryTable. ***)
+let function_cids = 
+  (fst (List.split constructors))@(List.map 
+    (fun (def: InterpSwitch.global_fun ) -> def.cid) 
+    (defs)
+  )
+;;
+
+let is_table_lookup cid = Cid.equal cid lookup_cid
+
+let rec flatten_core_exp (exp: CoreSyntax.exp) = match exp.e with 
+  | ETuple(es) -> List.map flatten_core_exp es |> List.flatten
+  | ERecord(label_exps) -> List.map (fun (_, exp) -> flatten_core_exp exp) label_exps |> List.flatten
+  | _ -> [exp]
+;;
+
+let is_tbl_ty (raw_ty : CoreSyntax.raw_ty) = 
+  match raw_ty with 
+  | TName(cid, _) -> Cid.equal cid t_id
+  | _ -> false
+;;
+
+type core_tbl_ty = 
+  { tkey_sizes : CoreSyntax.size list
+  (* ; tinstallparam_tys : CoreSyntax.ty list *)
+  ; tparam_tys : CoreSyntax.ty list
+  ; tret_tys : CoreSyntax.ty list
+  }
+;;
+
+type core_tbl_def = 
+{ tid : CoreSyntax.id (* for convenience *)
+; tty : CoreSyntax.ty
+; tactions : CoreSyntax. exp list
+; tsize : CoreSyntax.exp
+; tdefault : CoreSyntax.cid * CoreSyntax.exp list
+}
+
+type core_tbl_match = 
+{
+  tbl : CoreSyntax.exp; 
+  keys : CoreSyntax.exp list;
+  args : CoreSyntax.exp list;
+  outs : Id.t list; 
+  out_tys : CoreSyntax.ty list option;
+}
+
+let size_ints (sz : CoreSyntax.size) = match sz with 
+  | Sz sz -> [sz]
+  | Szs szs -> szs
+;;
+let size_to_ty (sz: int) = (CoreSyntax.ty) @@ TInt(CoreSyntax.Sz sz) ;;
+
+let tname_to_ttable (rty : CoreSyntax.raw_ty) : core_tbl_ty =
+  match rty with
+  | TName(cid, [key_sizes; _; param_sizes; ret_sizes])
+  | TName(cid, [key_sizes; param_sizes; ret_sizes]) -> 
+    if (Cid.equal cid t_id) then (
+      (* tofino compiler actually doesn't need install param sizes -- it infers them. *)
+    (* let install_tys = List.map size_to_ty (size_ints install_param_sizes) in *)
+    let param_tys = List.map size_to_ty (size_ints param_sizes) in
+    let ret_tys = List.map size_to_ty (size_ints ret_sizes) in
+    { 
+      tkey_sizes = List.map (fun sz -> (CoreSyntax.Sz sz)) (size_ints key_sizes); 
+      (* tinstallparam_tys = install_tys; *)
+      tparam_tys = param_tys;
+      tret_tys = ret_tys;
+    })
+    else 
+      error@@"[tname_to_ttable] table does not have expected type >>"^(CorePrinting.raw_ty_to_string rty)^"<<"
+  | _ ->     
+    error@@"[tname_to_ttable] table does not have expected type >>"^(CorePrinting.raw_ty_to_string rty)^"<<"
+;;
+
+
+let dglobal_params_to_tbl_def tid (exp : CoreSyntax.exp) : core_tbl_def = 
+  match exp.e with 
+  | CoreSyntax.ECall(_, [size; actions_tup; default_acn_ctor; default_arg], _) -> (
+    let default_args = flatten_core_exp default_arg in 
+    let default_cid  = match default_acn_ctor.e with 
+      | EVar(cid) -> cid
+      | _ -> error "[Tables.dglobal_params_to_tbl_def] unexpected: default action argument is not an evar"
+    in
+    match actions_tup.e with
+    | ETuple(actions) ->
+      let tsize = size in
+      let tactions = actions in
+      let tdefault = (default_cid, default_args) in
+      let tty = exp.ety in
+      {tid; tty; tactions; tsize; tdefault}
+    | _ -> 
+      let tsize = size in
+      let tactions = [actions_tup] in
+      let tdefault = (default_cid, default_args) in
+      let tty = exp.ety in
+      {tid; tty; tactions; tsize; tdefault}
+  )
+  | _ -> error@@"got invalid table declaration: "^(CorePrinting.exp_to_string exp)
+;;
+
+let tbl_def_to_econstr (tbl_def : core_tbl_def) : CoreSyntax.exp = 
+  let open CoreSyntax in
+  let {tty; tactions; tsize; tdefault} = tbl_def in
+  let actions_tup = {CoreSyntax.e = CoreSyntax.ETuple(tactions); ety = tty; espan = Span.default} in
+  let default_action = {CoreSyntax.e = EVar(fst tdefault); ety = (List.hd tactions).ety; espan = Span.default} in
+  let default_arg = CoreSyntax.tup_sp (snd tdefault) Span.default in
+  let exp = {CoreSyntax.e = ECall(create_id, [tsize; actions_tup; default_action; default_arg], false); ety = tty; espan = Span.default} in
+  exp
+;;
+
+
+(* translate a coresyntax statement into a table match command *)
+let s_to_tbl_match (s : CoreSyntax.s) : core_tbl_match = 
+  match s with 
+    | CoreSyntax.STupleAssign({ids; tys; exp={e=CoreSyntax.ECall(_, [tbl; keys_exp; args_exp], _)}}) -> 
+      let keys = flatten_core_exp keys_exp in
+      let args = flatten_core_exp args_exp in
+      let outs = ids in
+      let out_tys = tys in
+      {tbl; keys; args; outs; out_tys}      
+    | CoreSyntax.SNoop -> 
+      error "[s_to_tbl_match] called on a noop?"
+    | _ -> 
+      
+      error @@ "[Table.s_to_tbl_match] only a STupleAssign can be translated into a table match, got:\n"^(CorePrinting.s_to_string s)
+;;
+
+let s_to_tbl_match_opt (s : CoreSyntax.s) : core_tbl_match option = 
+  try Some(s_to_tbl_match s) with _ -> None
+;;
+
+
+let tbl_match_to_s ({tbl; keys; args; outs; out_tys} : core_tbl_match) : CoreSyntax.s = 
+  let keys_exp = CoreSyntax.tup_sp keys Span.default in
+  let args_exp = CoreSyntax.tup_sp args Span.default in    
+  let ids = outs in
+  let tys = out_tys in
+  (* BUG: the tofino backend assumes that Table.match only appears in a TupleAssign statements. *)
+  let exp = {CoreSyntax.e =CoreSyntax.ECall(lookup_cid, [tbl; keys_exp; args_exp], false); ety = tbl.ety; espan = Span.default} in
+  CoreSyntax.STupleAssign({ids; tys; exp})
+;;

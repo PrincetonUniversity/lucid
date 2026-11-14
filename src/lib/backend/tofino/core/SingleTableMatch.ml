@@ -73,8 +73,8 @@ module ZZ = Z
 let rec tables_in_prog (tds:TC.tdecls) = 
   match tds with 
   | [] -> []
-  | {td=TDGlobal(tbl_id, tty, econstr)}::tds'  when Tables.is_tbl_ty (tty.raw_ty) -> 
-    let tbl_def = Tables.dglobal_params_to_tbl_def tbl_id econstr in
+  | {td=TDGlobal(tbl_id, tty, econstr)}::tds'  when TernaryTables.is_tbl_ty (tty.raw_ty) -> 
+    let tbl_def = TernaryTables.dglobal_params_to_tbl_def tbl_id econstr in
     tbl_def::(tables_in_prog tds')
   | _::tds' -> tables_in_prog tds'
 ;;
@@ -85,7 +85,7 @@ let tables_matched_in_prog (tds:TC.tdecls) =
       inherit [_] TC.s_iter as super
 
       method! visit_STupleAssign _ tupcmd  =
-        let tm = Tables.s_to_tbl_match@@STupleAssign(tupcmd) in
+        let tm = TernaryTables.s_to_tbl_match@@STupleAssign(tupcmd) in
         let tbl_id = tm.tbl |> CoreSyntax.exp_to_id in
         tbl_ids := tbl_id::(!tbl_ids);
     
@@ -99,7 +99,7 @@ let tables_defined_and_used_in_prog tds =
   let defined_tbls = tables_in_prog tds in
   let used_ids = tables_matched_in_prog tds in
   let defined_and_used_tbls = List.filter
-    (fun (tdef:Tables.core_tbl_def) -> List.exists (fun id -> id = tdef.tid) used_ids)
+    (fun (tdef:TernaryTables.core_tbl_def) -> List.exists (fun id -> id = tdef.tid) used_ids)
     defined_tbls
   in
   defined_and_used_tbls
@@ -129,7 +129,7 @@ let tblid_equal tid exp =
 
 let is_tbl_call tid stmt =
   try (
-    let tm = Tables.s_to_tbl_match stmt.s in 
+    let tm = TernaryTables.s_to_tbl_match stmt.s in 
     tblid_equal tid tm.tbl        
     )
   with _ -> false
@@ -156,24 +156,24 @@ let rec has_tbl_call tid stmt =
 let callnumvar_of_tid tid : (id * ty)  =
   Id.append_string "_callnum" tid, tint (Sz 32)
 ;;
-let callnumvar_of_table (td : Tables.core_tbl_def) : (id * ty) =
+let callnumvar_of_table (td : TernaryTables.core_tbl_def) : (id * ty) =
   Id.append_string "_callnum" td.tid, tint (Sz 32)
 ;;
 
-let keyvars_of_table (td : Tables.core_tbl_def) : (id * ty) list =
-  let tbl_ty = Tables.tname_to_ttable td.tty.raw_ty in
+let keyvars_of_table (td : TernaryTables.core_tbl_def) : (id * ty) list =
+  let tbl_ty = TernaryTables.tname_to_ttable td.tty.raw_ty in
   List.mapi 
     (fun i sz -> Id.append_string ("_"^(string_of_int i)^"_key") td.tid, tint sz)
     tbl_ty.tkey_sizes
 ;;    
-let argvars_of_table (td : Tables.core_tbl_def) : (id * ty) list =
-  let tbl_ty = Tables.tname_to_ttable td.tty.raw_ty in
+let argvars_of_table (td : TernaryTables.core_tbl_def) : (id * ty) list =
+  let tbl_ty = TernaryTables.tname_to_ttable td.tty.raw_ty in
   List.mapi 
     (fun i ty -> Id.append_string ("_"^(string_of_int i)^"_arg") td.tid, ty)
     tbl_ty.tparam_tys
 ;;    
-let retvars_of_table (td : Tables.core_tbl_def) : (id * ty) list =
-  let tbl_ty = Tables.tname_to_ttable td.tty.raw_ty in
+let retvars_of_table (td : TernaryTables.core_tbl_def) : (id * ty) list =
+  let tbl_ty = TernaryTables.tname_to_ttable td.tty.raw_ty in
   List.mapi 
     (fun i ty -> Id.append_string ("_"^(string_of_int i)^"_ret") td.tid, ty)
     tbl_ty.tret_tys
@@ -189,7 +189,7 @@ let iovars_of_table td : (id * ty) list =
 
 (* replace the match to tbl td 
    with statements to setup input for branchnum *)
-let cut_tbl_match td (tbl_match : Tables.core_tbl_match) branchnum =
+let cut_tbl_match td (tbl_match : TernaryTables.core_tbl_match) branchnum =
   let set_id, set_ty = callnumvar_of_table td in
   let set_callnum = sassign 
     (Cid.id set_id)
@@ -254,10 +254,10 @@ let cut_tbl_match td (tbl_match : Tables.core_tbl_match) branchnum =
 type pruned_branch = 
   {
     bcall_num : int;     
-    btbl_match : Tables.core_tbl_match;
+    btbl_match : TernaryTables.core_tbl_match;
     bstmts : statement list;
   }
-let rec prune_tbl_call_branches (tbl:Tables.core_tbl_def) stmt branchnum  : (statement * pruned_branch list * int) =
+let rec prune_tbl_call_branches (tbl:TernaryTables.core_tbl_def) stmt branchnum  : (statement * pruned_branch list * int) =
   (* remember: this is called from the immediate dominator branch *)
   match stmt.s with
   | SSeq(s1, s2) -> (
@@ -305,8 +305,8 @@ let rec prune_tbl_call_branches (tbl:Tables.core_tbl_def) stmt branchnum  : (sta
       bs
     in
     smatch es bs', pruned, branchnum'
-  | STupleAssign({exp={e=ECall(fcid, _, _); _}}) when Tables.is_table_lookup fcid -> 
-    let tm = Tables.s_to_tbl_match stmt.s in
+  | STupleAssign({exp={e=ECall(fcid, _, _); _}}) when TernaryTables.is_table_lookup fcid -> 
+    let tm = TernaryTables.s_to_tbl_match stmt.s in
     (* when we reach a table call, replace it with setup stmt and 
        cut the rest of the branch off.*)
        let stmt', branchnum' = 
@@ -328,13 +328,13 @@ let rec prune_tbl_call_branches (tbl:Tables.core_tbl_def) stmt branchnum  : (sta
   | _ -> stmt, [], branchnum
 ;;
 
-let count_tbl_matches (tbl:Tables.core_tbl_def) stmt = 
+let count_tbl_matches (tbl:TernaryTables.core_tbl_def) stmt = 
   let ct = ref 0 in
   let v =
     object
       inherit [_] s_iter as super
       method! visit_STupleAssign _ tupcmd  =
-        let tm = Tables.s_to_tbl_match@@STupleAssign(tupcmd) in
+        let tm = TernaryTables.s_to_tbl_match@@STupleAssign(tupcmd) in
         if (tblid_equal tbl.tid tm.tbl)
         then (ct := !ct + 1;)
     end
@@ -426,7 +426,7 @@ and contains_idom_branch n_calls tbl stmt =
    match statements, we generate a match instead of an if. *)
 let merged_match_stmt tbldef = 
   let cnum_var, cnum_ty = callnumvar_of_table tbldef in
-  let (tbl_match: Tables.core_tbl_match) = {
+  let (tbl_match: TernaryTables.core_tbl_match) = {
     tbl = exp_of_id tbldef.tid tbldef.tty;
     keys = List.map 
       (fun (id, ty) -> exp_of_id id ty)
@@ -438,7 +438,7 @@ let merged_match_stmt tbldef =
     out_tys = None; (* none because the out vars are declared already. *)
     }
   in 
-  let tbl_match_s = Tables.tbl_match_to_s tbl_match in
+  let tbl_match_s = TernaryTables.tbl_match_to_s tbl_match in
   let branches = [
     ([PNum(Z.of_int(0))], snoop);
     ([PWild], statement tbl_match_s)
@@ -558,10 +558,10 @@ if a table is only used once, we can use a simpler / more efficient transformati
         must go into an if statement and layout must respect that. *)
 let gate_table_match = object
   inherit [_] s_map as super
-  method! visit_statement (tbl: Tables.core_tbl_def) stmt = 
+  method! visit_statement (tbl: TernaryTables.core_tbl_def) stmt = 
     match stmt.s with
-    | STupleAssign _ when (Tables.s_to_tbl_match_opt stmt.s <> None) -> (
-      let tbl_match = Tables.s_to_tbl_match stmt.s in
+    | STupleAssign _ when (TernaryTables.s_to_tbl_match_opt stmt.s <> None) -> (
+      let tbl_match = TernaryTables.s_to_tbl_match stmt.s in
       let tbl_match_cid = exp_to_cid tbl_match.tbl in
       let tbl_cid = Cid.id tbl.tid in
       (* only process the specified table *)
@@ -583,7 +583,7 @@ let gate_table_match = object
            if the flag is set. *)
         let branches = [
            ([PNum(Z.of_int(0))], snoop);
-           ([PWild], {stmt with s = Tables.tbl_match_to_s tbl_match})
+           ([PWild], {stmt with s = TernaryTables.tbl_match_to_s tbl_match})
            ] 
         in
         let cnum_var, cnum_ty = callnumvar_of_table tbl in
@@ -659,7 +659,7 @@ let tables_matched_in_prog (tds:tdecls) =
     object
       inherit [_] s_iter as super
       method! visit_STupleAssign _ tuple_assign = 
-        let tm = Tables.s_to_tbl_match (STupleAssign(tuple_assign)) in
+        let tm = TernaryTables.s_to_tbl_match (STupleAssign(tuple_assign)) in
         tbl_ids := (tm.tbl |> CoreSyntax.exp_to_id)::(!tbl_ids)
     end
   in
@@ -672,7 +672,7 @@ let tables_defined_and_used_in_prog (tds : tdecls) =
   let defined_tbls = tables_in_prog tds in
   let used_ids = tables_matched_in_prog tds in
   let defined_and_used_tbls = List.filter
-    (fun (tdef:Tables.core_tbl_def) -> List.exists (fun id -> id = tdef.tid) used_ids)
+    (fun (tdef:TernaryTables.core_tbl_def) -> List.exists (fun id -> id = tdef.tid) used_ids)
     defined_tbls
   in
   defined_and_used_tbls

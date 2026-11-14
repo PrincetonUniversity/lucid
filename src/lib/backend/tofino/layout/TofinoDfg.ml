@@ -154,8 +154,8 @@ let rec read_ids_of_stmt (stmt:CoreSyntax.statement) : Cid.t list =
   (* | STableMatch(tm) -> 
     (read_ids_of_exps tm.keys)
     @(read_ids_of_exps tm.args) *)
-  | STupleAssign(_) when (Tables.s_to_tbl_match_opt stmt.s <> None) -> 
-    let tm = Tables.s_to_tbl_match stmt.s in
+  | STupleAssign(_) when (TernaryTables.s_to_tbl_match_opt stmt.s <> None) -> 
+    let tm = TernaryTables.s_to_tbl_match stmt.s in
     (read_ids_of_exps tm.keys)
     @(read_ids_of_exps tm.args)
   | STupleAssign(_) -> error "[coreDfg] read_ids_of_stmt: STupleAssign only supported for Table.lookup supported"

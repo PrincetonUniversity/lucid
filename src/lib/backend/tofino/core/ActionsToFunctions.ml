@@ -17,7 +17,7 @@ module IdMap = Collections.IdMap
 
 type env = {
   actions : (Id.t * action) list;
-  tables : (Id.t * Tables.core_tbl_def) list;
+  tables : (Id.t * TernaryTables.core_tbl_def) list;
 }
 let empty_env = {actions = []; tables = [];}
 
@@ -51,7 +51,7 @@ let openfcn id params stmt vars span =
 ;;
 
 (* convert an action into a function *)
-let action_to_function env (tmatch: Tables.core_tbl_match) acn_exp =
+let action_to_function env (tmatch: TernaryTables.core_tbl_match) acn_exp =
   let acn = lookup_acn env acn_exp in
   (* map from ids (params) to expressions (args) *)
   let subst_map =
@@ -105,7 +105,7 @@ let actions_to_functions env tdecl =
     object
       inherit [_] s_iter as super
       method! visit_STupleAssign env tassn = 
-        match (Tables.s_to_tbl_match_opt (STupleAssign(tassn))) with 
+        match (TernaryTables.s_to_tbl_match_opt (STupleAssign(tassn))) with 
         | Some(tmatch) -> 
             let tbl = lookup_tbl env tmatch.tbl in
             fcn_decls := (!fcn_decls)@(
@@ -139,8 +139,8 @@ let rec _process env tdecls =
       | TDActionConstr(acn) -> 
         let actions' = (acn.aid, acn)::env.actions in
         (_process {env with actions=actions'} tdecls)
-      | TDGlobal(id, tty, etblconstr)  when Tables.is_tbl_ty (tty.raw_ty) -> 
-        let tbl = Tables.dglobal_params_to_tbl_def id etblconstr in
+      | TDGlobal(id, tty, etblconstr)  when TernaryTables.is_tbl_ty (tty.raw_ty) -> 
+        let tbl = TernaryTables.dglobal_params_to_tbl_def id etblconstr in
         (* remember the table. *)
         let tables' = (tbl.tid, tbl)::env.tables in
         let env' = {env with tables=tables'} in
@@ -150,7 +150,7 @@ let rec _process env tdecls =
           tbl.tactions
         in
         let tbl' = {tbl with tactions=tactions'} in
-        let etblconstr' = Tables.tbl_def_to_econstr tbl' in
+        let etblconstr' = TernaryTables.tbl_def_to_econstr tbl' in
         let etblconstr' = {etblconstr with e=etblconstr'.e} in
         let tdecl' = {tdecl with td=TDGlobal(id, tty, etblconstr')} in
         tdecl'::(_process env' tdecls)

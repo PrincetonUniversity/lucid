@@ -156,18 +156,16 @@ let port_tys ds =
 ;;
 
 
-(* Table.install is not supported on the tofino *)
+(* Installing, updating, and removing table entries 
+   is not supported on the tofino *)
 let no_table_installs ds = 
   let pass = ref true in
   let table_install_fcn_cids = List.filter_map 
     (fun fcn_cid -> 
-      let (name  : String.t) = Cid.to_string fcn_cid in
-      let contains_install = 
-            (Batteries.String.exists name "install" )
-        ||  (Batteries.String.exists name "Install")
-      in      
-      if contains_install then Some fcn_cid else None)
-    (Tables.function_cids)
+      match List.nth (Cid.names fcn_cid) 1 with 
+      | "install" | "update" | "remove" -> Some fcn_cid
+      | _ -> None)
+    (TernaryTables.function_cids)
   in
   (* check every ECall in the program, fail if any one 
      of them to a function in table_install_fcn_cids *)
@@ -180,7 +178,7 @@ let no_table_installs ds =
         | ECall(fcn_cid, _, _) -> 
           if List.exists (Cid.equals fcn_cid) table_install_fcn_cids then 
             (pass := false;
-            let err_str = "Table.install not supported on tofino." in
+            let err_str = "installing, updating, and removing table entries is not supported on tofino." in
             report_err exp.espan err_str)
           else (super#visit_exp ctx exp)
         | _ -> super#visit_exp ctx exp
@@ -209,13 +207,13 @@ let all_tables_used ds =
       object
         inherit [_] CoreSyntax.s_iter as super
         method! visit_ECall _ fcid args _ = 
-          if (Tables.is_table_lookup fcid) then 
+          if (TernaryTables.is_table_lookup fcid) then 
             let tbl_id = (List.hd args) |> CoreSyntax.exp_to_id in
             tbl_ids := tbl_id :: !tbl_ids
           
         (* method! visit_STupleAssign _ tuple_assign = 
           print_endline @@"tuple assign"^(CorePrinting.s_to_string@@STupleAssign tuple_assign);
-          let tm = Tables.s_to_tbl_match@@STupleAssign(tuple_assign) in
+          let tm = TernaryTables.s_to_tbl_match@@STupleAssign(tuple_assign) in
           tbl_ids := (tm.tbl |> CoreSyntax.exp_to_id) :: !tbl_ids *)
       end
     in
@@ -225,7 +223,7 @@ let all_tables_used ds =
   let defined_tbls = InterpHelpers.tables_in_prog ds in
   let used_ids = tables_matched_in_prog ds in
   List.iter
-    (fun ((tdef:Tables.core_tbl_def), dspan, espan) ->
+    (fun ((tdef:TernaryTables.core_tbl_def), dspan, espan) ->
       let is_used = List.exists (fun id -> id = tdef.tid) used_ids in
       if not is_used
       then (

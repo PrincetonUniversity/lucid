@@ -276,6 +276,17 @@ let execute_control swidx (nst : network_state) (ctl_ev : control_val) =
      can't call back up to InterpCore *)
   let do_tbl_install ternary tbl_cid (cmd : entry_install_cmd) =
     let etbl = exp (EVar tbl_cid) (ty@@TBool) in
+    (* a Table.install command is for a Table, 
+       a TernaryTable.install command is for a TernaryTable *)
+    let tbl_v = InterpCore.interp_exp nst.(swidx) Env.empty etbl |> extract_ival in
+    let tbl_is_ternary = match tbl_v.vty.raw_ty with 
+      | TName(ty_cid, _) -> Cid.equals ty_cid TernaryTables.t_id
+      | _ -> false
+    in
+    if (ternary && not tbl_is_ternary) 
+    then error "a TernaryTable.install command can only install into a TernaryTable";
+    if (tbl_is_ternary && not ternary) 
+    then error "a Table.install command can only install into a Table (use TernaryTable.install)";
     let ekey = exp 
       (ETuple(cmd.imatch)) 
       (ty@@TTuple(List.map (fun exp -> exp.ety.raw_ty) cmd.imatch) ) in

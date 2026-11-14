@@ -19,9 +19,6 @@ let p4_array_to_arrmeta pipe_id id slot_sz len tcid =
 let p4_table_to_tblmeta pipe_id control_id id keys actions length_opt tcid = 
   let full_tbl_cid tid = Cid.concat (Cid.concat pipe_id control_id) tid in
   let full_acn_cid aid = Cid.concat control_id aid in
-  let priority_key = 
-    {kid = Some(Cid.create ["$MATCH_PRIORITY"]); kty = "exact"; ksize = 32}
-  in
   let ekey_to_key (ekey:P4.expr) = 
     match ekey.ex, ekey.ety with 
       |  P4.EVar(cid), P4.TKey(KTernary, sz) -> {kid=Some(cid); kty= "ternary"; ksize=sz;}

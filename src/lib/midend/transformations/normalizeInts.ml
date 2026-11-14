@@ -183,7 +183,7 @@ let atomize_int_assigns ds =
       method! visit_exp _ exp =
         match exp.e with 
         (* skip Tables method calls completely *)
-        | ECall(cid, _, _) when (List.exists (fun cid' -> Cid.equal cid cid') Tables.function_cids) -> 
+        | ECall(cid, _, _) when (List.exists (fun cid' -> Cid.equal cid cid') TernaryTables.function_cids) -> 
           exp
         (* recurse on arguments of other calls (Array and System) *)
         | ECall _ -> super#visit_exp () exp

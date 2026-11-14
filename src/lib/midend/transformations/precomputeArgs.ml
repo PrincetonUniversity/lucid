@@ -137,7 +137,7 @@ let precompute_args ds =
             | _ -> error "[precompute_args] array method call with < 3 args"
         )
         (* skip table function calls -- nothing to inline *)
-        | ECall (fcn_id, _, _) when (List.exists) (fun fcid -> Cid.equal_names fcn_id fcid) Tables.function_cids -> exp
+        | ECall (fcn_id, _, _) when (List.exists) (fun fcid -> Cid.equal_names fcn_id fcid) TernaryTables.function_cids -> exp
         | ECall (fcn_id, args, u) ->
           (match CL.mem fcn_id exception_cids with
            | true -> exp (* skip event combinators *)

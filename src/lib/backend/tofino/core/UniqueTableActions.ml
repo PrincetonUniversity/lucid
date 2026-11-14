@@ -87,7 +87,7 @@ let rename_actionvars renames decl =
          separately. *)
 
       method! visit_ECall renames cid exps b = 
-        let tbl_exps = List.filter_map (fun exp -> if (Tables.is_tbl_ty exp.ety.raw_ty) then Some(exp) else None) exps in
+        let tbl_exps = List.filter_map (fun exp -> if (TernaryTables.is_tbl_ty exp.ety.raw_ty) then Some(exp) else None) exps in
         match tbl_exps with 
           | [] -> ECall(cid, exps, b)
           | [tbl_exp] -> (
@@ -146,9 +146,9 @@ let update_decl ctx decl : replace_ctx * decls =
   | DActionConstr({aid=aid; _}) -> 
     add_action aid decl ctx, []
   (* table constructors -- create bindings, update context, update local actions *)
-  | DGlobal(tid, tty, econstr) when Tables.is_tbl_ty (tty.raw_ty) ->
+  | DGlobal(tid, tty, econstr) when TernaryTables.is_tbl_ty (tty.raw_ty) ->
     (* bug? Doesn't this apply to everything, not just tables? *)
-    let tdef = Tables.dglobal_params_to_tbl_def tid econstr in  
+    let tdef = TernaryTables.dglobal_params_to_tbl_def tid econstr in  
     let aids = List.map id_of_exp tdef.tactions in
     let new_aids = List.map (new_aid tid) aids in
     let ctx = add_tableaction_renames tid aids new_aids ctx in
@@ -168,7 +168,7 @@ let update_decl ctx decl : replace_ctx * decls =
        with local names.*)
     let actions = List.map2 (copy_action ctx) aids new_aids in
     (* let d' = DGlobal(tid, tty, {e=ETableCreate(tdef'); ety=tty; espan=decl.espan}) in *)
-    let econstr' = Tables.tbl_def_to_econstr tdef' in
+    let econstr' = TernaryTables.tbl_def_to_econstr tdef' in
     let exp_constr = {econstr with e = econstr'.e}in
     let d' = DGlobal(tid, tty, exp_constr) in
     ctx, actions@[{decl with d=d'}]

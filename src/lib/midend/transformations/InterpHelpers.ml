@@ -365,7 +365,7 @@ let rec tables_in_prog (tds:decls) =
   | {d=DGlobal(tbl_id, _, econstr); dspan}::tds' -> (
     (* might not be a table, in which case dglobal_params will fail *)
     try 
-      let tbl_def = Tables.dglobal_params_to_tbl_def tbl_id econstr in
+      let tbl_def = TernaryTables.dglobal_params_to_tbl_def tbl_id econstr in
       (tbl_def, dspan, econstr.espan)::(tables_in_prog tds')
     with _ -> tables_in_prog tds')
   | _::tds' -> tables_in_prog tds'

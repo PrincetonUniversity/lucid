@@ -134,7 +134,7 @@ type prog_env = {
   memops : memop IdMap.t;
   actions : CidSet.t;
   (* defined_fcns : tdecl CidMap.t; *)
-  tables : (Tables.core_tbl_def * Span.t) CidMap.t;
+  tables : (TernaryTables.core_tbl_def * Span.t) CidMap.t;
   vars   : exp CidMap.t;
   (* hashers that have already been constructed, 
      because we can't deduplicate hash expressions 
@@ -732,7 +732,7 @@ let fresh_table_id _ = Id.fresh_name "table"
 (* translate a table object declaration into a P4 table. 
    Note: we need the match statement that calls the table 
    because it contains the key *)
-let translate_table env (tdef:Tables.core_tbl_def) tspan pragmas keys =
+let translate_table env (tdef:TernaryTables.core_tbl_def) tspan pragmas keys =
   let tid = tdef.tid in
   let size = CoreSyntax.exp_to_int tdef.tsize in
   let action_ids = translate_exps env tdef.tactions |> fst_snd in
@@ -764,7 +764,7 @@ let stmt_to_table env (_:pragma) (ignore_pragmas: (id * pragma) list) (tid, stmt
   in
   match stmt.s with
   | SIf(e, {s}, _) when (match s with STupleAssign(_) -> true | _ -> false)-> 
-    let tm = Tables.s_to_tbl_match s in
+    let tm = TernaryTables.s_to_tbl_match s in
   (* | SIf(e, {s=STableMatch(tm);}, _) ->    *)
     (* match keys are specified in the statement *)
     let keys = translate_exps env tm.keys 
@@ -871,7 +871,7 @@ let sseq_to_stage stage_num env block_id seq_stmt =
   let table_ids = List.map 
     (fun call_stmt -> match call_stmt.s with
       | SIf(_, {s}, _) when (match s with STupleAssign(_) -> true | _ -> false)-> 
-        let tm = Tables.s_to_tbl_match s in
+        let tm = TernaryTables.s_to_tbl_match s in
       (* | SIf(_, {s=STableMatch(tm);}, _) ->  *)
         CoreSyntax.id_of_exp tm.tbl
       | SMatch(_) -> fresh_table_id ()
@@ -1626,8 +1626,8 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
   (* memops just go into the context *)
   | TDMemop(m) -> (dw bind_memop denv (m.mid, m))
   (* tables just go into context *)
-  | TDGlobal(tbl_id, {raw_ty = TName(ty_cid, _)}, econstr) when (Cid.names ty_cid = ["Table"; "t"]) ->
-    let tbl_def = Tables.dglobal_params_to_tbl_def tbl_id econstr in 
+  | TDGlobal(tbl_id, {raw_ty = TName(ty_cid, _)}, econstr) when (Cid.names ty_cid = ["TernaryTable"; "t"]) ->
+    let tbl_def = TernaryTables.dglobal_params_to_tbl_def tbl_id econstr in 
     dw bind_tbl denv ((Cid.id tbl_id), (tbl_def, econstr.espan))
   (* arrays get translated into registerarrays, which are global. *)
   | TDGlobal(rid, ty, exp) -> (

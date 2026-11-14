@@ -160,6 +160,7 @@
    ShareMemopInputsSat
    SingleTableMatch
    ActionsToFunctions
+   ExactToTernaryTables
    UniqueTableActions
    MatchAlgebra
    DeparserChecksums
