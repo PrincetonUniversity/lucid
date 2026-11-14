@@ -59,6 +59,16 @@ def find_tool(name, override, in_repo=None):
     sys.exit(f"ltf: can't find {name} (not on PATH or in the repo; pass --{name.lower()})")
 
 
+def container_runner():
+    """docker/dpdk/run.sh in the git repo this script is in: runs a command in the
+    DPDK container"""
+    root = repo_root()
+    runner = os.path.join(root, "docker", "dpdk", "run.sh") if root else None
+    if not runner or not os.path.exists(runner):
+        sys.exit("ltf: can't find docker/dpdk/run.sh in this repo")
+    return runner
+
+
 class TestError(Exception):
     """a test that couldn't run (as opposed to one whose outputs differ)"""
 
@@ -192,10 +202,10 @@ class Dpdk:
 
     def __init__(self, tools, args):
         self.lucidcc = find_tool("lucidcc", args.lucidcc)
-        if args.dpdk_run == "native":
+        if args.no_container:
             self.runner = None
         else:
-            self.runner = find_tool("run.sh", args.dpdk_run, in_repo="docker/dpdk/run.sh")
+            self.runner = container_runner()
 
     def prepare(self, case):
         """generate the C build dir, and the port map: every port the case uses
@@ -377,8 +387,9 @@ def main():
     ap.add_argument("--dpt", help="path to the interpreter (dpt)")
     ap.add_argument("--lucidencode", help="path to lucidEncode")
     ap.add_argument("--lucidcc", help="path to lucidcc (dpdk target)")
-    ap.add_argument("--dpdk-run", help="dpdk target: the container runner (default: "
-                    "docker/dpdk/run.sh in this repo), or 'native' to run here")
+    ap.add_argument("--no-container", action="store_true",
+                    help="dpdk target: run DPDK directly here (Linux with DPDK, as root), "
+                         "not in the docker/dpdk container")
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run", help="run one test case")
     r.add_argument("program")

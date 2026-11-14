@@ -25,6 +25,7 @@ type port =
         That is very convenient, but we could change it in the future. *)
      (* | PStdio of      {port_id : int}                  json events and control commands from stdio *)
      (* in the future, we may add a port type for queues *)
+     (* TODO: add a port type for output-only ports, for tests *)
 
 type node = {
     node_id : int;                  (* identifier of the node *)

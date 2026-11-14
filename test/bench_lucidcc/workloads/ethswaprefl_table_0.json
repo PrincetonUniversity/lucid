@@ -1,5 +1,5 @@
 {
-  "comment": "No entries: every lookup misses (today's table scans all 4096 slots on a miss).",
+  "comment": "No entries: every lookup misses (and, with the table's max_idx, scans nothing).",
   "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
   "events": [
     {"name": "ethpkt", "args": ["0x000200000001", "0x112233445566", "0x0800", "5041594c4f41442d444154415041594c4f41442d444154415041594c4f41442d444154415041594c4f41442d44415441"], "locations": ["0:1"], "timestamp": 0},

@@ -1,29 +1,30 @@
 #!/usr/bin/env python3
-"""Internal to bench.py: the benchmark's executor on DPDK. Not meant to be run directly.
+"""Runs DPDK benchmarks. 
+   bench.py copies this script to work dirs that it creates and runs it to execute 
+   a benchmark. 
 
-bench.py prepares a work dir, copies this script into it, and runs it there, inside the
-docker/dpdk image (or natively, as root):
+   This script expects the work dir its in to contain: 
+        build/        the lucidcc --dpdk build dir
+        job.json      { "replay": {port: pcap}, 
+                        "preload": {port: pcap}, 
+                        "output_ports": [port, ...],
+                        "warmup_s", "duration_s"}
+    It generates: 
+        switch.stdout, switch.stderr, and result.json:
+            {   "stats": [{rx, tx, recirc, nic-rx, nic-missed}, ...], 
+                "measured": n,
+                "counters": {...}, 
+                "drops": {...}, 
+                "preload_rx": {port: n}} or {"error": msg}
 
-  bench_dpdk.py            (in the work dir, as bench.py calls it)
-
-The work dir holds
-  build/        the lucidcc --dpdk build dir
-  job.json      {"replay": {port: pcap}, "preload": {port: pcap}, "sinks": [port, ...],
-                 "warmup_s", "duration_s"}
-and gets
-  switch.stdout, switch.stderr, and result.json:
-    {"stats": [{rx, tx, recirc, nic-rx, nic-missed}, ...], "measured": n,
-     "counters": {...}, "drops": {...}, "preload_rx": {port: n}} or {"error": msg}
-
-Each replayed port is a pcap vdev that replays its pcap endlessly (infinite_rx=1) and
-drops everything sent to it (no tx queue given). Each preload port is a second pcap vdev
-on the same program port, which reads its pcap once; it starts with the others, so the
-preload is interleaved with the first of the traffic, and must be done by the end of
-the warm-up. Each sink port is a pcap vdev with an
-empty, non-replayed input, so outputs to it are dropped the same way and aren't counted
-as driver no-port drops. The switch prints its rates every second (--stats 1); the
-stats lines after the warm-up are the measurement.
+Replay ports are pcap vdevs that loop infinite over the input pcap.
+Preload ports are pcap vdevs that replay their pcap once.
+There are no output pcaps, so all output is dropped.
+Output ports are opened with no pcap, just so the packet goes 
+all the way through to the vdev. 
+The lucid program runs with (--stats 1) to print stats every second.
 """
+
 import json
 import os
 import re
@@ -64,7 +65,7 @@ def run():
     if r.returncode != 0 or not os.path.exists(binf):
         raise RuntimeError("make failed:\n" + "\n".join(r.stdout.strip().splitlines()[-10:]))
 
-    with open("empty.pcap", "wb") as f:   # a sink port's (non-replayed) input
+    with open("empty.pcap", "wb") as f:   # an output port's (non-replayed) input
         f.write(struct.pack("<IHHiIII", 0xa1b2c3d4, 2, 4, 0, 0, 65535, 1))
     vdevs, ports = [], []
     for port, pcap in sorted(job["replay"].items(), key=lambda x: int(x[0])):
@@ -75,7 +76,7 @@ def run():
         preload_devs[len(vdevs)] = int(port)
         vdevs.append(f"net_pcap{len(vdevs)},rx_pcap={pcap}")
         ports.append(int(port))
-    for port in job["sinks"]:
+    for port in job["output_ports"]:
         vdevs.append(f"net_pcap{len(vdevs)},rx_pcap=empty.pcap")
         ports.append(int(port))
     cmd = [binf, *EAL]
@@ -84,7 +85,7 @@ def run():
     cmd += ["--", "--stats", "1"]
     for i, port in enumerate(ports):
         cmd += ["--port", f"{port}:{i}"]
-    print("[bench_dpdk] run " + " ".join(cmd[1:]), flush=True)
+    print("[run_dpdk] run " + " ".join(cmd[1:]), flush=True)
 
     stdout_f, stderr_f = open("switch.stdout", "w"), open("switch.stderr", "w")
     sw = subprocess.Popen(cmd, stdout=stdout_f, stderr=subprocess.PIPE)
@@ -127,7 +128,7 @@ def main():
         result = {"error": str(e)}
     with open("result.json", "w") as f:
         json.dump(result, f)
-    print(f"[bench_dpdk] {result.get('error') or 'done'}", flush=True)
+    print(f"[run_dpdk] {result.get('error') or 'done'}", flush=True)
 
 
 if __name__ == "__main__":
