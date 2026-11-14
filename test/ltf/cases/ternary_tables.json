@@ -1,0 +1,49 @@
+{
+  "comment": "A ternary table with room for 4 entries. The highest priority match wins, whatever the install order; equal priorities go to the first installed. An install of an existing (key & mask, mask, priority) changes nothing; the same key and mask at another priority is another entry. Then a rejected install into the full table, update, update and remove of missing entries, and removes that uncover lower entries.",
+  "max time": 30000000,
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"name": "do_install", "args": [0, 0, 1, 100], "locations": ["0:1"], "timestamp": 0},
+    {"name": "do_query", "args": [5], "locations": ["0:1"], "timestamp": 1000000},
+    {"name": "do_install", "args": [4, 252, 5, 200], "locations": ["0:1"], "timestamp": 2000000},
+    {"name": "do_query", "args": [5], "locations": ["0:1"], "timestamp": 3000000},
+    {"name": "do_query", "args": [9], "locations": ["0:1"], "timestamp": 4000000},
+    {"name": "do_install", "args": [5, 4294967295, 5, 300], "locations": ["0:1"], "timestamp": 5000000},
+    {"name": "do_query", "args": [5], "locations": ["0:1"], "timestamp": 6000000},
+    {"name": "do_install", "args": [5, 4294967295, 9, 400], "locations": ["0:1"], "timestamp": 7000000},
+    {"name": "do_query", "args": [5], "locations": ["0:1"], "timestamp": 8000000},
+    {"name": "do_install", "args": [7, 252, 5, 999], "locations": ["0:1"], "timestamp": 9000000},
+    {"name": "do_query", "args": [6], "locations": ["0:1"], "timestamp": 10000000},
+    {"name": "do_install", "args": [8, 4294967295, 1, 500], "locations": ["0:1"], "timestamp": 11000000},
+    {"name": "do_query", "args": [8], "locations": ["0:1"], "timestamp": 12000000},
+    {"name": "do_update", "args": [4, 252, 5, 201], "locations": ["0:1"], "timestamp": 13000000},
+    {"name": "do_query", "args": [6], "locations": ["0:1"], "timestamp": 14000000},
+    {"name": "do_update", "args": [4, 252, 6, 1], "locations": ["0:1"], "timestamp": 15000000},
+    {"name": "do_query", "args": [6], "locations": ["0:1"], "timestamp": 16000000},
+    {"name": "do_remove", "args": [5, 4294967295, 9], "locations": ["0:1"], "timestamp": 17000000},
+    {"name": "do_query", "args": [5], "locations": ["0:1"], "timestamp": 18000000},
+    {"name": "do_remove", "args": [5, 4294967295, 9], "locations": ["0:1"], "timestamp": 19000000},
+    {"name": "do_remove", "args": [4, 252, 5], "locations": ["0:1"], "timestamp": 20000000},
+    {"name": "do_query", "args": [5], "locations": ["0:1"], "timestamp": 21000000},
+    {"name": "do_query", "args": [6], "locations": ["0:1"], "timestamp": 22000000},
+    {"name": "do_install", "args": [8, 4294967295, 7, 500], "locations": ["0:1"], "timestamp": 23000000},
+    {"name": "do_query", "args": [8], "locations": ["0:1"], "timestamp": 24000000}
+  ],
+  "expected": {
+    "1": [
+      {"name": "query_result", "args": [5, 100, 1]},
+      {"name": "query_result", "args": [5, 200, 1]},
+      {"name": "query_result", "args": [9, 100, 1]},
+      {"name": "query_result", "args": [5, 200, 1]},
+      {"name": "query_result", "args": [5, 400, 1]},
+      {"name": "query_result", "args": [6, 200, 1]},
+      {"name": "query_result", "args": [8, 100, 1]},
+      {"name": "query_result", "args": [6, 201, 1]},
+      {"name": "query_result", "args": [6, 201, 1]},
+      {"name": "query_result", "args": [5, 201, 1]},
+      {"name": "query_result", "args": [5, 300, 1]},
+      {"name": "query_result", "args": [6, 100, 1]},
+      {"name": "query_result", "args": [8, 500, 1]}
+    ]
+  }
+}

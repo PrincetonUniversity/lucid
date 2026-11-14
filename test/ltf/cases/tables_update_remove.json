@@ -1,0 +1,39 @@
+{
+  "comment": "An exact table with room for 2 entries. A second install of a key changes nothing; update changes an entry; update and remove of a missing key change nothing; an install into the full table is rejected; a removed key misses and frees its slot.",
+  "max time": 24000000,
+  "topology": {"nodes": {"0": {"ports": {"196": {"type": "recirc"}}}}, "links": []},
+  "events": [
+    {"name": "do_install", "args": [1, 10], "locations": ["0:1"], "timestamp": 0},
+    {"name": "do_query", "args": [1], "locations": ["0:1"], "timestamp": 1000000},
+    {"name": "do_install", "args": [1, 99], "locations": ["0:1"], "timestamp": 2000000},
+    {"name": "do_query", "args": [1], "locations": ["0:1"], "timestamp": 3000000},
+    {"name": "do_update", "args": [1, 11], "locations": ["0:1"], "timestamp": 4000000},
+    {"name": "do_query", "args": [1], "locations": ["0:1"], "timestamp": 5000000},
+    {"name": "do_update", "args": [5, 50], "locations": ["0:1"], "timestamp": 6000000},
+    {"name": "do_query", "args": [5], "locations": ["0:1"], "timestamp": 7000000},
+    {"name": "do_install", "args": [2, 20], "locations": ["0:1"], "timestamp": 8000000},
+    {"name": "do_install", "args": [3, 30], "locations": ["0:1"], "timestamp": 9000000},
+    {"name": "do_query", "args": [3], "locations": ["0:1"], "timestamp": 10000000},
+    {"name": "do_install", "args": [2, 21], "locations": ["0:1"], "timestamp": 11000000},
+    {"name": "do_query", "args": [2], "locations": ["0:1"], "timestamp": 12000000},
+    {"name": "do_remove", "args": [1], "locations": ["0:1"], "timestamp": 13000000},
+    {"name": "do_query", "args": [1], "locations": ["0:1"], "timestamp": 14000000},
+    {"name": "do_remove", "args": [1], "locations": ["0:1"], "timestamp": 15000000},
+    {"name": "do_install", "args": [3, 30], "locations": ["0:1"], "timestamp": 16000000},
+    {"name": "do_query", "args": [3], "locations": ["0:1"], "timestamp": 17000000},
+    {"name": "do_query", "args": [2], "locations": ["0:1"], "timestamp": 18000000}
+  ],
+  "expected": {
+    "1": [
+      {"name": "query_result", "args": [1, 10, 1]},
+      {"name": "query_result", "args": [1, 10, 1]},
+      {"name": "query_result", "args": [1, 11, 1]},
+      {"name": "query_result", "args": [5, 1000, 0]},
+      {"name": "query_result", "args": [3, 1000, 0]},
+      {"name": "query_result", "args": [2, 20, 1]},
+      {"name": "query_result", "args": [1, 1000, 0]},
+      {"name": "query_result", "args": [3, 30, 1]},
+      {"name": "query_result", "args": [2, 20, 1]}
+    ]
+  }
+}

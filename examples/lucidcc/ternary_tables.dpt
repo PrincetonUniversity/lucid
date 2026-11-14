@@ -1,0 +1,50 @@
+// A ternary table: masks, priorities, update and remove 
+// (cases/ternary_tables.json). An entry is identified by its key, mask and 
+// priority. A lookup uses the matching entry with the highest priority (a 
+// higher number is a higher priority); among entries of equal priority, the 
+// first one installed. 
+//   do_install(key, mask, prio, val) -- install hit_acn(val)
+//   do_update(key, mask, prio, val)  -- change the entry to hit_acn(val)
+//   do_remove(key, mask, prio)       -- remove the entry
+//   do_query(key)                    -- look key up and emit query_result(key, val, hit) on port 1
+// A miss runs the default miss_acn, which echoes the lookup arg (1000).
+
+type res_t = {
+  int val;
+  bool is_hit;
+}
+
+action res_t hit_acn(int x)(int a) {
+  return {val = x; is_hit = true};
+}
+action res_t miss_acn(int b)(int a) {
+  return {val = a; is_hit = false};
+}
+
+// a table with room for 4 entries
+global TernaryTable.t<<int, int, int, res_t>> ftbl = TernaryTable.create(4, [hit_acn; miss_acn], miss_acn, 1);
+
+// output event: the result of a query, observable in the output pcap
+event query_result(int key, int val, int hit) { skip; }
+
+event do_install(int key, int mask, int prio, int val) {
+  TernaryTable.install(ftbl, key, mask, prio, hit_acn, val);
+}
+
+event do_update(int key, int mask, int prio, int val) {
+  TernaryTable.update(ftbl, key, mask, prio, hit_acn, val);
+}
+
+event do_remove(int key, int mask, int prio) {
+  TernaryTable.remove(ftbl, key, mask, prio);
+}
+
+event do_query(int key) {
+  res_t r = TernaryTable.lookup(ftbl, key, 1000);
+  int hit = 0;
+  if (r#is_hit == true) {
+    hit = 1;
+  }
+  printf("query key=%d -> val=%d hit=%d", key, r#val, hit);
+  generate_port(1, query_result(key, r#val, hit));
+}
