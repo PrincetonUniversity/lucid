@@ -70,10 +70,10 @@ This branch improves Lucid's testing framework for `lucidcc` development. It add
 This branch significantly improves the functionality and performance of match action tables.
 - Added remove and update operations to match-action tables.
 - Renamed the existing Table data structure to TernaryTable, and added a new Table with exact
-  match semantics. Exact tables have much lower overhead. 
+  match semantics. Exact tables are much faster.
 - Added support for the new exact and ternary match-action tables to the interpreter and tofino
   backends. The tofino backend currently converts both types of tables to ternary tables. 
-- Benchmarked `lucidcc`'s ternary match-action table, see `test/bench_lucidcc/bench.py`.
+- Benchmarked `lucidcc`'s exact and ternary match-action tables, see `test/bench_lucidcc/benchmarks/table_size/run.py`.
 
 
 ## Drivers
