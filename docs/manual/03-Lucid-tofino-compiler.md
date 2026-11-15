@@ -21,6 +21,8 @@ The tofino backend has a few additional restrictions on Lucid programs.
 
 3. Every event parameter must either start or end on a byte boundary.
 
+4. A handler can look up a key in a table, but it cannot install, update, or remove table entries: a control program does that (see `globals.json`). Both `Table` and `TernaryTable` compile to ternary P4 tables.
+
 ### Example programs
 
 The programs in `examples/tofino_apps/src` are regularly compiled and tested on the Tofino's ASIC reference model. 

@@ -57,6 +57,15 @@ void write_bits(packet_t* bs, uint64_t v, int n) {
     }
 }
 uint32_t flood(uint32_t port ){ return port + 10000;/* TODO!*/ }
+
+/* mix a field of a key into the hash of a table key (the 64-bit finalizer of MurmurHash3) */
+static inline uint64_t table_hash_mix(uint64_t h, uint64_t v) {
+    h ^= v;
+    h ^= h >> 33; h *= 0xff51afd7ed558ccdULL;
+    h ^= h >> 33; h *= 0xc4ceb9fe1a85ec53ULL;
+    h ^= h >> 33;
+    return h;
+}
 enum {tag_add_pair_1276 = 0};
 
 /* installs that a full table rejected */
@@ -105,9 +114,8 @@ pair_t_1272 add_pair_1276(uint32_t c_1273 , pair_t_1272 p ){
   return tmp_1371;
 }
 typedef struct {
+  uint8_t valid;
   uint32_t key;
-  uint32_t mask;
-  uint32_t prio;
   uint32_t action_tag;
   uint32_t action_arg;
 } cellty_my_table_1277;
@@ -116,10 +124,10 @@ typedef struct {
     uint32_t action_tag;
     uint32_t action_arg;
   } _default;
-  uint32_t max_idx;
-  cellty_my_table_1277 entries [32];
+  uint32_t num_entries;
+  cellty_my_table_1277 entries [64];
 } ty_my_table_1277;
-ty_my_table_1277 my_table_1277  = {._default = {.action_tag = tag_add_pair_1276, .action_arg = 0}, .max_idx = 0, .entries = {0}};
+ty_my_table_1277 my_table_1277  = {._default = {.action_tag = tag_add_pair_1276, .action_arg = 0}, .num_entries = 0, .entries = {0}};
 void warn_full_my_table_1277(){
   static int warned = 0;
   table_full_installs++;
@@ -133,68 +141,82 @@ void warn_remove_my_table_1277(){
   static int warned = 0;
   if (!warned) { warned = 1; fprintf(stderr, "warning: table my_table has no such entry to remove\n"); }
 }
-void install_my_table_1277(uint32_t key , uint32_t mask , uint32_t prio , uint32_t action , uint32_t const_arg ){
-  for (int _idx = 0; _idx < 32; _idx++) {
-    if (_idx < my_table_1277.max_idx) {
-      if ((my_table_1277.entries[_idx].prio == prio) && ((my_table_1277.entries[_idx].mask == mask) && ((my_table_1277.entries[_idx].key & mask) == (key & mask)))) {
+uint32_t hash_my_table_1277(uint32_t f0 ){
+  uint64_t h = 0;
+  h = table_hash_mix(h, (uint64_t)f0);
+  return (uint32_t)h & 63;
+}
+void install_my_table_1277(uint32_t key , uint32_t action , uint32_t const_arg ){
+  uint32_t home  = hash_my_table_1277(key);
+  for (int _idx = 0; _idx < 64; _idx++) {
+    uint32_t slot  = (home + _idx) & 63;
+    if (my_table_1277.entries[slot].valid == false) {
+      if (my_table_1277.num_entries == 32) {
+        warn_full_my_table_1277();
         return ;
       }
+      cellty_my_table_1277 tmp_1372  = {.valid = true, .key = key, .action_tag = action, .action_arg = const_arg};
+      my_table_1277.entries[slot] = tmp_1372;
+      my_table_1277.num_entries = my_table_1277.num_entries + 1;
+      return ;
     }
-  }
-  if (my_table_1277.max_idx == 32) {
-    warn_full_my_table_1277();
-    return ;
-  }
-  cellty_my_table_1277 carry  = {.key = key, .mask = mask, .prio = prio, .action_tag = action, .action_arg = const_arg};
-  for (int _idx = 0; _idx < 32; _idx++) {
-    if ((_idx < my_table_1277.max_idx) && (my_table_1277.entries[_idx].prio < prio)) {
-      cellty_my_table_1277 tmp  = my_table_1277.entries[_idx];
-      my_table_1277.entries[_idx] = carry;
-      carry = tmp;
-    }
-    if (_idx == my_table_1277.max_idx) {
-      my_table_1277.entries[_idx] = carry;
-      my_table_1277.max_idx = _idx + 1;
+    if (my_table_1277.entries[slot].key == key) {
       return ;
     }
   }
   return ;
 }
-void update_my_table_1277(uint32_t key , uint32_t mask , uint32_t prio , uint32_t action , uint32_t const_arg ){
-  for (int _idx = 0; _idx < 32; _idx++) {
-    if (_idx < my_table_1277.max_idx) {
-      if ((my_table_1277.entries[_idx].prio == prio) && ((my_table_1277.entries[_idx].mask == mask) && ((my_table_1277.entries[_idx].key & mask) == (key & mask)))) {
-        my_table_1277.entries[_idx].action_tag = action;
-        my_table_1277.entries[_idx].action_arg = const_arg;
-        return ;
-      }
+void update_my_table_1277(uint32_t key , uint32_t action , uint32_t const_arg ){
+  uint32_t home  = hash_my_table_1277(key);
+  for (int _idx = 0; _idx < 64; _idx++) {
+    uint32_t slot  = (home + _idx) & 63;
+    if (my_table_1277.entries[slot].valid == false) {
+      warn_update_my_table_1277();
+      return ;
+    }
+    if (my_table_1277.entries[slot].key == key) {
+      my_table_1277.entries[slot].action_tag = action;
+      my_table_1277.entries[slot].action_arg = const_arg;
+      return ;
     }
   }
-  warn_update_my_table_1277();
   return ;
 }
-void remove_my_table_1277(uint32_t key , uint32_t mask , uint32_t prio ){
+void remove_my_table_1277(uint32_t key ){
   uint8_t removed  = false;
-  for (int _idx = 0; _idx < 32; _idx++) {
-    if (_idx < my_table_1277.max_idx) {
-      if ((my_table_1277.entries[_idx].prio == prio) && ((my_table_1277.entries[_idx].mask == mask) && ((my_table_1277.entries[_idx].key & mask) == (key & mask)))) {
-        removed = true;
+  uint32_t hole  = 0;
+  uint32_t home  = hash_my_table_1277(key);
+  for (int _idx = 0; _idx < 64; _idx++) {
+    uint32_t slot  = (home + _idx) & 63;
+    if (removed) {
+      if (my_table_1277.entries[slot].valid == false) {
+        my_table_1277.entries[hole].valid = false;
+        my_table_1277.num_entries = my_table_1277.num_entries - 1;
+        return ;
       }
-      if (removed && ((_idx + 1) < my_table_1277.max_idx)) {
-        my_table_1277.entries[_idx] = my_table_1277.entries[_idx + 1];
+      uint32_t entry_home  = hash_my_table_1277(my_table_1277.entries[slot].key);
+      if (((slot - entry_home) & 63) >= ((slot - hole) & 63)) {
+        my_table_1277.entries[hole] = my_table_1277.entries[slot];
+        hole = slot;
+      }
+    }else {
+      if (my_table_1277.entries[slot].valid == false) {
+        warn_remove_my_table_1277();
+        return ;
+      }
+      if (my_table_1277.entries[slot].key == key) {
+        removed = true;
+        hole = slot;
       }
     }
   }
-  if (removed) {
-    my_table_1277.max_idx = my_table_1277.max_idx - 1;
-    return ;
-  }
-  warn_remove_my_table_1277();
   return ;
 }
 pair_t_1272 lookup_my_table_1277(uint32_t key , pair_t_1272 arg ){
-  for (int _idx = 0; _idx < 32; _idx++) {
-    if (_idx >= my_table_1277.max_idx) {
+  uint32_t home  = hash_my_table_1277(key);
+  for (int _idx = 0; _idx < 64; _idx++) {
+    uint32_t slot  = (home + _idx) & 63;
+    if (my_table_1277.entries[slot].valid == false) {
       switch (my_table_1277._default.action_tag) {
         default: {
           return add_pair_1276(my_table_1277._default.action_arg, arg);
@@ -202,10 +224,10 @@ pair_t_1272 lookup_my_table_1277(uint32_t key , pair_t_1272 arg ){
         }
       }
     }
-    if ((key & my_table_1277.entries[_idx].mask) == (my_table_1277.entries[_idx].key & my_table_1277.entries[_idx].mask)) {
-      switch (my_table_1277.entries[_idx].action_tag) {
+    if (my_table_1277.entries[slot].key == key) {
+      switch (my_table_1277.entries[slot].action_tag) {
         case tag_add_pair_1276: {
-          return add_pair_1276(my_table_1277.entries[_idx].action_arg, arg);
+          return add_pair_1276(my_table_1277.entries[slot].action_arg, arg);
           break;
         }
       }
@@ -253,12 +275,12 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       uint32_t p_0_1282  = ev_in->data.args.foo_1281.p_0_1278;
       uint32_t p_1_1283  = ev_in->data.args.foo_1281.p_1_1279;
       event_t this  = mk_foo(p_0_1282, p_1_1283);
-      pair_t_1272 tmp_1372  = {._0 = p_0_1282, ._1 = p_1_1283,};
-      pair_t_1272 tup_1369  = lookup_my_table_1277(1, tmp_1372);
+      pair_t_1272 tmp_1373  = {._0 = p_0_1282, ._1 = p_1_1283,};
+      pair_t_1272 tup_1369  = lookup_my_table_1277(1, tmp_1373);
       uint32_t new_pair_0_1285  = tup_1369._0;
       uint32_t new_pair_1_1286  = tup_1369._1;
-      out_event_t tmp_1373  = {.ev = mk_foo(new_pair_0_1285, new_pair_1_1286), .port = 1};
-      out_events[n] = tmp_1373;
+      out_event_t tmp_1374  = {.ev = mk_foo(new_pair_0_1285, new_pair_1_1286), .port = 1};
+      out_events[n] = tmp_1374;
       n = n + 1;
       break;
     }

@@ -5,7 +5,8 @@ def lucid_ctl(c, globals_dict):
   # get the P4 name of the first action bound to the "dmac_table" (which is "out_port")
   action_p4_name = globals_dict['wire_tbl']["actions"][0]["compiled_name"]
   # define the key and action arguments. The key has one additional field in the P4 
-  # program, a priority where lower is matched first. 
+  # program, a priority where lower is matched first 
+  # (the opposite of a TernaryTable entry's priority in Lucid). 
   key = [128, 1]
   # define the install-time action argument
   action_arg = [128]

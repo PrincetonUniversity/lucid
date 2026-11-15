@@ -57,6 +57,15 @@ void write_bits(packet_t* bs, uint64_t v, int n) {
     }
 }
 uint32_t flood(uint32_t port ){ return port + 10000;/* TODO!*/ }
+
+/* mix a field of a key into the hash of a table key (the 64-bit finalizer of MurmurHash3) */
+static inline uint64_t table_hash_mix(uint64_t h, uint64_t v) {
+    h ^= v;
+    h ^= h >> 33; h *= 0xff51afd7ed558ccdULL;
+    h ^= h >> 33; h *= 0xc4ceb9fe1a85ec53ULL;
+    h ^= h >> 33;
+    return h;
+}
 enum {tag_hit_acn_2409 = 0, tag_miss_acn_2412 = 1};
 
 /* installs that a full table rejected */
@@ -141,9 +150,8 @@ res_t_2406 miss_acn_2412(uint32_t b_2410 , uint32_t a_2411 ){
   return tmp_2590;
 }
 typedef struct {
+  uint8_t valid;
   uint32_t key;
-  uint32_t mask;
-  uint32_t prio;
   uint32_t action_tag;
   uint32_t action_arg;
 } cellty_ftbl_2413;
@@ -152,10 +160,10 @@ typedef struct {
     uint32_t action_tag;
     uint32_t action_arg;
   } _default;
-  uint32_t max_idx;
-  cellty_ftbl_2413 entries [1024];
+  uint32_t num_entries;
+  cellty_ftbl_2413 entries [2048];
 } ty_ftbl_2413;
-ty_ftbl_2413 ftbl_2413  = {._default = {.action_tag = tag_miss_acn_2412, .action_arg = 1}, .max_idx = 0, .entries = {0}};
+ty_ftbl_2413 ftbl_2413  = {._default = {.action_tag = tag_miss_acn_2412, .action_arg = 1}, .num_entries = 0, .entries = {0}};
 void warn_full_ftbl_2413(){
   static int warned = 0;
   table_full_installs++;
@@ -169,68 +177,82 @@ void warn_remove_ftbl_2413(){
   static int warned = 0;
   if (!warned) { warned = 1; fprintf(stderr, "warning: table ftbl has no such entry to remove\n"); }
 }
-void install_ftbl_2413(uint32_t key , uint32_t mask , uint32_t prio , uint32_t action , uint32_t const_arg ){
-  for (int _idx = 0; _idx < 1024; _idx++) {
-    if (_idx < ftbl_2413.max_idx) {
-      if ((ftbl_2413.entries[_idx].prio == prio) && ((ftbl_2413.entries[_idx].mask == mask) && ((ftbl_2413.entries[_idx].key & mask) == (key & mask)))) {
+uint32_t hash_ftbl_2413(uint32_t f0 ){
+  uint64_t h = 0;
+  h = table_hash_mix(h, (uint64_t)f0);
+  return (uint32_t)h & 2047;
+}
+void install_ftbl_2413(uint32_t key , uint32_t action , uint32_t const_arg ){
+  uint32_t home  = hash_ftbl_2413(key);
+  for (int _idx = 0; _idx < 2048; _idx++) {
+    uint32_t slot  = (home + _idx) & 2047;
+    if (ftbl_2413.entries[slot].valid == false) {
+      if (ftbl_2413.num_entries == 1024) {
+        warn_full_ftbl_2413();
         return ;
       }
+      cellty_ftbl_2413 tmp_2591  = {.valid = true, .key = key, .action_tag = action, .action_arg = const_arg};
+      ftbl_2413.entries[slot] = tmp_2591;
+      ftbl_2413.num_entries = ftbl_2413.num_entries + 1;
+      return ;
     }
-  }
-  if (ftbl_2413.max_idx == 1024) {
-    warn_full_ftbl_2413();
-    return ;
-  }
-  cellty_ftbl_2413 carry  = {.key = key, .mask = mask, .prio = prio, .action_tag = action, .action_arg = const_arg};
-  for (int _idx = 0; _idx < 1024; _idx++) {
-    if ((_idx < ftbl_2413.max_idx) && (ftbl_2413.entries[_idx].prio < prio)) {
-      cellty_ftbl_2413 tmp  = ftbl_2413.entries[_idx];
-      ftbl_2413.entries[_idx] = carry;
-      carry = tmp;
-    }
-    if (_idx == ftbl_2413.max_idx) {
-      ftbl_2413.entries[_idx] = carry;
-      ftbl_2413.max_idx = _idx + 1;
+    if (ftbl_2413.entries[slot].key == key) {
       return ;
     }
   }
   return ;
 }
-void update_ftbl_2413(uint32_t key , uint32_t mask , uint32_t prio , uint32_t action , uint32_t const_arg ){
-  for (int _idx = 0; _idx < 1024; _idx++) {
-    if (_idx < ftbl_2413.max_idx) {
-      if ((ftbl_2413.entries[_idx].prio == prio) && ((ftbl_2413.entries[_idx].mask == mask) && ((ftbl_2413.entries[_idx].key & mask) == (key & mask)))) {
-        ftbl_2413.entries[_idx].action_tag = action;
-        ftbl_2413.entries[_idx].action_arg = const_arg;
-        return ;
-      }
+void update_ftbl_2413(uint32_t key , uint32_t action , uint32_t const_arg ){
+  uint32_t home  = hash_ftbl_2413(key);
+  for (int _idx = 0; _idx < 2048; _idx++) {
+    uint32_t slot  = (home + _idx) & 2047;
+    if (ftbl_2413.entries[slot].valid == false) {
+      warn_update_ftbl_2413();
+      return ;
+    }
+    if (ftbl_2413.entries[slot].key == key) {
+      ftbl_2413.entries[slot].action_tag = action;
+      ftbl_2413.entries[slot].action_arg = const_arg;
+      return ;
     }
   }
-  warn_update_ftbl_2413();
   return ;
 }
-void remove_ftbl_2413(uint32_t key , uint32_t mask , uint32_t prio ){
+void remove_ftbl_2413(uint32_t key ){
   uint8_t removed  = false;
-  for (int _idx = 0; _idx < 1024; _idx++) {
-    if (_idx < ftbl_2413.max_idx) {
-      if ((ftbl_2413.entries[_idx].prio == prio) && ((ftbl_2413.entries[_idx].mask == mask) && ((ftbl_2413.entries[_idx].key & mask) == (key & mask)))) {
-        removed = true;
+  uint32_t hole  = 0;
+  uint32_t home  = hash_ftbl_2413(key);
+  for (int _idx = 0; _idx < 2048; _idx++) {
+    uint32_t slot  = (home + _idx) & 2047;
+    if (removed) {
+      if (ftbl_2413.entries[slot].valid == false) {
+        ftbl_2413.entries[hole].valid = false;
+        ftbl_2413.num_entries = ftbl_2413.num_entries - 1;
+        return ;
       }
-      if (removed && ((_idx + 1) < ftbl_2413.max_idx)) {
-        ftbl_2413.entries[_idx] = ftbl_2413.entries[_idx + 1];
+      uint32_t entry_home  = hash_ftbl_2413(ftbl_2413.entries[slot].key);
+      if (((slot - entry_home) & 2047) >= ((slot - hole) & 2047)) {
+        ftbl_2413.entries[hole] = ftbl_2413.entries[slot];
+        hole = slot;
+      }
+    }else {
+      if (ftbl_2413.entries[slot].valid == false) {
+        warn_remove_ftbl_2413();
+        return ;
+      }
+      if (ftbl_2413.entries[slot].key == key) {
+        removed = true;
+        hole = slot;
       }
     }
   }
-  if (removed) {
-    ftbl_2413.max_idx = ftbl_2413.max_idx - 1;
-    return ;
-  }
-  warn_remove_ftbl_2413();
   return ;
 }
 res_t_2406 lookup_ftbl_2413(uint32_t key , uint32_t arg ){
-  for (int _idx = 0; _idx < 1024; _idx++) {
-    if (_idx >= ftbl_2413.max_idx) {
+  uint32_t home  = hash_ftbl_2413(key);
+  for (int _idx = 0; _idx < 2048; _idx++) {
+    uint32_t slot  = (home + _idx) & 2047;
+    if (ftbl_2413.entries[slot].valid == false) {
       switch (ftbl_2413._default.action_tag) {
         case tag_hit_acn_2409: {
           return hit_acn_2409(ftbl_2413._default.action_arg, arg);
@@ -242,14 +264,14 @@ res_t_2406 lookup_ftbl_2413(uint32_t key , uint32_t arg ){
         }
       }
     }
-    if ((key & ftbl_2413.entries[_idx].mask) == (ftbl_2413.entries[_idx].key & ftbl_2413.entries[_idx].mask)) {
-      switch (ftbl_2413.entries[_idx].action_tag) {
+    if (ftbl_2413.entries[slot].key == key) {
+      switch (ftbl_2413.entries[slot].action_tag) {
         case tag_hit_acn_2409: {
-          return hit_acn_2409(ftbl_2413.entries[_idx].action_arg, arg);
+          return hit_acn_2409(ftbl_2413.entries[slot].action_arg, arg);
           break;
         }
         case tag_miss_acn_2412: {
-          return miss_acn_2412(ftbl_2413.entries[_idx].action_arg, arg);
+          return miss_acn_2412(ftbl_2413.entries[slot].action_arg, arg);
           break;
         }
       }
@@ -376,7 +398,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       uint32_t val_2427  = ev_in->data.args.do_install_2420.val_2419;
       event_t this  = mk_do_install(key_2426, val_2427);
       printf("installing entry: key=%u -> hit_acn(%u)\n", key_2426, val_2427);
-      install_ftbl_2413(key_2426, 4294967295, 0, tag_hit_acn_2409, val_2427);
+      install_ftbl_2413(key_2426, tag_hit_acn_2409, val_2427);
       break;
     }
     case 3: {
@@ -390,8 +412,8 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
         hit_2431 = 1;
       }
       printf("query key=%u -> val=%u hit=%u\n", key_2428, r_0_2429, hit_2431);
-      out_event_t tmp_2591  = {.ev = mk_query_result(key_2428, r_0_2429, hit_2431), .port = 1};
-      out_events[n] = tmp_2591;
+      out_event_t tmp_2592  = {.ev = mk_query_result(key_2428, r_0_2429, hit_2431), .port = 1};
+      out_events[n] = tmp_2592;
       n = n + 1;
       break;
     }

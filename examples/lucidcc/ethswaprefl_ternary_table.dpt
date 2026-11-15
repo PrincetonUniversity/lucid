@@ -1,0 +1,31 @@
+// The ternary-table twin of ethswaprefl_table.dpt, for comparing an exact table with a
+// ternary table that is used as one (test/bench_lucidcc): every entry has a full mask
+// and the same priority. The events and the behavior are the same as ethswaprefl_table's.
+packet event ethpkt(int<48> dst, int<48> src, int<16> ety, Payload.t pl);
+
+action int<16> set_ety(int<16> new_ety)(int<16> ety) {
+  return new_ety;
+}
+action int<16> keep_ety(int<16> unused)(int<16> ety) {
+  return ety;
+}
+
+global TernaryTable.t<<int, int<16>, int<16>, int<16>>> ety_tbl = TernaryTable.create(4096, [set_ety; keep_ety], keep_ety, 0);
+
+event do_install(int key, int<16> new_ety) {
+  TernaryTable.install<unordered>(ety_tbl, key, 0xffffffff, 1, set_ety, new_ety);
+}
+
+handle ethpkt(int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
+  int<16> out_ety = TernaryTable.lookup(ety_tbl, (int<32>)dst, ety);
+  generate_port(ingress_port, ethpkt(src, dst, out_ety, pl));
+}
+
+parser main(bitstring pkt) {
+  int<48> dst = read(pkt);
+  int<48> src = read(pkt);
+  int<16> ety = read(pkt);
+  match ety with
+  | LUCID_ETHERTY -> { do_lucid_parsing(pkt); }
+  | _ -> { generate ethpkt(dst, src, ety, Payload.parse(pkt)); }
+}

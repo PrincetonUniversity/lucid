@@ -12,13 +12,15 @@ could only generate one output and there was no support for background
 event handling (for multi threading). There were also many mismatches 
 between the behavior of compiled programs and that of the Lucid interpreter.
 
-After this branch, the compiler supports most of Lucid, it generates relatively 
-efficient (but still single threaded) code, and there is a testing framework 
-for validating equivalence of interpreter and compiler output. 
+After this branch, the compiler supports most of Lucid, it generates relatively efficient (but still single threaded) code, and there is a testing framework for validating equivalence of interpreter and compiler output. 
 
 ## Testing instructions
 
+- Try the new lucid compiler on programs with async and delayed events
 
+- Benchmark and compare the table implementations
+
+- Try out the new testing and benchmark harnesses
 
 
 

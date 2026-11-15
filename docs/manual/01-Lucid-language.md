@@ -125,7 +125,7 @@ Each event value also contains a _delay_, which represents an amount of time (in
 
 ### Globals
 
-Globals (also known as global variables) represent mutable state in a program that persists across event handler executions and is accessible from any event handler or function. Global declarations have the form `global <ty> foo = <constructor>(<args>)`. Currently, there are four builtin global type: Arrays, Paired Arrays, Counters, and Tables. Users can also define their own global types (see the User Types section of this document).
+Globals (also known as global variables) represent mutable state in a program that persists across event handler executions and is accessible from any event handler or function. Global declarations have the form `global <ty> foo = <constructor>(<args>)`. Currently, there are five builtin global types: Arrays, Paired Arrays, Counters, Tables, and Ternary Tables. Users can also define their own global types (see the User Types section of this document).
 
 ### Arrays
 
@@ -152,35 +152,16 @@ The declaration `global Counter<<size>> counter = Counter.create(init)` declares
 
 ### Tables
 
-Tables are like match statements that you can update dynamically at runtime by adding new branches.
+A table is a function defined by cases that can change while the program runs. The way to "call" a table is with a lookup function that takes a *key*: the value that selects the case. The lookup finds the case for the key and returns its result. Every table has a default case, so it always returns a result.
 
-A table is a data structure that stores a list of records. Each record in a table contains a key pattern, a data value, and a special type of function called an action. 
+The cases of a table are called *entries* and a program can install, update, and remove them at runtime. An entry has a pattern, which determines the keys that it matches. It names one of the table's actions, which are small functions declared in advance, and may also store data to pass to that action. An entry means, "for any key that matches this pattern, run this action with this data."
 
-### Table Lookup
-The primary operation on a table is a lookup: 
+Lucid has two kinds of tables. First, in a `Table`, a pattern is a single value, and it matches only the key that is equal to it. Second, in a `TernaryTable`, a pattern is a value and a mask, and it matches every key whose masked bits equal the value. 
+Patterns in a `TernaryTable` can overlap: more than one entry can match the same key. So each of its entries also has a priority, and a lookup uses the matching entry with the highest priority. If several matching entries have the same priority, the lookup uses the one that was installed first.
 
-```ret_ty result = Table.lookup(tbl, key, arg);```
+#### Table type
 
-This table lookup call will iterate over the records in `tbl`, finding the first one with a key pattern that matches `key`. That matching record will contain an action function and, optionally, some data. Table.lookup will call the action function, passing it the data and the `arg` parameter. If no action is found, the table will run a default action. 
-
-As psuedocode:
-```
-def lookup(tbl, key, arg):
-	for i in range(len(tbl.records)):
-		entry = tbl.records[i]
-		if (key == entry.key): # match!
-			data = entry.data
-			action = entry.action
-			return action(data, arg)
-	# no matches, run default action
-	return tbl.default_action(tbl.default_data, arg)
-```
-
-### Table Types
-
-The Table type has 4 arguments. 
-
-`Table.t<<key_ty, data_ty, arg_ty, ret_ty>>`
+`Table.t<<key_ty, data_ty, arg_ty, ret_ty>>` is the type of a Table, where: 
 
 - `key_ty` is the type of the key that the table matches on.
 
@@ -198,31 +179,81 @@ All of a table's actions must have the same data, arg, and return types.
 
 `global Table.t<<key_ty, data_ty, arg_ty, ret_ty>> tbl = Table.create(sz, actions, default_action, default_data);`
 
-Creates the table `tbl` of type `Table.t<<key_ty, data_ty, arg_ty, ret_ty>>`, with `sz` entries that each store a key value, data value, and action function value of type `data_ty -> arg_ty -> ret_ty`. Action functions have a slightly different syntax -- see the section on Action functions for more details.
+Creates the table `tbl` of type `Table.t<<key_ty, data_ty, arg_ty, ret_ty>>`, with room for `sz` entries, each of which stores a pattern, a data value, and an action function value of type `data_ty -> arg_ty -> ret_ty`. Action functions have a slightly different syntax -- see the Actions section for more details.
 
 The table will also have a default entry that stores `default_action` and `default_data`, which is applied on `Table.lookup` if no other entries match.
 
-#### Table install
+
+#### Table lookup
+
+The primary operation on a table is a lookup: 
+
+```ret_ty result = Table.lookup(tbl, key, arg);```
+
+This finds the entry in `tbl` whose pattern matches `key`, and calls the entry's action with the entry's data and `arg`. If no entry matches, it calls the table's default action with the default data and `arg`.
+
+#### Table install, update, and remove
 
 ```Table.install(tbl, key, acn, data);```
 
-This installs an entry into `tbl` that matches on `key` and calls `acn` with first argument `data`. 
+This installs an entry into `tbl`. The entry's pattern is the value `key`, so it matches only the key that is equal to `key`. A lookup that matches the entry calls `acn` with first argument `data`. 
 
-```Table.install_ternary(tbl, key, mask, acn, data);```
-This installs a masked entry into `tbl`. A masked entry only considers the masked bits of the key at lookup time. In other words, if `Table.lookup(tbl, k, arg);` is called, the masked entry installed above will match when `key && mask == k && mask`.
+If `tbl` already has an entry for `key`, the install does nothing. If `tbl` is full (it has the `sz` entries that it was created with), the new entry is not installed.
+
+```Table.update(tbl, key, acn, data);```
+
+This changes the entry for `key`, so that a lookup that matches it calls `acn` with first argument `data`. If `tbl` has no entry for `key`, the update does nothing.
+
+```Table.remove(tbl, key);```
+
+This removes the entry for `key` from `tbl`. If `tbl` has no entry for `key`, the remove does nothing.
+
+None of these functions returns a value. When an install finds the table full, or an update or a remove finds no entry, the program keeps running and reports a warning.
 
 
-There are also two other ways to update a table. First, the interpreter also supports a _table install command event_. For example, including the following event in the interpreter's input event list will install the same entry as the above command: 
+#### Ternary Tables
+
+`TernaryTable`'s type, create, and lookup have the same arguments as `Table`'s. This section explains the differences.
+
+```TernaryTable.install(tbl, key, mask, prio, acn, data);```
+
+This installs a masked entry into `tbl`, which must be a ternary table (a `TernaryTable.t`, made with `TernaryTable.create`). A masked entry only considers the masked bits of the key at lookup time. In other words, if `TernaryTable.lookup(tbl, k, arg);` is called, the masked entry installed above will match when `key & mask == k & mask`. When more than one entry matches, the lookup uses the entry with the highest `prio` (a higher number is a higher priority).
+
+An entry in a ternary table is identified by its value, mask, and priority. Only the masked bits of the value count, so two entries with the same mask and priority are the same entry if their values are equal on the masked bits. Installing an entry that is already in the table does nothing.
+
+```TernaryTable.update(tbl, key, mask, prio, acn, data);```
+
+This changes the entry identified by `key`, `mask`, and `prio`, so that a lookup that matches it calls `acn` with first argument `data`.
+
+```TernaryTable.remove(tbl, key, mask, prio);```
+
+This removes the entry identified by `key`, `mask`, and `prio`.
+
+As with a `Table`, an install into a full table, and an update or a remove of an entry that is not in the table, do nothing and report a warning.
+
+#### External table management
+
+The interpreter allows external programs to install entries into tables with _table install command events_, for both `Table` and `TernaryTable`. For example, for a `Table` named `tbl`: 
 
 ```json
-{"type": "command", "name":"Table.install", "args":{"table":"tbl", "key":["0<<32>>"], "mask":["3<<32>>"], "action":"tbl.acn", "args":[5]}},
+{"type": "command", "name":"Table.install", "args":{"table":"tbl", "key":["5<<32>>"], "action":"tbl.acn", "args":[7]}},
 ```
 
-See the section on interpreter commands for more details. 
+This command does the same thing as `Table.install(tbl, 5, acn, 7);`: it installs an entry that matches the 32-bit key 5 and calls `acn` with data 7.
 
-Finally, for hardware targets like the Tofino, Lucid does not provide a builtin way to install entries into tables. This is because table installation on a hardware pipeline must be done by a control CPU using a vendor-provided driver. 
+And for a `TernaryTable` named `tbl`: 
 
-For hardware targets, the programmer must write their own control program to install table entries as needed. To facilitate this, the Lucid compiler generates a _globals directory_. The entry in the globals directory for a table `tbl` provides all the information that a user needs about the implementation of `tbl` in the compiler-generated code in order to write a custom control plane program to update it.
+```json
+{"type": "command", "name":"TernaryTable.install", "args":{"table":"tbl", "key":["0<<32>>"], "mask":["3<<32>>"], "priority":1, "action":"tbl.acn", "args":[5]}},
+```
+
+This command does the same thing as `TernaryTable.install(tbl, 0, 3, 1, acn, 5);`: it installs an entry with priority 1 that matches every key whose low two bits are 0, and calls `acn` with data 5. A `TernaryTable.install` command must have a `mask` and a `priority`, and a `Table.install` command must have neither.
+
+See the section of the Lucid interpreter documentation about interpreter commands for more details. The interpreter currently only supports install commands, not entry update or removal.
+
+Finally, the Tofino target does not support table install, update, or remove operations from inside its line-rate pipeline. Lucid's Tofino compiler rejects a program that installs, updates, or removes entries.
+
+On the Tofino, programmers must write their own control programs to install, update, or remove table entries. To facilitate this, the Lucid compiler generates a _globals directory_. The entry in the globals directory for a table `tbl` provides all the information that a user needs about the implementation of `tbl` in the compiler-generated code in order to write a custom control plane program to update it.
 
 For example, the Tofino compiler generates the following entry for table `tbl` in its `globals.json`, which tells the programmer the names and type information of the P4 objects that implement `tbl` and its actions. 
 
@@ -243,15 +274,19 @@ For example, the Tofino compiler generates the following entry for table `tbl` i
     ],
     "actions": [
       {
-        "name": "action_constr",
-        "compiled_name": "ingress_hdl.action_constr",
+        "name": "acn",
+        "compiled_name": "ingress_hdl.tbl_acn",
         "install_arg_sizes": [ 32 ]
       }
     ]
   }
 ```
 
-See the Section on the globals directory for more information.
+On the Tofino, both a `Table` and a `TernaryTable` currently compile to a ternary P4 table, so both have ternary keys and a `$MATCH_PRIORITY`. An entry for a `Table` should have a full mask. The Tofino matches the entry with the lowest `$MATCH_PRIORITY` first, which is the opposite of the priority of a `TernaryTable` entry in Lucid.
+
+See the Tofino tutorial on tables, `tutorials/tofino/02Tables/readme.md`, for an example.
+
+Note that `lucidcc` does not create a globals directory. A program compiled with it supports every table operation itself.
 
 ### Ordering
 
@@ -345,25 +380,25 @@ Functions in Lucid are declared using the syntax `fun rty foo(type1 idN, ..., ty
 
 Functions which return global types are not currently supported.
 
-## Actions and Action Constructors
+## Actions
 
-Actions in Lucid are special functions that users do not call directly, similar to memops. An action is essentially an expression with arguments: the body of an action may only have a single return statement.
+Actions in Lucid are special functions that code does call directly, similar to memops. An action is essentially an expression with arguments: the body of an action may only have a single return statement.
 
-In Lucid, actions are not constructed directly. Instead, programmers declare _action constructors_. For example: 
+An action is declared with two lists of parameters. For example: 
 
 ```c
-action_constr mk_my_acn(bool x) = {
-  return action res_t _ (int a) {
-    	return {val = a; is_hit = x};
-  	};
-};
+action res_t my_acn(bool x)(int a) {
+  return {val = a; is_hit = x};
+}
 ```
 
-This creates an action constructor named `mk_hit_acn` which takes a single parameter x and returns an anonymous (un-named) action that takes a single integer `a` as its argument and returns a record of type `res_t`. The name of the returned action does not matter, because user-code cannot ever reference it.
+This creates an action named `my_acn`, which takes a parameter `x` in its first list and a single integer `a` in its second list, and returns a record of type `res_t`. 
 
-Notice that the argument of the action constructor, `x`, is available within the body of the action that it creates. This is the entire point of action constructors -- it provides the flexibility to bind some of the variables defined in the action at _install time_ (when an action is installed into a table) and other variables at _match time_ (when an action is match during packet processing).
+Notice that both `x` and `a` are available within the body of the action. This is the entire point of the two parameter lists -- they provide the flexibility to bind some of the variables defined in the action at _install time_ (when an action is installed into a table) and other variables at _lookup time_ (when a lookup runs the action during packet processing). The first list is bound at install time: its argument is the `data` that is passed to `Table.install`, and is stored in the table's entry. The second list is bound at lookup time: its argument is the `arg` that is passed to `Table.lookup`.
 
-Action constructors are passed as arguments to `table_create`, to define the domain of actions that the table supports and the table's default action, and also passed to `table_install`, to construct new actions. 
+A parameter list may have more than one parameter, or none. For example, an action declared as `action res_t fwd(int<48> dmac, int<32> port)() { ... }` is for a table whose `data_ty` is the tuple `(int<48>, int<32>)` and whose `arg_ty` is `()`.
+
+Actions are passed as arguments to `Table.create`, to define the domain of actions that the table supports and the table's default action, and also passed to `Table.install` and `Table.update`, to set the action of an entry. The same is true for a `TernaryTable`.
 
 ## Match statements
 Match statements in Lucid represent TCAM tables with static rules. They have the form `match (e1, ..., eN) with | pat1 -> { ... } | pat2 -> { ... } | ...`. Here, `e1` through `eN` are integer expressions, and each pattern should have `N` entries (or be the single wildcard pattern `_`).

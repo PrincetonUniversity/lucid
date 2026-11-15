@@ -53,6 +53,15 @@ void write_bits(packet_t* bs, uint64_t v, int n) {
     }
 }
 uint32_t flood(uint32_t port ){ return port + 10000;/* TODO!*/ }
+
+/* mix a field of a key into the hash of a table key (the 64-bit finalizer of MurmurHash3) */
+static inline uint64_t table_hash_mix(uint64_t h, uint64_t v) {
+    h ^= v;
+    h ^= h >> 33; h *= 0xff51afd7ed558ccdULL;
+    h ^= h >> 33; h *= 0xc4ceb9fe1a85ec53ULL;
+    h ^= h >> 33;
+    return h;
+}
 enum {tag_set_ety_2335 = 0, tag_keep_ety_2338 = 1};
 
 /* installs that a full table rejected */
@@ -120,9 +129,8 @@ uint16_t keep_ety_2338(uint16_t unused_2336 , uint16_t ety_2337 ){
   return ety_2337;
 }
 typedef struct {
+  uint8_t valid;
   uint32_t key;
-  uint32_t mask;
-  uint32_t prio;
   uint32_t action_tag;
   uint16_t action_arg;
 } cellty_ety_tbl_2339;
@@ -131,10 +139,10 @@ typedef struct {
     uint32_t action_tag;
     uint16_t action_arg;
   } _default;
-  uint32_t max_idx;
-  cellty_ety_tbl_2339 entries [4096];
+  uint32_t num_entries;
+  cellty_ety_tbl_2339 entries [8192];
 } ty_ety_tbl_2339;
-ty_ety_tbl_2339 ety_tbl_2339  = {._default = {.action_tag = tag_keep_ety_2338, .action_arg = 0}, .max_idx = 0, .entries = {0}};
+ty_ety_tbl_2339 ety_tbl_2339  = {._default = {.action_tag = tag_keep_ety_2338, .action_arg = 0}, .num_entries = 0, .entries = {0}};
 void warn_full_ety_tbl_2339(){
   static int warned = 0;
   table_full_installs++;
@@ -148,68 +156,82 @@ void warn_remove_ety_tbl_2339(){
   static int warned = 0;
   if (!warned) { warned = 1; fprintf(stderr, "warning: table ety_tbl has no such entry to remove\n"); }
 }
-void install_ety_tbl_2339(uint32_t key , uint32_t mask , uint32_t prio , uint32_t action , uint16_t const_arg ){
-  for (int _idx = 0; _idx < 4096; _idx++) {
-    if (_idx < ety_tbl_2339.max_idx) {
-      if ((ety_tbl_2339.entries[_idx].prio == prio) && ((ety_tbl_2339.entries[_idx].mask == mask) && ((ety_tbl_2339.entries[_idx].key & mask) == (key & mask)))) {
+uint32_t hash_ety_tbl_2339(uint32_t f0 ){
+  uint64_t h = 0;
+  h = table_hash_mix(h, (uint64_t)f0);
+  return (uint32_t)h & 8191;
+}
+void install_ety_tbl_2339(uint32_t key , uint32_t action , uint16_t const_arg ){
+  uint32_t home  = hash_ety_tbl_2339(key);
+  for (int _idx = 0; _idx < 8192; _idx++) {
+    uint32_t slot  = (home + _idx) & 8191;
+    if (ety_tbl_2339.entries[slot].valid == false) {
+      if (ety_tbl_2339.num_entries == 4096) {
+        warn_full_ety_tbl_2339();
         return ;
       }
+      cellty_ety_tbl_2339 tmp_2515  = {.valid = true, .key = key, .action_tag = action, .action_arg = const_arg};
+      ety_tbl_2339.entries[slot] = tmp_2515;
+      ety_tbl_2339.num_entries = ety_tbl_2339.num_entries + 1;
+      return ;
     }
-  }
-  if (ety_tbl_2339.max_idx == 4096) {
-    warn_full_ety_tbl_2339();
-    return ;
-  }
-  cellty_ety_tbl_2339 carry  = {.key = key, .mask = mask, .prio = prio, .action_tag = action, .action_arg = const_arg};
-  for (int _idx = 0; _idx < 4096; _idx++) {
-    if ((_idx < ety_tbl_2339.max_idx) && (ety_tbl_2339.entries[_idx].prio < prio)) {
-      cellty_ety_tbl_2339 tmp  = ety_tbl_2339.entries[_idx];
-      ety_tbl_2339.entries[_idx] = carry;
-      carry = tmp;
-    }
-    if (_idx == ety_tbl_2339.max_idx) {
-      ety_tbl_2339.entries[_idx] = carry;
-      ety_tbl_2339.max_idx = _idx + 1;
+    if (ety_tbl_2339.entries[slot].key == key) {
       return ;
     }
   }
   return ;
 }
-void update_ety_tbl_2339(uint32_t key , uint32_t mask , uint32_t prio , uint32_t action , uint16_t const_arg ){
-  for (int _idx = 0; _idx < 4096; _idx++) {
-    if (_idx < ety_tbl_2339.max_idx) {
-      if ((ety_tbl_2339.entries[_idx].prio == prio) && ((ety_tbl_2339.entries[_idx].mask == mask) && ((ety_tbl_2339.entries[_idx].key & mask) == (key & mask)))) {
-        ety_tbl_2339.entries[_idx].action_tag = action;
-        ety_tbl_2339.entries[_idx].action_arg = const_arg;
-        return ;
-      }
+void update_ety_tbl_2339(uint32_t key , uint32_t action , uint16_t const_arg ){
+  uint32_t home  = hash_ety_tbl_2339(key);
+  for (int _idx = 0; _idx < 8192; _idx++) {
+    uint32_t slot  = (home + _idx) & 8191;
+    if (ety_tbl_2339.entries[slot].valid == false) {
+      warn_update_ety_tbl_2339();
+      return ;
+    }
+    if (ety_tbl_2339.entries[slot].key == key) {
+      ety_tbl_2339.entries[slot].action_tag = action;
+      ety_tbl_2339.entries[slot].action_arg = const_arg;
+      return ;
     }
   }
-  warn_update_ety_tbl_2339();
   return ;
 }
-void remove_ety_tbl_2339(uint32_t key , uint32_t mask , uint32_t prio ){
+void remove_ety_tbl_2339(uint32_t key ){
   uint8_t removed  = false;
-  for (int _idx = 0; _idx < 4096; _idx++) {
-    if (_idx < ety_tbl_2339.max_idx) {
-      if ((ety_tbl_2339.entries[_idx].prio == prio) && ((ety_tbl_2339.entries[_idx].mask == mask) && ((ety_tbl_2339.entries[_idx].key & mask) == (key & mask)))) {
-        removed = true;
+  uint32_t hole  = 0;
+  uint32_t home  = hash_ety_tbl_2339(key);
+  for (int _idx = 0; _idx < 8192; _idx++) {
+    uint32_t slot  = (home + _idx) & 8191;
+    if (removed) {
+      if (ety_tbl_2339.entries[slot].valid == false) {
+        ety_tbl_2339.entries[hole].valid = false;
+        ety_tbl_2339.num_entries = ety_tbl_2339.num_entries - 1;
+        return ;
       }
-      if (removed && ((_idx + 1) < ety_tbl_2339.max_idx)) {
-        ety_tbl_2339.entries[_idx] = ety_tbl_2339.entries[_idx + 1];
+      uint32_t entry_home  = hash_ety_tbl_2339(ety_tbl_2339.entries[slot].key);
+      if (((slot - entry_home) & 8191) >= ((slot - hole) & 8191)) {
+        ety_tbl_2339.entries[hole] = ety_tbl_2339.entries[slot];
+        hole = slot;
+      }
+    }else {
+      if (ety_tbl_2339.entries[slot].valid == false) {
+        warn_remove_ety_tbl_2339();
+        return ;
+      }
+      if (ety_tbl_2339.entries[slot].key == key) {
+        removed = true;
+        hole = slot;
       }
     }
   }
-  if (removed) {
-    ety_tbl_2339.max_idx = ety_tbl_2339.max_idx - 1;
-    return ;
-  }
-  warn_remove_ety_tbl_2339();
   return ;
 }
 uint16_t lookup_ety_tbl_2339(uint32_t key , uint16_t arg ){
-  for (int _idx = 0; _idx < 4096; _idx++) {
-    if (_idx >= ety_tbl_2339.max_idx) {
+  uint32_t home  = hash_ety_tbl_2339(key);
+  for (int _idx = 0; _idx < 8192; _idx++) {
+    uint32_t slot  = (home + _idx) & 8191;
+    if (ety_tbl_2339.entries[slot].valid == false) {
       switch (ety_tbl_2339._default.action_tag) {
         case tag_set_ety_2335: {
           return set_ety_2335(ety_tbl_2339._default.action_arg, arg);
@@ -221,14 +243,14 @@ uint16_t lookup_ety_tbl_2339(uint32_t key , uint16_t arg ){
         }
       }
     }
-    if ((key & ety_tbl_2339.entries[_idx].mask) == (ety_tbl_2339.entries[_idx].key & ety_tbl_2339.entries[_idx].mask)) {
-      switch (ety_tbl_2339.entries[_idx].action_tag) {
+    if (ety_tbl_2339.entries[slot].key == key) {
+      switch (ety_tbl_2339.entries[slot].action_tag) {
         case tag_set_ety_2335: {
-          return set_ety_2335(ety_tbl_2339.entries[_idx].action_arg, arg);
+          return set_ety_2335(ety_tbl_2339.entries[slot].action_arg, arg);
           break;
         }
         case tag_keep_ety_2338: {
-          return keep_ety_2338(ety_tbl_2339.entries[_idx].action_arg, arg);
+          return keep_ety_2338(ety_tbl_2339.entries[slot].action_arg, arg);
           break;
         }
       }
@@ -320,7 +342,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       uint32_t key_2347  = ev_in->data.args.do_install_2342.key_2340;
       uint16_t new_ety_2348  = ev_in->data.args.do_install_2342.new_ety_2341;
       event_t this  = mk_do_install(key_2347, new_ety_2348);
-      install_ety_tbl_2339(key_2347, 4294967295, 0, tag_set_ety_2335, new_ety_2348);
+      install_ety_tbl_2339(key_2347, tag_set_ety_2335, new_ety_2348);
       break;
     }
     case 1: {
@@ -329,8 +351,8 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       uint16_t ety_2351  = ev_in->data.args.ethpkt_2332.ety_2330;
       event_t this  = mk_ethpkt(dst_2349, src_2350, ety_2351);
       uint16_t out_ety_2353  = lookup_ety_tbl_2339(((uint32_t)(dst_2349)), ety_2351);
-      out_event_t tmp_2515  = {.ev = mk_ethpkt(src_2350, dst_2349, out_ety_2353), .port = ev_in->meta.in_port};
-      out_events[n] = tmp_2515;
+      out_event_t tmp_2516  = {.ev = mk_ethpkt(src_2350, dst_2349, out_ety_2353), .port = ev_in->meta.in_port};
+      out_events[n] = tmp_2516;
       n = n + 1;
       break;
     }

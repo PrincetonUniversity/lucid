@@ -92,6 +92,15 @@ uint8_t hash_args_0(uint8_t seed , uint32_t f0 ){
   put_bits(buf, 0, (uint64_t)f0, 32);
   return hash_64((uint32_t)seed, buf, 32) & 0xffULL;
 }
+
+/* mix a field of a key into the hash of a table key (the 64-bit finalizer of MurmurHash3) */
+static inline uint64_t table_hash_mix(uint64_t h, uint64_t v) {
+    h ^= v;
+    h ^= h >> 33; h *= 0xff51afd7ed558ccdULL;
+    h ^= h >> 33; h *= 0xc4ceb9fe1a85ec53ULL;
+    h ^= h >> 33;
+    return h;
+}
 enum {tag_WriteCacheTable_hit_acn_4344 = 0, tag_WriteCacheTable_miss_acn_4346 = 1};
 
 /* installs that a full table rejected */
@@ -214,9 +223,8 @@ uint32_t Array_update_complex_global_cached_table_1_4351_get_get_memop_32_bit(ui
   return ret;
 }
 typedef struct {
+  uint8_t valid;
   uint32_t key;
-  uint32_t mask;
-  uint32_t prio;
   uint32_t action_tag;
   uint32_t action_arg;
 } cellty_global_cached_table_2_4352;
@@ -225,10 +233,10 @@ typedef struct {
     uint32_t action_tag;
     uint32_t action_arg;
   } _default;
-  uint32_t max_idx;
-  cellty_global_cached_table_2_4352 entries [1024];
+  uint32_t num_entries;
+  cellty_global_cached_table_2_4352 entries [2048];
 } ty_global_cached_table_2_4352;
-ty_global_cached_table_2_4352 global_cached_table_2_4352  = {._default = {.action_tag = tag_WriteCacheTable_miss_acn_4346, .action_arg = 0}, .max_idx = 0, .entries = {0}};
+ty_global_cached_table_2_4352 global_cached_table_2_4352  = {._default = {.action_tag = tag_WriteCacheTable_miss_acn_4346, .action_arg = 0}, .num_entries = 0, .entries = {0}};
 void warn_full_global_cached_table_2_4352(){
   static int warned = 0;
   table_full_installs++;
@@ -242,68 +250,82 @@ void warn_remove_global_cached_table_2_4352(){
   static int warned = 0;
   if (!warned) { warned = 1; fprintf(stderr, "warning: table global_cached_table_2 has no such entry to remove\n"); }
 }
-void install_global_cached_table_2_4352(uint32_t key , uint32_t mask , uint32_t prio , uint32_t action , uint32_t const_arg ){
-  for (int _idx = 0; _idx < 1024; _idx++) {
-    if (_idx < global_cached_table_2_4352.max_idx) {
-      if ((global_cached_table_2_4352.entries[_idx].prio == prio) && ((global_cached_table_2_4352.entries[_idx].mask == mask) && ((global_cached_table_2_4352.entries[_idx].key & mask) == (key & mask)))) {
+uint32_t hash_global_cached_table_2_4352(uint32_t f0 ){
+  uint64_t h = 0;
+  h = table_hash_mix(h, (uint64_t)f0);
+  return (uint32_t)h & 2047;
+}
+void install_global_cached_table_2_4352(uint32_t key , uint32_t action , uint32_t const_arg ){
+  uint32_t home  = hash_global_cached_table_2_4352(key);
+  for (int _idx = 0; _idx < 2048; _idx++) {
+    uint32_t slot  = (home + _idx) & 2047;
+    if (global_cached_table_2_4352.entries[slot].valid == false) {
+      if (global_cached_table_2_4352.num_entries == 1024) {
+        warn_full_global_cached_table_2_4352();
         return ;
       }
+      cellty_global_cached_table_2_4352 tmp_4629  = {.valid = true, .key = key, .action_tag = action, .action_arg = const_arg};
+      global_cached_table_2_4352.entries[slot] = tmp_4629;
+      global_cached_table_2_4352.num_entries = global_cached_table_2_4352.num_entries + 1;
+      return ;
     }
-  }
-  if (global_cached_table_2_4352.max_idx == 1024) {
-    warn_full_global_cached_table_2_4352();
-    return ;
-  }
-  cellty_global_cached_table_2_4352 carry  = {.key = key, .mask = mask, .prio = prio, .action_tag = action, .action_arg = const_arg};
-  for (int _idx = 0; _idx < 1024; _idx++) {
-    if ((_idx < global_cached_table_2_4352.max_idx) && (global_cached_table_2_4352.entries[_idx].prio < prio)) {
-      cellty_global_cached_table_2_4352 tmp  = global_cached_table_2_4352.entries[_idx];
-      global_cached_table_2_4352.entries[_idx] = carry;
-      carry = tmp;
-    }
-    if (_idx == global_cached_table_2_4352.max_idx) {
-      global_cached_table_2_4352.entries[_idx] = carry;
-      global_cached_table_2_4352.max_idx = _idx + 1;
+    if (global_cached_table_2_4352.entries[slot].key == key) {
       return ;
     }
   }
   return ;
 }
-void update_global_cached_table_2_4352(uint32_t key , uint32_t mask , uint32_t prio , uint32_t action , uint32_t const_arg ){
-  for (int _idx = 0; _idx < 1024; _idx++) {
-    if (_idx < global_cached_table_2_4352.max_idx) {
-      if ((global_cached_table_2_4352.entries[_idx].prio == prio) && ((global_cached_table_2_4352.entries[_idx].mask == mask) && ((global_cached_table_2_4352.entries[_idx].key & mask) == (key & mask)))) {
-        global_cached_table_2_4352.entries[_idx].action_tag = action;
-        global_cached_table_2_4352.entries[_idx].action_arg = const_arg;
-        return ;
-      }
+void update_global_cached_table_2_4352(uint32_t key , uint32_t action , uint32_t const_arg ){
+  uint32_t home  = hash_global_cached_table_2_4352(key);
+  for (int _idx = 0; _idx < 2048; _idx++) {
+    uint32_t slot  = (home + _idx) & 2047;
+    if (global_cached_table_2_4352.entries[slot].valid == false) {
+      warn_update_global_cached_table_2_4352();
+      return ;
+    }
+    if (global_cached_table_2_4352.entries[slot].key == key) {
+      global_cached_table_2_4352.entries[slot].action_tag = action;
+      global_cached_table_2_4352.entries[slot].action_arg = const_arg;
+      return ;
     }
   }
-  warn_update_global_cached_table_2_4352();
   return ;
 }
-void remove_global_cached_table_2_4352(uint32_t key , uint32_t mask , uint32_t prio ){
+void remove_global_cached_table_2_4352(uint32_t key ){
   uint8_t removed  = false;
-  for (int _idx = 0; _idx < 1024; _idx++) {
-    if (_idx < global_cached_table_2_4352.max_idx) {
-      if ((global_cached_table_2_4352.entries[_idx].prio == prio) && ((global_cached_table_2_4352.entries[_idx].mask == mask) && ((global_cached_table_2_4352.entries[_idx].key & mask) == (key & mask)))) {
-        removed = true;
+  uint32_t hole  = 0;
+  uint32_t home  = hash_global_cached_table_2_4352(key);
+  for (int _idx = 0; _idx < 2048; _idx++) {
+    uint32_t slot  = (home + _idx) & 2047;
+    if (removed) {
+      if (global_cached_table_2_4352.entries[slot].valid == false) {
+        global_cached_table_2_4352.entries[hole].valid = false;
+        global_cached_table_2_4352.num_entries = global_cached_table_2_4352.num_entries - 1;
+        return ;
       }
-      if (removed && ((_idx + 1) < global_cached_table_2_4352.max_idx)) {
-        global_cached_table_2_4352.entries[_idx] = global_cached_table_2_4352.entries[_idx + 1];
+      uint32_t entry_home  = hash_global_cached_table_2_4352(global_cached_table_2_4352.entries[slot].key);
+      if (((slot - entry_home) & 2047) >= ((slot - hole) & 2047)) {
+        global_cached_table_2_4352.entries[hole] = global_cached_table_2_4352.entries[slot];
+        hole = slot;
+      }
+    }else {
+      if (global_cached_table_2_4352.entries[slot].valid == false) {
+        warn_remove_global_cached_table_2_4352();
+        return ;
+      }
+      if (global_cached_table_2_4352.entries[slot].key == key) {
+        removed = true;
+        hole = slot;
       }
     }
   }
-  if (removed) {
-    global_cached_table_2_4352.max_idx = global_cached_table_2_4352.max_idx - 1;
-    return ;
-  }
-  warn_remove_global_cached_table_2_4352();
   return ;
 }
 res_t_4342 lookup_global_cached_table_2_4352(uint32_t key ){
-  for (int _idx = 0; _idx < 1024; _idx++) {
-    if (_idx >= global_cached_table_2_4352.max_idx) {
+  uint32_t home  = hash_global_cached_table_2_4352(key);
+  for (int _idx = 0; _idx < 2048; _idx++) {
+    uint32_t slot  = (home + _idx) & 2047;
+    if (global_cached_table_2_4352.entries[slot].valid == false) {
       switch (global_cached_table_2_4352._default.action_tag) {
         case tag_WriteCacheTable_hit_acn_4344: {
           return WriteCacheTable_hit_acn_4344(global_cached_table_2_4352._default.action_arg);
@@ -315,14 +337,14 @@ res_t_4342 lookup_global_cached_table_2_4352(uint32_t key ){
         }
       }
     }
-    if ((key & global_cached_table_2_4352.entries[_idx].mask) == (global_cached_table_2_4352.entries[_idx].key & global_cached_table_2_4352.entries[_idx].mask)) {
-      switch (global_cached_table_2_4352.entries[_idx].action_tag) {
+    if (global_cached_table_2_4352.entries[slot].key == key) {
+      switch (global_cached_table_2_4352.entries[slot].action_tag) {
         case tag_WriteCacheTable_hit_acn_4344: {
-          return WriteCacheTable_hit_acn_4344(global_cached_table_2_4352.entries[_idx].action_arg);
+          return WriteCacheTable_hit_acn_4344(global_cached_table_2_4352.entries[slot].action_arg);
           break;
         }
         case tag_WriteCacheTable_miss_acn_4346: {
-          return WriteCacheTable_miss_acn_4346(global_cached_table_2_4352.entries[_idx].action_arg);
+          return WriteCacheTable_miss_acn_4346(global_cached_table_2_4352.entries[slot].action_arg);
           break;
         }
       }
@@ -426,7 +448,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
         Array_update_complex_global_cached_table_1_4351_set_set_memop_32_bit(idx_4360, v_4359, 0);
       }else {
         printf("installing entry for %u into TABLE\n", k_4358);
-        install_global_cached_table_2_4352(k_4358, 4294967295, 0, tag_WriteCacheTable_hit_acn_4344, v_4359);
+        install_global_cached_table_2_4352(k_4358, tag_WriteCacheTable_hit_acn_4344, v_4359);
       }
       false;
       break;
