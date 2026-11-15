@@ -60,40 +60,48 @@ Once you have generated the json, you must manually add the table rules like thi
     },
     {
       "type": "command", 
-      "name":"Table.install", 
+      "name":"TernaryTable.install", 
       "args":{
           "table":"anony_src_ip_tb", 
-          "key":["2198055104<<32>> &&& 4294967040<<32>>"],
+          "key":["2198055104<<32>>"],
+          "mask":["4294967040<<32>>"],
+          "priority":24,
           "action":"anony_src_ip_tb.get_ip_prefix", 
           "args":[4294967040]
       }
     },
     {
       "type": "command", 
-      "name":"Table.install", 
+      "name":"TernaryTable.install", 
       "args":{
           "table":"anony_dst_ip_tb", 
-          "key":["2198055104<<32>> &&& 4294967040<<32>>"], 
+          "key":["2198055104<<32>>"],
+          "mask":["4294967040<<32>>"],
+          "priority":24, 
           "action":"anony_dst_ip_tb.get_ip_prefix", 
           "args":[4294967040]
       }
     },
     {
       "type": "command", 
-      "name":"Table.install", 
+      "name":"TernaryTable.install", 
       "args":{
           "table":"anony_src_ip_tb", 
-          "key":["33493164<<32>> &&& 4294901760<<32>>"],
+          "key":["33493164<<32>>"],
+          "mask":["4294901760<<32>>"],
+          "priority":16,
           "action":"anony_src_ip_tb.get_ip_prefix", 
           "args":[4294901760]
       }
     },
     {
       "type": "command", 
-      "name":"Table.install", 
+      "name":"TernaryTable.install", 
       "args":{
           "table":"anony_dst_ip_tb", 
-          "key":["33493164<<32>> &&& 4294901760<<32>>"], 
+          "key":["33493164<<32>>"],
+          "mask":["4294901760<<32>>"],
+          "priority":16, 
           "action":"anony_dst_ip_tb.get_ip_prefix", 
           "args":[4294901760]
       }
@@ -261,13 +269,11 @@ For example, this JSON command installs a rule to anonymize the MAC destination 
 }
 ```
 
-The `hash_mac_action` constructor generates the hashing action:
+The `hash_mac_action` action does the hashing:
 ```c
-action_constr hash_mac_action() = {
-    return action int<24> acn (int<24> mac_part) {
-        return hash<24>(HASH_SEED, mac_part);
-    };
-};
+action int<24> hash_mac_action()(int<24> mac_part) {
+  return hash<24>(HASH_SEED, mac_part);
+}
 ```
 **IPv4 Addresses:**
  IP prefix matching is performed using masks provided by the user as arguments. This allows the prefix to be preserved while the non-fixed part is extracted. The non-fixed part is then hashed to anonymize it. After, the anonymized non-fixed part is combined with the original prefix.
@@ -276,23 +282,24 @@ This JSON command installs a rule to anonymize the last 8 bits of the IPv4 sourc
 ```json
 {
   "type": "command", 
-  "name":"Table.install", 
+  "name":"TernaryTable.install", 
   "args":{
       "table":"anony_src_ip_tb", 
-      "key":["16909056<<32>> &&& 4294967040<<32>>"], 
+      "key":["16909056<<32>>"],
+      "mask":["4294967040<<32>>"],
+      "priority":24, 
       "action":"anony_src_ip_tb.get_ip_prefix", 
       "args":[4294967040]
   }
 }
 ```
-*"key": The used by both of the IP tables is a masked pattern. The user provides the IP containing the prefix in addition to the subnet for said prefix, then use the `&&&` operator to allow for any IPs with the same prefix to match. 
-*"args": The install-time argument for the get_ip_prefix constructor. The user provides a install-time argument of a subnet for the IP prefix they are preserving, this subnet is then used to derive the prefix and host ID portions of a provided IP
+*"key" and "mask": Both of the IP tables are ternary tables. The user provides the IP containing the prefix as the key, and the subnet for said prefix as the mask, to allow for any IPs with the same prefix to match. 
+*"priority": The priority of the rule. Using the length of the prefix makes the longest matching prefix the one that is used.
+*"args": The install-time argument for the get_ip_prefix action. The user provides a install-time argument of a subnet for the IP prefix they are preserving, this subnet is then used to derive the prefix and host ID portions of a provided IP
 
-The get_ip_prefix constructor generates the action to extract the prefix and non-fixed part:
+The `get_ip_prefix` action extracts the prefix and non-fixed part:
 ```c
-action_constr get_ip_prefix(int prefix_mask) = {
-    return action prefix_output get_prefix_action(int ip) {
+action prefix_output get_ip_prefix(int prefix_mask)(int ip) {
         return {prefix = ip & prefix_mask; non_fixed = ip & ~prefix_mask; subnet_mask = prefix_mask};
-    };
-};
+}
 ```

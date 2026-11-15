@@ -97,8 +97,8 @@ global Table.t<<int, (), int<24>, int<24> >> anony_mac_src_id_tb = Table.create(
 // any IP matching that prefix, such as 1.2.3.1 (16909057) will match, allowing for the 
 // 'get_ip_action' to occur. Otherwise, the table will default to the 'nop_ip_action', which
 // will simply pass a subnet of 255.255.255.255 through, indicating that no hash will occur.
-global Table.t<<int, int, int, prefix_output>> anony_src_ip_tb = Table.create(24, [get_ip_prefix; nop_ip_action], nop_ip_action, (0));
-global Table.t<<int, int, int, prefix_output>> anony_dst_ip_tb = Table.create(24, [get_ip_prefix; nop_ip_action], nop_ip_action, (0));
+global TernaryTable.t<<int, int, int, prefix_output>> anony_src_ip_tb = TernaryTable.create(24, [get_ip_prefix; nop_ip_action], nop_ip_action, (0));
+global TernaryTable.t<<int, int, int, prefix_output>> anony_dst_ip_tb = TernaryTable.create(24, [get_ip_prefix; nop_ip_action], nop_ip_action, (0));
 
 //************ FUNCTIONS ************//
 
@@ -183,8 +183,8 @@ fun eth_t anonymize_eth_packet(eth_t eth) {
 fun ipv4_t anonymize_ip_packet(ipv4_t ip) {
   // Perform table match on SRC and DST IP. The match occurs if provided IP matches
   // the prefix set as the key during the install.
-  prefix_output src_ip_output = Table.lookup(anony_src_ip_tb, ip#src, (ip#src));
-  prefix_output dst_ip_output = Table.lookup(anony_dst_ip_tb, ip#dst, (ip#dst));
+  prefix_output src_ip_output = TernaryTable.lookup(anony_src_ip_tb, ip#src, (ip#src));
+  prefix_output dst_ip_output = TernaryTable.lookup(anony_dst_ip_tb, ip#dst, (ip#dst));
 
   // Initialize vars for storing anonymized SRC/DST IPs outside match statements
   int anony_src_ip = 0;
@@ -288,8 +288,8 @@ fun void anonymize_eth_ip_packet(eth_t eth, ipv4_t ip) {
   int<24> src_id = Table.lookup(anony_mac_src_id_tb, (1), eth#src_mac_id);
   
   // IP address anonymization
-  prefix_output src_ip_output = Table.lookup(anony_src_ip_tb, ip#src, (ip#src));
-  prefix_output dst_ip_output = Table.lookup(anony_dst_ip_tb, ip#dst, (ip#dst));
+  prefix_output src_ip_output = TernaryTable.lookup(anony_src_ip_tb, ip#src, (ip#src));
+  prefix_output dst_ip_output = TernaryTable.lookup(anony_dst_ip_tb, ip#dst, (ip#dst));
   int anony_src_ip = 0;
   int anony_dst_ip = 0;
 

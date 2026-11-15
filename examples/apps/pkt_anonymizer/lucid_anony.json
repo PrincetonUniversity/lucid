@@ -44,40 +44,48 @@
     },
     {
       "type": "command", 
-      "name":"Table.install", 
+      "name":"TernaryTable.install", 
       "args":{
           "table":"anony_src_ip_tb", 
-          "key":["2198055104<<32>> &&& 4294967040<<32>>"],
+          "key":["2198055104<<32>>"],
+          "mask":["4294967040<<32>>"],
+          "priority":24,
           "action":"anony_src_ip_tb.get_ip_prefix", 
           "args":[4294967040]
       }
     },
     {
       "type": "command", 
-      "name":"Table.install", 
+      "name":"TernaryTable.install", 
       "args":{
           "table":"anony_dst_ip_tb", 
-          "key":["2198055104<<32>> &&& 4294967040<<32>>"], 
+          "key":["2198055104<<32>>"],
+          "mask":["4294967040<<32>>"],
+          "priority":24, 
           "action":"anony_dst_ip_tb.get_ip_prefix", 
           "args":[4294967040]
       }
     },
     {
       "type": "command", 
-      "name":"Table.install", 
+      "name":"TernaryTable.install", 
       "args":{
           "table":"anony_src_ip_tb", 
-          "key":["33493164<<32>> &&& 4294901760<<32>>"],
+          "key":["33493164<<32>>"],
+          "mask":["4294901760<<32>>"],
+          "priority":16,
           "action":"anony_src_ip_tb.get_ip_prefix", 
           "args":[4294901760]
       }
     },
     {
       "type": "command", 
-      "name":"Table.install", 
+      "name":"TernaryTable.install", 
       "args":{
           "table":"anony_dst_ip_tb", 
-          "key":["33493164<<32>> &&& 4294901760<<32>>"], 
+          "key":["33493164<<32>>"],
+          "mask":["4294901760<<32>>"],
+          "priority":16, 
           "action":"anony_dst_ip_tb.get_ip_prefix", 
           "args":[4294901760]
       }
